@@ -1,25 +1,187 @@
 {% extends "base.html" %}
 {% block content %}
-  <div class="row g-3">
-    <div class="col-12 col-lg-8">
+  {% set tab = active_tab or 'webp' %}
+
+  <ul class="nav nav-tabs mb-3" role="tablist">
+    <li class="nav-item"><button class="nav-link {{ 'active' if tab=='webp' }}" data-bs-toggle="tab" data-bs-target="#tab-webp" type="button">WebP → PNG</button></li>
+    <li class="nav-item"><button class="nav-link {{ 'active' if tab=='batch' }}" data-bs-toggle="tab" data-bs-target="#tab-batch" type="button">Batch Adjust</button></li>
+    <li class="nav-item"><button class="nav-link {{ 'active' if tab=='tags' }}" data-bs-toggle="tab" data-bs-target="#tab-tags" type="button">Dataset Tag Editor</button></li>
+    <li class="nav-item"><button class="nav-link {{ 'active' if tab=='suffix' }}" data-bs-toggle="tab" data-bs-target="#tab-suffix" type="button">Append Suffix</button></li>
+    <li class="nav-item"><button class="nav-link {{ 'active' if tab=='reorder' }}" data-bs-toggle="tab" data-bs-target="#tab-reorder" type="button">Reorder Pairs</button></li>
+    <li class="nav-item ms-auto"><span class="nav-link disabled">Presets loaded: {{ preset_names|length }}</span></li>
+  </ul>
+
+  <div class="tab-content">
+    <!-- WebP -->
+    <div class="tab-pane fade {{ 'show active' if tab=='webp' }}" id="tab-webp">
       <div class="card p-4">
-        <h3 class="mb-3">Welcome</h3>
-        <p>This local site wraps a few batch tools commonly used in image dataset prep.</p>
-        <ul>
-          <li><a href="{{ url_for('webp_to_png') }}">WebP → PNG Converter</a></li>
-          <li><a href="{{ url_for('batch_adjust') }}">Batch Photo Adjust (presets)</a></li>
-          <li><a href="{{ url_for('dataset_labeling') }}">Dataset Tag Editor</a></li>
-          <li><a href="{{ url_for('rename_suffix') }}">Append Suffix to All Files</a></li>
-          <li><a href="{{ url_for('reorder_pairs') }}">Reorder (image + .txt) Pairs</a></li>
-        </ul>
-        <p class="small-note">Paths are Windows-friendly. Always back up before bulk changes.</p>
+        <form method="post">
+          <input type="hidden" name="tool" value="webp">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Source Folder</label>
+              <div class="input-group">
+                <input id="src_webp" name="src_webp" type="text" class="form-control" placeholder="D:\\path\\to\\webp">
+                <button class="btn btn-outline-light btn-browse" type="button" data-target="src_webp">Browse</button>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Output Folder</label>
+              <div class="input-group">
+                <input id="dst_webp" name="dst_webp" type="text" class="form-control" placeholder="D:\\path\\to\\output">
+                <button class="btn btn-outline-light btn-browse" type="button" data-target="dst_webp">Browse</button>
+              </div>
+            </div>
+          </div>
+          <div class="mt-3"><button class="btn btn-primary">Convert</button></div>
+        </form>
       </div>
     </div>
-    <div class="col-12 col-lg-4">
+
+    <!-- Batch Adjust -->
+    <div class="tab-pane fade {{ 'show active' if tab=='batch' }}" id="tab-batch">
       <div class="card p-4">
-        <h5>Presets found</h5>
-        <pre class="monospace">{{ presets|tojson(indent=2) }}</pre>
+        <form method="post">
+          <input type="hidden" name="tool" value="batch">
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label">Source Folder</label>
+              <div class="input-group">
+                <input id="src_batch" name="src_batch" type="text" class="form-control" placeholder="D:\\path\\to\\images">
+                <button class="btn btn-outline-light btn-browse" type="button" data-target="src_batch">Browse</button>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Output Folder</label>
+              <div class="input-group">
+                <input id="dst_batch" name="dst_batch" type="text" class="form-control" placeholder="D:\\path\\to\\output">
+                <button class="btn btn-outline-light btn-browse" type="button" data-target="dst_batch">Browse</button>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Preset</label>
+              <select class="form-select" name="preset">
+                {% for name in preset_names %}
+                  <option value="{{ name }}">{{ name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Suffix</label>
+              <input class="form-control" name="suffix" value="_adj">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Max files (0 = all)</label>
+              <input class="form-control" type="number" name="limit" value="0" min="0">
+            </div>
+          </div>
+          <div class="mt-3"><button class="btn btn-primary">Process</button></div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Dataset Tag Editor -->
+    <div class="tab-pane fade {{ 'show active' if tab=='tags' }}" id="tab-tags">
+      <div class="card p-4">
+        <form method="post">
+          <input type="hidden" name="tool" value="tags">
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label">Folder</label>
+              <div class="input-group">
+                <input id="folder_tags" name="folder" type="text" class="form-control" placeholder="D:\\path\\to\\dataset">
+                <button class="btn btn-outline-light btn-browse" type="button" data-target="folder_tags">Browse</button>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Mode</label>
+              <select class="form-select" name="mode">
+                <option value="insert">insert</option>
+                <option value="delete">delete</option>
+                <option value="replace">replace (old→new; old2→new2)</option>
+                <option value="move">move (tagA,tagB)</option>
+                <option value="dedup">dedup</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Image extensions (comma)</label>
+              <input class="form-control" name="exts" value=".jpg,.jpeg,.png,.webp">
+            </div>
+            <div class="col-md-9">
+              <label class="form-label">Tags / mapping / pair</label>
+              <input class="form-control" name="tags" placeholder="green hair, green eyes  OR  old->new; old2->new2  OR  tagA,tagB">
+            </div>
+            <div class="col-md-3 d-flex align-items-end">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="backup" name="backup" checked>
+                <label class="form-check-label" for="backup">Create .bak backups</label>
+              </div>
+            </div>
+          </div>
+          <div class="mt-3"><button class="btn btn-primary">Run</button></div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Append Suffix -->
+    <div class="tab-pane fade {{ 'show active' if tab=='suffix' }}" id="tab-suffix">
+      <div class="card p-4">
+        <form method="post">
+          <input type="hidden" name="tool" value="suffix">
+          <div class="row g-3">
+            <div class="col-md-8">
+              <label class="form-label">Folder</label>
+              <div class="input-group">
+                <input id="folder_suffix" name="folder_suffix" type="text" class="form-control" placeholder="D:\\path\\to\\folder">
+                <button class="btn btn-outline-light btn-browse" type="button" data-target="folder_suffix">Browse</button>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Suffix</label>
+              <input class="form-control" name="suffix" value="_2">
+            </div>
+          </div>
+          <div class="mt-3"><button class="btn btn-primary">Rename</button></div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Reorder Pairs -->
+    <div class="tab-pane fade {{ 'show active' if tab=='reorder' }}" id="tab-reorder">
+      <div class="card p-4">
+        <form method="post">
+          <input type="hidden" name="tool" value="reorder">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Root folder (has subfolders 1,2,3)</label>
+              <div class="input-group">
+                <input id="root_reorder" name="root" type="text" class="form-control" placeholder="D:\\path\\to\\root">
+                <button class="btn btn-outline-light btn-browse" type="button" data-target="root_reorder">Browse</button>
+              </div>
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Digits</label>
+              <input class="form-control" type="number" name="digits" value="3" min="1" max="8">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Start</label>
+              <input class="form-control" type="number" name="start" value="1" min="1">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Image ext (comma)</label>
+              <input class="form-control" name="exts" value=".jpg,.jpeg,.png,.webp">
+            </div>
+          </div>
+          <div class="mt-3"><button class="btn btn-primary">Reorder</button></div>
+        </form>
       </div>
     </div>
   </div>
+
+  {% if log %}
+    <div class="card p-3 mt-3">
+      <h5>Log</h5>
+      <pre class="monospace">{{ log }}</pre>
+    </div>
+  {% endif %}
 {% endblock %}
