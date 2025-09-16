@@ -13,6 +13,7 @@
       --bb-input-bg:#0b1220; --bb-input-bd:#3b4b6b; --bb-input-ph:#c4d2e1;
       --bb-primary:#3b82f6; --bb-primary-hover:#2563eb;
       --bb-code-bg:#0a1020; --bb-code-bd:#23314f; --bb-focus:#8ab4ff;
+
       --bs-body-bg:var(--bb-bg); --bs-body-color:var(--bb-text);
       --bs-heading-color:var(--bb-text); --bs-secondary-color:var(--bb-muted);
       --bs-tertiary-color:var(--bb-muted); --bs-border-color:var(--bb-border);
@@ -31,6 +32,26 @@
     pre{background:var(--bb-code-bg);color:var(--bb-text);padding:1rem;border-radius:.5rem;border:1px solid var(--bb-code-bd);overflow-x:auto;}
     :focus-visible{outline:2px solid var(--bb-focus);outline-offset:2px;}
     .list-group-item{background:var(--bb-card);color:var(--bb-text);border-color:var(--bb-border);}
+
+    /* Tabs: white by default, blue when hover/focus/active */
+    .nav-tabs .nav-link{color:var(--bb-text);}
+    .nav-tabs .nav-link:hover,
+    .nav-tabs .nav-link:focus,
+    .nav-tabs .nav-link:focus-visible{color:var(--bb-link-hover);}
+    .nav-tabs .nav-link.active{color:var(--bb-link); background:transparent; border-color: var(--bb-border) var(--bb-border) transparent;}
+
+    /* Tooltips: force white text on dark bg */
+    .tooltip{
+      --bs-tooltip-bg:#0f172a;
+      --bs-tooltip-color:#ffffff;
+      --bs-tooltip-opacity:1;
+      --bs-tooltip-arrow-color:#0f172a;
+    }
+    .tooltip .tooltip-inner{
+      background-color:var(--bs-tooltip-bg);
+      color:var(--bs-tooltip-color);
+      border:1px solid var(--bb-border);
+    }
   </style>
 </head>
 <body>
@@ -59,9 +80,9 @@
         </div>
         <div class="modal-body">
           <div class="d-flex gap-2 mb-2">
-            <button class="btn btn-sm btn-secondary" id="bb-up">Up one level</button>
+            <button class="btn btn-sm btn-secondary" id="bb-up" data-bs-toggle="tooltip" data-bs-title="Go up one level">Up</button>
             <div class="flex-grow-1">
-              <input id="bb-current" class="form-control form-control-sm" readonly>
+              <input id="bb-current" class="form-control form-control-sm" readonly data-bs-toggle="tooltip" data-bs-title="Current path">
             </div>
           </div>
           <ul id="bb-list" class="list-group small"></ul>
@@ -76,6 +97,14 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script>
+    // Enable tooltips globally (after DOM is ready)
+    document.addEventListener("DOMContentLoaded", () => {
+      document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
+        new bootstrap.Tooltip(el);
+      });
+    });
+
+    // Folder picker logic
     let bbTargetInput = null;
     let bbPath = "";
 
