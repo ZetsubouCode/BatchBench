@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card p-4">
+  <h3>WebP → PNG Converter</h3>
+  <form method="post">
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label">Source Folder (where your .webp files are)</label>
+        <input type="text" class="form-control" name="src" placeholder="D:\\path\\to\\images" required>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Output Folder</label>
+        <input type="text" class="form-control" name="dst" placeholder="D:\\path\\to\\output (create if missing)" required>
+      </div>
+    </div>
+    <div class="mt-3">
+      <button class="btn btn-primary">Convert</button>
+    </div>
+  </form>
+  {% if log %}
+  <hr/>
+  <h5>Log</h5>
+  <pre class="monospace">{{ log }}</pre>
+  {% endif %}
+</div>
+{% endblock %}

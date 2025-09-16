@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card p-4">
+  <h3>Dataset Tag Editor</h3>
+  <p class="small-note">Edits the .txt that sits next to each image (same stem). Tags are comma-separated.</p>
+  <form method="post">
+    <div class="row g-3">
+      <div class="col-md-4">
+        <label class="form-label">Folder</label>
+        <input type="text" class="form-control" name="folder" placeholder="D:\\path\\to\\dataset" required>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Mode</label>
+        <select class="form-select" name="mode">
+          <option value="insert">insert (append if missing)</option>
+          <option value="delete">delete (remove if present)</option>
+          <option value="replace">replace (old→new)</option>
+          <option value="move">move (tagA before tagB)</option>
+          <option value="dedup">dedup (remove duplicates)</option>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Image extensions (comma)</label>
+        <input type="text" class="form-control" name="exts" value=".jpg,.jpeg,.png,.webp">
+      </div>
+    </div>
+
+    <div class="row g-3 mt-1">
+      <div class="col-md-6">
+        <label class="form-label">Tags / Old→New / Move A,B</label>
+        <input type="text" class="form-control" name="tags" placeholder="e.g. green hair, green eyes  OR  old_tag->new_tag  OR  tagA,tagB">
+      </div>
+      <div class="col-md-3 form-check d-flex align-items-end ps-4">
+        <input class="form-check-input me-2" type="checkbox" name="backup" checked id="backup">
+        <label class="form-check-label" for="backup">Create .bak backups</label>
+      </div>
+      <div class="col-md-3 d-flex align-items-end">
+        <button class="btn btn-primary">Run</button>
+      </div>
+    </div>
+  </form>
+
+  {% if log %}
+  <hr/>
+  <h5>Log</h5>
+  <pre class="monospace">{{ log }}</pre>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="row g-3">
+    <div class="col-12 col-lg-8">
+      <div class="card p-4">
+        <h3 class="mb-3">Welcome</h3>
+        <p>This local site wraps a few batch tools commonly used in image dataset prep.</p>
+        <ul>
+          <li><a href="{{ url_for('webp_to_png') }}">WebP → PNG Converter</a></li>
+          <li><a href="{{ url_for('batch_adjust') }}">Batch Photo Adjust (presets)</a></li>
+          <li><a href="{{ url_for('dataset_labeling') }}">Dataset Tag Editor</a></li>
+          <li><a href="{{ url_for('rename_suffix') }}">Append Suffix to All Files</a></li>
+          <li><a href="{{ url_for('reorder_pairs') }}">Reorder (image + .txt) Pairs</a></li>
+        </ul>
+        <p class="small-note">Paths are Windows-friendly. Always back up before bulk changes.</p>
+      </div>
+    </div>
+    <div class="col-12 col-lg-4">
+      <div class="card p-4">
+        <h5>Presets found</h5>
+        <pre class="monospace">{{ presets|tojson(indent=2) }}</pre>
+      </div>
+    </div>
+  </div>
+{% endblock %}

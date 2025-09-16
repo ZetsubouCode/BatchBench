@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card p-4">
+  <h3>Batch Photo Adjust</h3>
+  <form method="post">
+    <div class="row g-3">
+      <div class="col-md-4">
+        <label class="form-label">Source Folder (images)</label>
+        <input type="text" class="form-control" name="src" placeholder="D:\\path\\to\\images" required>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Output Folder</label>
+        <input type="text" class="form-control" name="dst" placeholder="D:\\path\\to\\output" required>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Preset</label>
+        <select class="form-select" name="preset">
+          {% for name in preset_names %}
+            <option value="{{ name }}">{{ name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="row g-3 mt-1">
+      <div class="col-md-3">
+        <label class="form-label">Suffix for output</label>
+        <input type="text" class="form-control" name="suffix" value="_adj">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Max files (0 = all)</label>
+        <input type="number" class="form-control" name="limit" value="0" min="0">
+      </div>
+      <div class="col-md-6 d-flex align-items-end">
+        <button class="btn btn-primary">Process</button>
+      </div>
+    </div>
+  </form>
+  {% if log %}
+  <hr/>
+  <h5>Log</h5>
+  <pre class="monospace">{{ log }}</pre>
+  {% endif %}
+</div>
+{% endblock %}

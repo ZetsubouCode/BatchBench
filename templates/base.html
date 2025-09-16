@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ config.APP_NAME or "BatchBench" }}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+
+  <style>
+    :root{
+      /* App palette */
+      --bb-bg: #0b1220;           /* page bg */
+      --bb-card: #0f172a;         /* cards/nav bg */
+      --bb-border: #1f2a44;
+      --bb-text: #e6edf3;         /* main text */
+      --bb-muted: #a9bbcf;        /* secondary text (brighter than before) */
+      --bb-link: #79c0ff;
+      --bb-link-hover: #a5d6ff;
+      --bb-input-bg:#0b1220;
+      --bb-input-bd:#3b4b6b;
+      --bb-input-ph:#c4d2e1;
+      --bb-primary:#3b82f6;
+      --bb-primary-hover:#2563eb;
+      --bb-code-bg:#0a1020;
+      --bb-code-bd:#23314f;
+      --bb-focus:#8ab4ff;
+
+      /* 🔧 Override Bootstrap variables so all built-ins render bright text */
+      --bs-body-bg: var(--bb-bg);
+      --bs-body-color: var(--bb-text);
+      --bs-heading-color: var(--bb-text);
+      --bs-secondary-color: var(--bb-muted);        /* used by .text-body-secondary */
+      --bs-tertiary-color: var(--bb-muted);
+      --bs-border-color: var(--bb-border);
+    }
+
+    * { box-sizing: border-box; }
+    body { background: var(--bb-bg); color: var(--bb-text); }
+
+    .navbar, .card { background: var(--bb-card); border: 1px solid var(--bb-border); }
+    .navbar .navbar-brand { color: var(--bb-text); }
+
+    /* Ensure ALL headings are bright */
+    h1, h2, h3, h4, h5, h6 { color: var(--bb-text); }
+
+    /* Ensure normal text never falls back to “black-ish” */
+    p, li, label { color: var(--bb-text); }
+
+    /* Make “muted”/secondary text readable on dark */
+    .text-muted, .text-body-secondary, .small-note { color: var(--bb-muted) !important; }
+
+    a { color: var(--bb-link); }
+    a:hover, a:focus { color: var(--bb-link-hover); }
+
+    .form-label { color: var(--bb-text); }
+    .form-control, .form-select {
+      background: var(--bb-input-bg);
+      color: var(--bb-text);
+      border-color: var(--bb-input-bd);
+    }
+    .form-control::placeholder { color: var(--bb-input-ph); opacity: 1; }
+    .form-select option { background: var(--bb-input-bg); color: var(--bb-text); }
+
+    .btn-primary { background: var(--bb-primary); border-color: var(--bb-primary); }
+    .btn-primary:hover, .btn-primary:focus {
+      background: var(--bb-primary-hover); border-color: var(--bb-primary-hover);
+    }
+
+    .alert-info {
+      color: var(--bb-text);
+      background-color: #102341;
+      border-color: #274472;
+    }
+
+    .monospace {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    }
+    pre {
+      background: var(--bb-code-bg);
+      color: var(--bb-text);
+      padding: 1rem;
+      border-radius: .5rem;
+      border: 1px solid var(--bb-code-bd);
+      overflow-x: auto;
+    }
+
+    /* High-contrast focus ring */
+    :focus-visible { outline: 2px solid var(--bb-focus); outline-offset: 2px; }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg navbar-dark mb-4">
+    <div class="container">
+      <a class="navbar-brand" href="/">{{ config.APP_NAME or "BatchBench" }}</a>
+      <div>
+        <a class="btn btn-sm btn-outline-light" href="/">Home</a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container pb-5">
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="alert alert-info">
+          {% for m in messages %}<div>{{ m }}</div>{% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
