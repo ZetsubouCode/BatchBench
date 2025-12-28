@@ -1,0 +1,183 @@
+<div class="card p-4 bb-card">
+  <form method="post" class="bb-form" data-tool-label="Flatten & Renumber">
+    <input type="hidden" name="tool" value="rename">
+
+    <!-- Title / intro -->
+    <div class="d-flex align-items-center justify-content-between mb-3">
+      <div>
+        <h2 class="h5 mb-1">Group Renamer</h2>
+        <div class="text-muted small">Flatten folders and rename as <code>001.png</code>, <code>002_1.png</code>, <code>002_2.png</code>, …</div>
+      </div>
+      <div class="text-muted small" id="rn-example">Example: <code>001.png</code>, <code>002_1.png</code></div>
+    </div>
+
+    <!-- Source & Output -->
+    <div class="bb-section">
+      <div class="bb-section-title">Source & Output</div>
+      <div class="row g-3">
+        <div class="col-lg-6">
+          <label class="form-label">Root Folder</label>
+          <div class="input-group">
+            <input id="rn_root" name="rn_root" type="text" class="form-control" placeholder="D:\manhwa\chapter-001" data-bs-toggle="tooltip" data-bs-title="Contains images and subfolders with images">
+            <button class="btn btn-outline-light btn-browse" type="button" data-target="rn_root">Browse</button>
+          </div>
+          <div class="form-text">Scans this folder for top-level images and subfolders.</div>
+        </div>
+
+        <div class="col-lg-6">
+          <label class="form-label">Output Folder (flattened)</label>
+          <div class="input-group">
+            <input id="rn_out" name="rn_out" type="text" class="form-control" placeholder="(default: &lt;root&gt;\_renamed)" data-bs-toggle="tooltip" data-bs-title="Files will be copied/moved here">
+            <button class="btn btn-outline-light btn-browse" type="button" data-target="rn_out">Browse</button>
+          </div>
+          <div class="form-text">Leave empty to write into <code>_renamed</code> inside the root.</div>
+        </div>
+
+        <div class="col-md-6 col-lg-4">
+          <label class="form-label">Image extensions (comma)</label>
+          <input class="form-control" name="rn_exts" value=".png,.jpg,.jpeg,.webp">
+          <div class="form-text">Case-insensitive. Example: <code>.png,.jpg</code></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Numbering -->
+    <div class="bb-section">
+      <div class="bb-section-title">Numbering</div>
+      <div class="row g-3 align-items-end">
+        <div class="col-6 col-sm-3 col-lg-2">
+          <label class="form-label">Start at</label>
+          <input class="form-control bb-num" name="rn_start" type="number" value="1" min="1">
+        </div>
+        <div class="col-6 col-sm-3 col-lg-2">
+          <label class="form-label">Prefix pad</label>
+          <input class="form-control bb-num" name="rn_pad" type="number" value="3" min="1">
+          <div class="form-text">e.g. <code>001</code></div>
+        </div>
+        <div class="col-6 col-sm-3 col-lg-2">
+          <label class="form-label">Suffix pad</label>
+          <input class="form-control bb-num" name="rn_suffix_pad" type="number" value="0" min="0">
+          <div class="form-text">e.g. <code>_01</code> vs <code>_1</code></div>
+        </div>
+        <div class="col-6 col-sm-3 col-lg-2">
+          <label class="form-label">Separator</label>
+          <input class="form-control" name="rn_sep" value="_" maxlength="3">
+          <div class="form-text">Between prefix and part: <code>002_1</code></div>
+        </div>
+        <div class="col-12 col-lg-4">
+          <div class="bb-example bg-transparent border rounded px-3 py-2">
+            <div class="small text-muted mb-1">Live example</div>
+            <code id="rn-example-inline">001.png, 002_1.png, 002_2.png</code>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ordering -->
+    <div class="bb-section">
+      <div class="bb-section-title">Ordering</div>
+      <div class="row g-3">
+        <div class="col-lg-4">
+          <label class="form-label">Top-level order</label>
+          <select class="form-select" name="rn_top_order">
+            <option value="name" selected>Name (natural)</option>
+            <option value="ctime">Date created</option>
+            <option value="mtime">Date modified</option>
+          </select>
+        </div>
+        <div class="col-lg-4">
+          <label class="form-label">Folder order</label>
+          <select class="form-select" name="rn_folder_order">
+            <option value="name" selected>Name (natural)</option>
+            <option value="ctime">Date created</option>
+            <option value="mtime">Date modified</option>
+          </select>
+        </div>
+        <div class="col-lg-4">
+          <label class="form-label">Inside-folder order</label>
+          <select class="form-select" name="rn_inside_order">
+            <option value="name" selected>Name (natural)</option>
+            <option value="ctime">Date created</option>
+            <option value="mtime">Date modified</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-text mt-2">Tip: “Name (natural)” is usually the most stable across copies.</div>
+    </div>
+
+    <!-- Options -->
+    <div class="bb-section">
+      <div class="bb-section-title">Options</div>
+      <div class="d-flex flex-wrap gap-4">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="rn_include_txt" name="rn_include_txt" checked>
+          <label class="form-check-label" for="rn_include_txt">Rename matching <code>.txt</code> sidecars</label>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="rn_move_instead" name="rn_move_instead">
+          <label class="form-check-label" for="rn_move_instead">Move instead of copy</label>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="rn_dry_run" name="rn_dry_run">
+          <label class="form-check-label" for="rn_dry_run">Dry run (plan only)</label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="d-flex justify-content-end mt-3">
+      <button class="btn btn-primary px-4">
+        <span class="me-1">Run Renamer</span>
+      </button>
+    </div>
+  </form>
+</div>
+
+<!-- Local styles for this panel -->
+<style>
+  .bb-card { border: 1px solid var(--bs-border-color, #2a2a2a); }
+  .bb-section {
+    border: 1px solid var(--bs-border-color, #2a2a2a);
+    border-radius: .75rem;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    background: rgba(255,255,255,0.02);
+  }
+  .bb-section-title {
+    font-weight: 600;
+    margin-bottom: .75rem;
+    opacity: .9;
+  }
+  .bb-num { max-width: 120px; }
+  .bb-example { min-height: 56px; display: flex; align-items: center; }
+  /* Dark mode nudge (keeps things readable on your palette) */
+  @media (prefers-color-scheme: dark) {
+    .bb-section { background: rgba(255,255,255,0.03); }
+  }
+</style>
+
+<!-- Tiny live example updater (no external deps) -->
+<script>
+  (function () {
+    const pad = (n, w) => String(n).padStart(w, '0');
+    const $ = (s) => document.querySelector(s);
+    const refresh = () => {
+      const ppad = Math.max(1, parseInt($('input[name="rn_pad"]').value || '3', 10));
+      const spad = Math.max(0, parseInt($('input[name="rn_suffix_pad"]').value || '0', 10));
+      const sep  = $('input[name="rn_sep"]').value || '_';
+      const sfx  = (i) => (spad > 0 ? String(i).padStart(spad, '0') : String(i));
+      const p1 = pad(1, ppad) + '.png';
+      const p2 = pad(2, ppad) + sep + sfx(1) + '.png';
+      const p3 = pad(2, ppad) + sep + sfx(2) + '.png';
+      const ex = `${p1}, ${p2}, ${p3}`;
+      $('#rn-example').innerHTML = 'Example: <code>' + ex + '</code>';
+      $('#rn-example-inline').textContent = ex;
+    };
+    ['input','change'].forEach(evt => {
+      document.querySelectorAll('[name="rn_pad"],[name="rn_suffix_pad"],[name="rn_sep"]').forEach(el => {
+        el.addEventListener(evt, refresh);
+      });
+    });
+    refresh();
+  })();
+</script>

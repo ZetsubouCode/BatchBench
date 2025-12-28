@@ -1,0 +1,121 @@
+<div class="card p-4">
+  <form method="post" data-tool-label="Webtoon Splitter">
+    <input type="hidden" name="tool" value="webtoon">
+
+    <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+      <div>
+        <h2 class="h5 mb-1">Webtoon Splitter</h2>
+        <div class="text-muted small">Stacks pages vertically (no gap), then slices wherever a horizontal white band is detected. Works per chapter folder or across numbered subfolders.</div>
+      </div>
+      <div class="text-muted small">Outputs: <code>&lt;chapter&gt;_001.png</code>, <code>_002.png</code>, ...</div>
+    </div>
+
+    <div class="wt-section">
+      <div class="wt-section-title">Folders & Input</div>
+      <div class="row g-3">
+        <div class="col-lg-6">
+          <label class="form-label">Source folder (pages)</label>
+          <div class="input-group">
+            <input id="wt_folder" name="wt_folder" type="text" class="form-control" placeholder="D:\path\to\chapter-root" data-bs-toggle="tooltip" data-bs-title="Point to a chapter folder, or a root that has chapter subfolders (e.g., Chapter 1, 2...).">
+            <button class="btn btn-outline-light btn-browse" type="button" data-target="wt_folder">Browse</button>
+          </div>
+          <div class="form-text">If subfolders exist (Chapter 1, 2, etc.), each is processed separately.</div>
+        </div>
+        <div class="col-lg-6">
+          <label class="form-label">Output folder (slices)</label>
+          <div class="input-group">
+            <input id="wt_out_dir" name="wt_out_dir" type="text" class="form-control" placeholder="(default: per-folder &lt;source&gt;\_panels)" data-bs-toggle="tooltip" data-bs-title="Leave blank to write into _panels inside each folder. If set, results go to &lt;output&gt;\&lt;chapter&gt;\_panels.">
+            <button class="btn btn-outline-light btn-browse" type="button" data-target="wt_out_dir">Browse</button>
+          </div>
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label">Filename glob</label>
+          <input name="wt_glob" class="form-control" value="*.*" data-bs-toggle="tooltip" data-bs-title="Apply first, before extension filtering. Examples: *.png or *_page*.*">
+          <div class="form-text">Defaults to everything; narrow it if noise files exist.</div>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Extensions to include</label>
+          <input name="wt_exts" class="form-control" value=".png,.jpg,.jpeg,.webp" data-bs-toggle="tooltip" data-bs-title="Comma-separated list (with or without dots). Only these are stacked.">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Width alignment</label>
+          <select name="wt_resize" class="form-select" data-bs-toggle="tooltip" data-bs-title="How to handle different widths before stacking into one tall strip.">
+            <option value="match-width" selected>Resize narrower pages up to the widest</option>
+            <option value="none">No resize; center-pad to the widest</option>
+          </select>
+          <div class="form-text">Gap is forced to 0; background is white.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="wt-section">
+      <div class="wt-section-title">Stripe detection</div>
+      <div class="row g-3">
+        <div class="col-sm-6 col-md-3">
+          <label class="form-label">Min stripe height (px)</label>
+          <input type="number" name="wt_min_stripe" class="form-control" value="12" min="1" data-bs-toggle="tooltip" data-bs-title="Ignore thinner white lines; raise if double pages get cut.">
+        </div>
+        <div class="col-sm-6 col-md-3">
+          <label class="form-label">Row white threshold (0-255)</label>
+          <input type="number" name="wt_white_threshold" class="form-control" value="245" min="0" max="255" data-bs-toggle="tooltip" data-bs-title="Pixel brightness needed to count as white (255 = pure white). Lower if gutters are gray.">
+        </div>
+        <div class="col-sm-6 col-md-3">
+          <label class="form-label">Row coverage (%)</label>
+          <input type="number" name="wt_row_ratio" class="form-control" value="98" min="50" max="100" data-bs-toggle="tooltip" data-bs-title="Percent of pixels in a row that must be above the threshold to call it 'white'.">
+          <div class="form-text">Drop to 95–96% if gutters are noisy.</div>
+        </div>
+        <div class="col-sm-6 col-md-3">
+          <label class="form-label">Tolerance inside stripe (rows)</label>
+          <input type="number" name="wt_max_gap" class="form-control" value="2" min="0" data-bs-toggle="tooltip" data-bs-title="Allow this many darker rows inside a stripe (bridges dust/text lines).">
+        </div>
+        <div class="col-sm-6 col-md-3">
+          <label class="form-label">Min panel height (px)</label>
+          <input type="number" name="wt_min_panel" class="form-control" value="128" min="1" data-bs-toggle="tooltip" data-bs-title="Skip slices shorter than this after cutting (protect tiny slivers).">
+        </div>
+      </div>
+    </div>
+
+    <div class="wt-section">
+      <div class="wt-section-title">Options</div>
+      <div class="d-flex flex-wrap gap-4">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="wt_save_strip" name="wt_save_strip" checked>
+          <label class="form-check-label" for="wt_save_strip">Also save the full merged strip</label>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="wt_overwrite" name="wt_overwrite">
+          <label class="form-check-label" for="wt_overwrite">Overwrite existing files</label>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="wt_dry_run" name="wt_dry_run">
+          <label class="form-check-label" for="wt_dry_run">Dry run (plan only)</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="d-flex justify-content-end">
+      <button class="btn btn-primary px-4">
+        <span class="me-1">Split panels</span>
+      </button>
+    </div>
+  </form>
+</div>
+
+<style>
+  .wt-section {
+    border: 1px solid var(--bs-border-color, #2a2a2a);
+    border-radius: .75rem;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    background: rgba(255,255,255,0.02);
+  }
+  .wt-section-title {
+    font-weight: 600;
+    margin-bottom: .75rem;
+    opacity: .9;
+  }
+  @media (prefers-color-scheme: dark) {
+    .wt-section { background: rgba(255,255,255,0.03); }
+  }
+</style>

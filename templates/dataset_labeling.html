@@ -1,49 +1,328 @@
-{% extends "base.html" %}
-{% block content %}
+<style>
+  .mode-banner { border:1px solid var(--bb-border); padding:.75rem 1rem; border-radius:.5rem; margin-bottom:1rem; }
+  .mode-insert  { background:#0d2d1f; color:#e6fff1; border-color:#1f6f4a; }
+  .mode-delete  { background:#2b1416; color:#ffe8ea; border-color:#6f1f26; }
+  .mode-replace { background:#2b220f; color:#fff2d6; border-color:#6f531f; }
+  .mode-move    { background:#1d1733; color:#eee8ff; border-color:#3f2f7a; }
+  .mode-dedup   { background:#0c2238; color:#d6edff; border-color:#1f4f6f; }
+  .mode-undo    { background:#103222; color:#e6fff1; border-color:#1f6f4a; }
+  .small-note { color: var(--bb-muted); }
+  .code-chip { background:var(--bb-code-bg); border:1px solid var(--bb-border); padding:.15rem .35rem; border-radius:.35rem; }
+  .monospace { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace; }
+</style>
+
 <div class="card p-4">
-  <h3>Dataset Tag Editor</h3>
-  <p class="small-note">Edits the .txt that sits next to each image (same stem). Tags are comma-separated.</p>
-  <form method="post">
+  <div id="mode-banner" class="mode-banner mode-insert">
+    <strong>Mode help:</strong>
+    <span id="mode-desc">Insert: add missing tags to each .txt (comma-separated).</span>
+  </div>
+
+  <form id="tags-form" method="post" data-no-busy="true" data-no-persist="true" data-tool-label="Dataset Tag Editor">
+    <input type="hidden" name="tool" value="tags">
+    <input type="hidden" name="active_tab" value="tags">
+
     <div class="row g-3">
       <div class="col-md-4">
         <label class="form-label">Folder</label>
-        <input type="text" class="form-control" name="folder" placeholder="D:\\path\\to\\dataset" required>
+        <div class="input-group">
+          <input id="folder_tags" name="folder" type="text" class="form-control"
+                 placeholder="D:\path\to\dataset" data-bs-toggle="tooltip"
+                 data-bs-title="Base dataset folder (images + .txt)">
+          <button class="btn btn-outline-light btn-browse" type="button" data-target="folder_tags"
+                  data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
+        </div>
       </div>
+
       <div class="col-md-4">
         <label class="form-label">Mode</label>
-        <select class="form-select" name="mode">
-          <option value="insert">insert (append if missing)</option>
-          <option value="delete">delete (remove if present)</option>
-          <option value="replace">replace (old→new)</option>
-          <option value="move">move (tagA before tagB)</option>
-          <option value="dedup">dedup (remove duplicates)</option>
+        <select class="form-select" name="mode" id="mode-select" data-bs-toggle="tooltip" data-bs-title="Choose what to do with tags">
+          <option value="insert">insert</option>
+          <option value="delete">delete</option>
+          <option value="replace">replace (old→new; old2→new2)</option>
+          <option value="move">move (to temp if tags match)</option>
+          <option value="dedup">dedup</option>
+          <option value="undo">undo (restore from temp)</option>
         </select>
       </div>
+
       <div class="col-md-4">
         <label class="form-label">Image extensions (comma)</label>
-        <input type="text" class="form-control" name="exts" value=".jpg,.jpeg,.png,.webp">
+        <input class="form-control" id="exts" name="exts" value=".jpg,.jpeg,.png,.webp"
+               data-bs-toggle="tooltip" data-bs-title="Which image types to include">
+      </div>
+
+      <div class="col-md-9">
+        <label class="form-label">Tags / mapping</label>
+        <input class="form-control" id="tags" name="tags"
+               placeholder="insert/delete/move: tag1, tag2   •   replace: old->new; old2->new2"
+               data-bs-toggle="tooltip"
+               data-bs-title="insert/delete/move use a comma list. replace uses mappings like old->new; old2->new2">
+      </div>
+
+      <div class="col-md-3 d-flex align-items-end">
+        <div class="form-check" data-bs-toggle="tooltip" data-bs-title="Create .bak backup of original .txt (not used for move/undo)">
+          <input class="form-check-input" type="checkbox" id="backup" name="backup">
+          <label class="form-check-label" for="backup">Create .bak backups</label>
+        </div>
+      </div>
+
+      <!-- Temp section -->
+      <div class="col-md-12">
+        <label class="form-label">Temp folder (used by move / undo / edit in temp)</label>
+        <div class="row g-2 align-items-stretch">
+          <div class="col-lg-8">
+            <div class="input-group">
+              <input id="temp_dir" name="temp_dir" type="text" class="form-control"
+                     placeholder="(default: &lt;folder&gt;\_temp)"
+                     data-bs-toggle="tooltip" data-bs-title="Leave empty to use &lt;folder&gt;\_temp">
+              <button class="btn btn-outline-light btn-browse" type="button" data-target="temp_dir"
+                      data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
+              <button class="btn btn-outline-secondary" type="button" id="btn-temp-default"
+                      data-bs-toggle="tooltip" data-bs-title="Fill with default path based on Folder">Use default</button>
+            </div>
+            <div class="small-note mt-1">
+              Default: <span class="code-chip" id="temp-default">—</span>
+            </div>
+          </div>
+          <div class="col-lg-4">
+            <div class="p-2" style="background:var(--bb-card); border:1px solid var(--bb-border); border-radius:.5rem;">
+              <div class="small-note mb-1">Effective paths preview</div>
+              <div class="small">
+                <strong>Move →</strong>
+                <span class="code-chip" id="eff-move">—</span> to
+                <span class="code-chip" id="eff-move-dest">—</span>
+              </div>
+              <div class="small">
+                <strong>Edit modes (insert / delete / replace / dedup) →</strong>
+                <span class="code-chip" id="eff-edit">—</span>
+              </div>
+              <div class="small">
+                <strong>Undo →</strong>
+                <span class="code-chip" id="eff-undo">—</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
-    <div class="row g-3 mt-1">
-      <div class="col-md-6">
-        <label class="form-label">Tags / Old→New / Move A,B</label>
-        <input type="text" class="form-control" name="tags" placeholder="e.g. green hair, green eyes  OR  old_tag->new_tag  OR  tagA,tagB">
-      </div>
-      <div class="col-md-3 form-check d-flex align-items-end ps-4">
-        <input class="form-check-input me-2" type="checkbox" name="backup" checked id="backup">
-        <label class="form-check-label" for="backup">Create .bak backups</label>
-      </div>
-      <div class="col-md-3 d-flex align-items-end">
-        <button class="btn btn-primary">Run</button>
-      </div>
+    <div class="mt-3 d-flex gap-2 flex-wrap">
+      <button class="btn btn-primary" id="btn-run">Run</button>
+      <button type="button" class="btn btn-outline-warning" id="btn-undo"
+              data-bs-toggle="tooltip" data-bs-title="Restore files from Temp folder back to Folder">Undo Move</button>
+      <button type="button" class="btn btn-outline-secondary" id="btn-clear"
+              data-bs-toggle="tooltip" data-bs-title="Clear remembered inputs for this tool">Clear saved</button>
+    </div>
+
+    <!-- Inline status + log (no page reload) -->
+    <div class="mt-3 small text-muted" id="tags-status" style="min-height:1.25rem;"></div>
+    <div id="tags-log" class="card p-3 mt-2 d-none">
+      <h6 class="mb-2">Log</h6>
+      <pre class="monospace mb-0" id="tags-log-pre"></pre>
     </div>
   </form>
-
-  {% if log %}
-  <hr/>
-  <h5>Log</h5>
-  <pre class="monospace">{{ log }}</pre>
-  {% endif %}
 </div>
-{% endblock %}
+
+<script>
+(() => {
+  const get = id => document.getElementById(id);
+
+  const IDS = {
+    folder: 'folder_tags',
+    temp: 'temp_dir',
+    mode: 'mode-select',
+    tags: 'tags',
+    exts: 'exts',
+    backup: 'backup',
+    status: 'tags-status',
+    logWrap: 'tags-log',
+    logPre: 'tags-log-pre',
+    tempDefault: 'temp-default',
+    effMove: 'eff-move',
+    effMoveDest: 'eff-move-dest',
+    effEdit: 'eff-edit',
+    effUndo: 'eff-undo'
+  };
+
+  const MODE_HELP = {
+    insert:"Insert: add missing tags to each .txt (comma-separated).",
+    delete:"Delete: remove specific tags if present (comma-separated).",
+    replace:"Replace: map old->new; multiple mappings separated by semicolons (e.g., old->new; old2->new2).",
+    move:"Move: if ANY listed tags exist in .txt, move image+.txt to Temp.",
+    dedup:"Dedup: remove duplicate tags, keep the first occurrence.",
+    undo:"Undo: restore files from Temp back to base Folder."
+  };
+  const MODE_CLASS = {
+    insert:"mode-insert", delete:"mode-delete", replace:"mode-replace",
+    move:"mode-move", dedup:"mode-dedup", undo:"mode-undo"
+  };
+
+  const stripTemp = p => (p||'').replace(/[\\\/]_temp$/i,'');
+  const sepFor = p => (p && p.includes('/')) ? '/' : '\\';
+  const defaultTempFor = root => root ? (stripTemp(root) + sepFor(root) + '_temp') : '';
+
+  function updateModeHelp(){
+    const key = get(IDS.mode)?.value || 'insert';
+    const desc = get('mode-desc'), banner = get('mode-banner');
+    if(desc) desc.textContent = MODE_HELP[key] || MODE_HELP.insert;
+    if(banner) banner.className = 'mode-banner ' + (MODE_CLASS[key] || 'mode-insert');
+  }
+
+  function refreshTempHints(){
+    const root = stripTemp((get(IDS.folder)?.value||'').trim());
+    const def  = defaultTempFor(root);
+    const temp = (get(IDS.temp)?.value||'').trim() || def;
+
+    if (get(IDS.tempDefault)) get(IDS.tempDefault).textContent = def || '—';
+    if (get(IDS.effMove))     get(IDS.effMove).textContent     = root || '—';
+    if (get(IDS.effMoveDest)) get(IDS.effMoveDest).textContent = temp || '—';
+    if (get(IDS.effEdit))     get(IDS.effEdit).textContent     = temp || '—';
+    if (get(IDS.effUndo))     get(IDS.effUndo).textContent     = (root || '—') + '  ←  from  ' + (temp || '—');
+  }
+
+  // ---- persistence ----
+  const LSKEY = 'bb.tags.';
+  const FIELDS = [
+    ['folder', IDS.folder],
+    ['temp', IDS.temp],
+    ['mode', IDS.mode],
+    ['exts', IDS.exts],
+    ['tags', IDS.tags],
+    ['backup', IDS.backup],
+  ];
+  function loadSaved(){
+    FIELDS.forEach(([k,id])=>{
+      const el = get(id); if(!el) return;
+      const sv = localStorage.getItem(LSKEY+k);
+      if (sv==null) return;
+      if (el.type === 'checkbox') el.checked = (sv === '1');
+      else el.value = sv;
+    });
+  }
+  function hookSavers(){
+    FIELDS.forEach(([k,id])=>{
+      const el = get(id); if(!el) return;
+      const save = ()=>{
+        if (el.type === 'checkbox') localStorage.setItem(LSKEY+k, el.checked ? '1':'0');
+        else localStorage.setItem(LSKEY+k, el.value || '');
+        refreshTempHints(); updateModeHelp();
+      };
+      el.addEventListener('input', save);
+      if (el.type === 'checkbox') el.addEventListener('change', save);
+    });
+  }
+  function clearSaved(){
+    FIELDS.forEach(([k])=> localStorage.removeItem(LSKEY+k));
+    get(IDS.tags).value = '';
+    get(IDS.exts).value = '.jpg,.jpeg,.png,.webp';
+    get(IDS.backup).checked = false;
+    refreshTempHints();
+  }
+
+  // ---- AJAX helpers ----
+  function showStatus(msg){ const s=get(IDS.status); if(s){ s.textContent=msg||''; } }
+  function showLog(text){
+    const wrap = get(IDS.logWrap), pre = get(IDS.logPre);
+    if(!wrap||!pre) return;
+    if (text && text.trim()){
+      wrap.classList.remove('d-none');
+      pre.textContent = text;
+    } else {
+      wrap.classList.add('d-none');
+      pre.textContent = '';
+    }
+  }
+  async function postForm(fd){
+    const res = await fetch(window.location.href, {
+      method: 'POST',
+      body: fd,
+      headers: { 'X-Requested-With': 'fetch' }
+    });
+    if (!res.ok) throw new Error('HTTP '+res.status);
+    let data=null;
+    try{ data = await res.json(); }catch(_){}
+    return data || { ok:true, log:'' };
+  }
+
+  // Build proper params:
+  // - move → operate on BASE
+  // - ALL OTHER MODES (insert/delete/replace/dedup/undo) → operate on TEMP
+  function finalizeFormDataForMode(fd){
+    const mode = get(IDS.mode)?.value || 'insert';
+    const root = stripTemp((get(IDS.folder)?.value||'').trim());
+    const temp = (get(IDS.temp)?.value||'').trim() || defaultTempFor(root);
+
+    fd.set('active_tab','tags');
+    fd.set('tool','tags');
+
+    if (mode === 'move') {
+      fd.set('folder', root);
+    } else {
+      fd.set('folder', temp);
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', ()=>{
+    const form = get('tags-form');
+
+    loadSaved();
+    hookSavers();
+    updateModeHelp();
+    refreshTempHints();
+
+    get('btn-temp-default')?.addEventListener('click', ()=>{
+      const root = stripTemp((get(IDS.folder)?.value||'').trim());
+      get(IDS.temp).value = defaultTempFor(root);
+      refreshTempHints();
+    });
+
+    // Main Run → AJAX (no refresh)
+    form.addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      showStatus('Running…');
+      const fd = new FormData(form);
+      finalizeFormDataForMode(fd);
+      try{
+        const data = await postForm(fd);
+        showStatus(data.ok ? 'Done.' : 'Finished with issues.');
+        showLog(data.log || '');
+      }catch(err){
+        console.error(err);
+        showStatus('Failed. See console / server log.');
+      }
+    });
+
+    // Undo button → force mode=undo and AJAX
+    get('btn-undo')?.addEventListener('click', async ()=>{
+      const fd = new FormData(form);
+      fd.set('mode','undo');
+      finalizeFormDataForMode(fd);
+      showStatus('Undo running…');
+      try{
+        const data = await postForm(fd);
+        showStatus(data.ok ? 'Undo done.' : 'Undo finished with issues.');
+        showLog(data.log || '');
+        // reflect current mode in UI/persistence
+        get(IDS.mode).value = 'undo';
+        localStorage.setItem(LSKEY+'mode','undo');
+        updateModeHelp();
+      }catch(err){
+        console.error(err);
+        showStatus('Undo failed.');
+      }
+    });
+
+    // Clear saved
+    get('btn-clear')?.addEventListener('click', ()=>{
+      clearSaved();
+      showStatus('Saved inputs cleared.');
+      showLog('');
+    });
+
+    // Live previews
+    get(IDS.mode)?.addEventListener('change', ()=>{ updateModeHelp(); refreshTempHints(); });
+    get(IDS.folder)?.addEventListener('input', refreshTempHints);
+    get(IDS.temp)?.addEventListener('input',   refreshTempHints);
+  });
+})();
+</script>

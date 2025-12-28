@@ -1,0 +1,44 @@
+<div class="card p-4">
+    <form method="post" data-tool-label="Combine image+txt sets">
+      <input type="hidden" name="tool" value="combine">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label">Folder A</label>
+          <div class="input-group">
+            <input id="folder_a" name="folder_a" type="text" class="form-control" placeholder="D:\path\to\datasetA" data-bs-toggle="tooltip" data-bs-title="First dataset (image + .txt pairs)">
+            <button class="btn btn-outline-light btn-browse" type="button" data-target="folder_a" data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Folder B</label>
+          <div class="input-group">
+            <input id="folder_b" name="folder_b" type="text" class="form-control" placeholder="D:\path\to\datasetB" data-bs-toggle="tooltip" data-bs-title="Second dataset (image + .txt pairs)">
+            <button class="btn btn-outline-light btn-browse" type="button" data-target="folder_b" data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Output Folder</label>
+          <div class="input-group">
+            <input id="out_dir" name="out_dir" type="text" class="form-control" placeholder="D:\path\to\merged_output" data-bs-toggle="tooltip" data-bs-title="All combined files will be placed here">
+            <button class="btn btn-outline-light btn-browse" type="button" data-target="out_dir" data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Suffix for smaller set</label>
+          <input class="form-control" name="suffix_combine" value="_B" data-bs-toggle="tooltip" data-bs-title="Appended to the smaller dataset's filenames to avoid collisions">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Image ext (comma)</label>
+          <input class="form-control" name="exts_combine" value=".jpg,.jpeg,.png,.webp" data-bs-toggle="tooltip" data-bs-title="Image types to treat as pairs with .txt">
+        </div>
+        <div class="col-md-3 d-flex align-items-end">
+          <div class="form-check" data-bs-toggle="tooltip" data-bs-title="Move files instead of copying">
+            <input class="form-check-input" type="checkbox" id="move_instead" name="move_instead">
+            <label class="form-check-label" for="move_instead">Move (not copy)</label>
+          </div>
+        </div>
+      </div>
+      <div class="mt-3"><button class="btn btn-primary">Combine</button></div>
+    </form>
+  </div>
+  
