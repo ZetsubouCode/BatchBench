@@ -2,186 +2,44 @@
 {% block content %}
   {% set tab = active_tab or 'webp' %}
 
-  <style>
-    /* Per-mode readable banners (unique backgrounds) */
-    .mode-banner { border:1px solid var(--bb-border); padding:.75rem 1rem; border-radius:.5rem; margin-bottom:1rem; }
-    .mode-insert  { background:#0d2d1f; color:#e6fff1; border-color:#1f6f4a; } /* greenish */
-    .mode-delete  { background:#2b1416; color:#ffe8ea; border-color:#6f1f26; } /* reddish */
-    .mode-replace { background:#2b220f; color:#fff2d6; border-color:#6f531f; } /* amber */
-    .mode-move    { background:#1d1733; color:#eee8ff; border-color:#3f2f7a; } /* purple */
-    .mode-dedup   { background:#0c2238; color:#d6edff; border-color:#1f4f6f; } /* blue-slate */
-  </style>
-
   <ul class="nav nav-tabs mb-3" role="tablist">
-    <li class="nav-item"><button class="nav-link {{ 'active' if tab=='webp' }}" data-bs-toggle="tab" data-bs-target="#tab-webp" type="button">WebP → PNG</button></li>
-    <li class="nav-item"><button class="nav-link {{ 'active' if tab=='batch' }}" data-bs-toggle="tab" data-bs-target="#tab-batch" type="button">Batch Adjust</button></li>
+    <li class="nav-item"><button class="nav-link {{ 'active' if tab=='webp' }}" data-bs-toggle="tab" data-bs-target="#tab-webp" type="button">WebP → PNG Converter</button></li>
+    <li class="nav-item"><button class="nav-link {{ 'active' if tab=='batch' }}" data-bs-toggle="tab" data-bs-target="#tab-batch" type="button">Photo Adjust (preset)</button></li>
     <li class="nav-item"><button class="nav-link {{ 'active' if tab=='tags' }}" data-bs-toggle="tab" data-bs-target="#tab-tags" type="button">Dataset Tag Editor</button></li>
-    <li class="nav-item"><button class="nav-link {{ 'active' if tab=='combine' }}" data-bs-toggle="tab" data-bs-target="#tab-combine" type="button">Combine Datasets</button></li>
+    <li class="nav-item"><button class="nav-link {{ 'active' if tab=='combine' }}" data-bs-toggle="tab" data-bs-target="#tab-combine" type="button">Combine Image+Txt sets</button></li>
+    <li class="nav-item"><button class="nav-link {{ 'active' if tab=='rename' }}" data-bs-toggle="tab" data-bs-target="#tab-rename" type="button">Flatten & Renumber</button></li>
+    <li class="nav-item"><button class="nav-link {{ 'active' if tab=='merge' }}" data-bs-toggle="tab" data-bs-target="#tab-merge" type="button">Stitch Groups</button></li>
+    <li class="nav-item"><button class="nav-link {{ 'active' if tab=='webtoon' }}" data-bs-toggle="tab" data-bs-target="#tab-webtoon" type="button">Webtoon Panel Splitter</button></li>
     <li class="nav-item ms-auto"><span class="nav-link disabled">Presets loaded: {{ preset_names|length }}</span></li>
   </ul>
 
   <div class="tab-content">
-    <!-- WebP -->
     <div class="tab-pane fade {{ 'show active' if tab=='webp' }}" id="tab-webp">
-      <div class="card p-4">
-        <form method="post">
-          <input type="hidden" name="tool" value="webp">
-          <div class="row g-3">
-            <div class="col-md-6">
-              <label class="form-label">Source Folder</label>
-              <div class="input-group">
-                <input id="src_webp" name="src_webp" type="text" class="form-control" placeholder="D:\\path\\to\\webp" data-bs-toggle="tooltip" data-bs-title="Folder containing .webp files">
-                <button class="btn btn-outline-light btn-browse" type="button" data-target="src_webp" data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
-              </div>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label">Output Folder</label>
-              <div class="input-group">
-                <input id="dst_webp" name="dst_webp" type="text" class="form-control" placeholder="D:\\path\\to\\output" data-bs-toggle="tooltip" data-bs-title="Converted PNGs will be saved here">
-                <button class="btn btn-outline-light btn-browse" type="button" data-target="dst_webp" data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
-              </div>
-            </div>
-          </div>
-          <div class="mt-3"><button class="btn btn-primary">Convert</button></div>
-        </form>
-      </div>
+      {% include "webp_to_png.html" %}
     </div>
 
-    <!-- Batch Adjust -->
     <div class="tab-pane fade {{ 'show active' if tab=='batch' }}" id="tab-batch">
-      <div class="card p-4">
-        <form method="post">
-          <input type="hidden" name="tool" value="batch">
-          <div class="row g-3">
-            <div class="col-md-4">
-              <label class="form-label">Source Folder</label>
-              <div class="input-group">
-                <input id="src_batch" name="src_batch" type="text" class="form-control" placeholder="D:\\path\\to\\images" data-bs-toggle="tooltip" data-bs-title="Images to process (.jpg/.png/.webp)">
-                <button class="btn btn-outline-light btn-browse" type="button" data-target="src_batch" data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
-              </div>
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">Output Folder</label>
-              <div class="input-group">
-                <input id="dst_batch" name="dst_batch" type="text" class="form-control" placeholder="D:\\path\\to\\output" data-bs-toggle="tooltip" data-bs-title="Processed images saved here">
-                <button class="btn btn-outline-light btn-browse" type="button" data-target="dst_batch" data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
-              </div>
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">Preset</label>
-              <select class="form-select" name="preset" data-bs-toggle="tooltip" data-bs-title="Choose an adjustment preset">
-                {% for name in preset_names %}
-                  <option value="{{ name }}">{{ name }}</option>
-                {% endfor %}
-              </select>
-            </div>
-            <div class="col-md-3">
-              <label class="form-label">Suffix</label>
-              <input class="form-control" name="suffix" value="_adj" data-bs-toggle="tooltip" data-bs-title="Added to output filenames">
-            </div>
-            <div class="col-md-3">
-              <label class="form-label">Max files (0 = all)</label>
-              <input class="form-control" type="number" name="limit" value="0" min="0" data-bs-toggle="tooltip" data-bs-title="Limit number of processed files">
-            </div>
-          </div>
-          <div class="mt-3"><button class="btn btn-primary">Process</button></div>
-        </form>
-      </div>
+      {% include "batch_adjust.html" %}
     </div>
 
-    <!-- Dataset Tag Editor -->
     <div class="tab-pane fade {{ 'show active' if tab=='tags' }}" id="tab-tags">
-      <div class="card p-4">
-        <!-- Mode explanation banner (unique per mode) -->
-        <div id="mode-banner" class="mode-banner mode-insert">
-          <strong>Mode help:</strong> <span id="mode-desc">Insert: add missing tags to each .txt (comma-separated).</span>
-        </div>
-
-        <form method="post">
-          <input type="hidden" name="tool" value="tags">
-          <div class="row g-3">
-            <div class="col-md-4">
-              <label class="form-label">Folder</label>
-              <div class="input-group">
-                <input id="folder_tags" name="folder" type="text" class="form-control" placeholder="D:\\path\\to\\dataset" data-bs-toggle="tooltip" data-bs-title="Contains images with sibling .txt files">
-                <button class="btn btn-outline-light btn-browse" type="button" data-target="folder_tags" data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
-              </div>
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">Mode</label>
-              <select class="form-select" name="mode" id="mode-select" data-bs-toggle="tooltip" data-bs-title="Choose what to do with tags">
-                <option value="insert">insert</option>
-                <option value="delete">delete</option>
-                <option value="replace">replace (old→new; old2→new2)</option>
-                <option value="move">move (tagA,tagB)</option>
-                <option value="dedup">dedup</option>
-              </select>
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">Image extensions (comma)</label>
-              <input class="form-control" name="exts" value=".jpg,.jpeg,.png,.webp" data-bs-toggle="tooltip" data-bs-title="Which image types to include">
-            </div>
-            <div class="col-md-9">
-              <label class="form-label">Tags / mapping / pair</label>
-              <input class="form-control" name="tags" placeholder="green hair, green eyes  OR  old->new; old2->new2  OR  tagA,tagB" data-bs-toggle="tooltip" data-bs-title="Depends on mode: tags to insert/delete, mapping old->new, or pair tagA,tagB">
-            </div>
-            <div class="col-md-3 d-flex align-items-end">
-              <div class="form-check" data-bs-toggle="tooltip" data-bs-title="Create .bak backup of original .txt">
-                <input class="form-check-input" type="checkbox" id="backup" name="backup" checked>
-                <label class="form-check-label" for="backup">Create .bak backups</label>
-              </div>
-            </div>
-          </div>
-          <div class="mt-3"><button class="btn btn-primary">Run</button></div>
-        </form>
-      </div>
+      {% include "dataset_labeling.html" %}
     </div>
 
-    <!-- Combine Datasets -->
     <div class="tab-pane fade {{ 'show active' if tab=='combine' }}" id="tab-combine">
-      <div class="card p-4">
-        <form method="post">
-          <input type="hidden" name="tool" value="combine">
-          <div class="row g-3">
-            <div class="col-md-4">
-              <label class="form-label">Folder A</label>
-              <div class="input-group">
-                <input id="folder_a" name="folder_a" type="text" class="form-control" placeholder="D:\\path\\to\\datasetA" data-bs-toggle="tooltip" data-bs-title="First dataset (image + .txt pairs)">
-                <button class="btn btn-outline-light btn-browse" type="button" data-target="folder_a" data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
-              </div>
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">Folder B</label>
-              <div class="input-group">
-                <input id="folder_b" name="folder_b" type="text" class="form-control" placeholder="D:\\path\\to\\datasetB" data-bs-toggle="tooltip" data-bs-title="Second dataset (image + .txt pairs)">
-                <button class="btn btn-outline-light btn-browse" type="button" data-target="folder_b" data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
-              </div>
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">Output Folder</label>
-              <div class="input-group">
-                <input id="out_dir" name="out_dir" type="text" class="form-control" placeholder="D:\\path\\to\\merged_output" data-bs-toggle="tooltip" data-bs-title="All combined files will be placed here">
-                <button class="btn btn-outline-light btn-browse" type="button" data-target="out_dir" data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
-              </div>
-            </div>
-            <div class="col-md-3">
-              <label class="form-label">Suffix for smaller set</label>
-              <input class="form-control" name="suffix_combine" value="_B" data-bs-toggle="tooltip" data-bs-title="Appended to the smaller dataset's filenames to avoid collisions">
-            </div>
-            <div class="col-md-3">
-              <label class="form-label">Image ext (comma)</label>
-              <input class="form-control" name="exts_combine" value=".jpg,.jpeg,.png,.webp" data-bs-toggle="tooltip" data-bs-title="Image types to treat as pairs with .txt">
-            </div>
-            <div class="col-md-3 d-flex align-items-end">
-              <div class="form-check" data-bs-toggle="tooltip" data-bs-title="Move files instead of copying">
-                <input class="form-check-input" type="checkbox" id="move_instead" name="move_instead">
-                <label class="form-check-label" for="move_instead">Move (not copy)</label>
-              </div>
-            </div>
-          </div>
-          <div class="mt-3"><button class="btn btn-primary">Combine</button></div>
-        </form>
-      </div>
+      {% include "combine_datasets.html" %}
+    </div>
+    
+    <div class="tab-pane fade {{ 'show active' if tab=='rename' }}" id="tab-rename">
+      {% include "group_renamer.html" %}
+    </div>
+
+    <div class="tab-pane fade {{ 'show active' if tab=='merge' }}" id="tab-merge">
+      {% include "merge_groups.html" %}
+    </div>
+
+    <div class="tab-pane fade {{ 'show active' if tab=='webtoon' }}" id="tab-webtoon">
+      {% include "webtoon_splitter.html" %}
     </div>
   </div>
 
@@ -191,36 +49,4 @@
       <pre class="monospace">{{ log }}</pre>
     </div>
   {% endif %}
-
-  <script>
-    // Live help text + banner color for Dataset Tag Editor Mode
-    const MODE_HELP = {
-      insert: "Insert: add missing tags to each .txt (comma-separated).",
-      delete: "Delete: remove specific tags if present (comma-separated).",
-      replace: "Replace: map old->new; multiple mappings separated by semicolons, e.g. old->new; old2->new2.",
-      move: "Move: reorder tags; provide two tags as 'tagA,tagB' to place A before B.",
-      dedup: "Dedup: remove duplicate tags, keeping the first occurrence."
-    };
-    const MODE_CLASS = {
-      insert: "mode-insert",
-      delete: "mode-delete",
-      replace: "mode-replace",
-      move: "mode-move",
-      dedup: "mode-dedup",
-    };
-    function updateModeHelp(){
-      const sel = document.getElementById("mode-select");
-      const desc = document.getElementById("mode-desc");
-      const banner = document.getElementById("mode-banner");
-      if(sel && desc && banner){
-        const key = sel.value || "insert";
-        desc.textContent = MODE_HELP[key] || MODE_HELP.insert;
-        banner.className = "mode-banner " + (MODE_CLASS[key] || "mode-insert");
-      }
-    }
-    document.addEventListener("change", (e)=>{
-      if(e.target && e.target.id === "mode-select"){ updateModeHelp(); }
-    });
-    document.addEventListener("DOMContentLoaded", updateModeHelp);
-  </script>
 {% endblock %}

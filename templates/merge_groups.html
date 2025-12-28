@@ -1,0 +1,102 @@
+<div class="card p-4">
+  <form method="post" data-tool-label="Stitch Groups">
+    <input type="hidden" name="tool" value="merge_groups">
+    <div class="row g-3">
+      <div class="col-md-4">
+        <label class="form-label">Source folder</label>
+        <div class="input-group">
+          <input id="merge_folder" name="merge_folder" type="text" class="form-control"
+                 placeholder="D:\path\to\images"
+                 data-bs-toggle="tooltip"
+                 data-bs-title="Folder with parts named &lt;prefix&gt;_&lt;order&gt;.&lt;ext&gt; (e.g., chapter1_01.png, chapter1_02.jpg).">
+          <button class="btn btn-outline-light btn-browse" type="button" data-target="merge_folder"
+                  data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
+        </div>
+        <div class="form-text">Outputs are saved as <strong>PNG</strong> in the destination folder.</div>
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label">Output folder (optional)</label>
+        <div class="input-group">
+          <input id="merge_out_dir" name="merge_out_dir" type="text" class="form-control"
+                 placeholder="(default: &lt;source&gt;\combined)"
+                 data-bs-toggle="tooltip" data-bs-title="Leave blank to write into &lt;source&gt;\combined">
+          <button class="btn btn-outline-light btn-browse" type="button" data-target="merge_out_dir"
+                  data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
+        </div>
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label">Filename glob</label>
+        <input name="merge_glob" class="form-control" value="*_*.*"
+               data-bs-toggle="tooltip"
+               data-bs-title="Filters the list before extension matching. Example: *_*.* for &lt;prefix&gt;_&lt;order&gt; files.">
+        <div class="form-text">Keep default unless you have helper files to skip.</div>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Extensions to include</label>
+        <input name="merge_exts" class="form-control" value=".png,.jpg,.jpeg,.webp"
+               data-bs-toggle="tooltip"
+               data-bs-title="Comma-separated. With or without dots is fine (.png, jpg, webp). Only these will be stitched.">
+        <div class="form-text">Inputs can mix formats; output is always PNG.</div>
+      </div>
+
+      <div class="col-md-2">
+        <label class="form-label">Stack direction</label>
+        <select name="merge_orientation" class="form-select"
+                data-bs-toggle="tooltip" data-bs-title="Vertical = webtoon style (top→bottom). Horizontal = filmstrip (left→right).">
+          <option value="v" selected>Vertical (top → bottom)</option>
+          <option value="h">Horizontal (left → right)</option>
+        </select>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Resize rule</label>
+        <select name="merge_resize" class="form-select"
+                data-bs-toggle="tooltip"
+                data-bs-title="Auto: align widths when vertical, heights when horizontal. 'None' keeps originals (pads only).">
+          <option value="auto" selected>Auto align (recommended)</option>
+          <option value="none">No resize (pad only)</option>
+          <option value="match-height">Force same height</option>
+          <option value="match-width">Force same width</option>
+        </select>
+      </div>
+
+      <div class="col-md-2">
+        <label class="form-label">Gap (px)</label>
+        <input name="merge_gap" type="number" class="form-control" value="0" min="0"
+               data-bs-toggle="tooltip" data-bs-title="Pixels inserted between images after resizing/padding.">
+      </div>
+
+      <div class="col-md-2">
+        <label class="form-label">Background</label>
+        <input name="merge_bg" class="form-control" value="#FFFFFF"
+               data-bs-toggle="tooltip" data-bs-title="Canvas color (hex). Used for padding and gaps.">
+      </div>
+
+      <div class="col-md-12 d-flex flex-wrap gap-4">
+        <div class="form-check" data-bs-toggle="tooltip" data-bs-title="Skip groups with only one image to avoid duplicates">
+          <input class="form-check-input" type="checkbox" id="merge_skip_single" name="merge_skip_single">
+          <label class="form-check-label" for="merge_skip_single">Skip single</label>
+        </div>
+        <div class="form-check" data-bs-toggle="tooltip" data-bs-title="Reverse each group before stitching">
+          <input class="form-check-input" type="checkbox" id="merge_reverse" name="merge_reverse">
+          <label class="form-check-label" for="merge_reverse">Reverse order</label>
+        </div>
+        <div class="form-check" data-bs-toggle="tooltip" data-bs-title="Overwrite existing outputs instead of skipping">
+          <input class="form-check-input" type="checkbox" id="merge_overwrite" name="merge_overwrite">
+          <label class="form-check-label" for="merge_overwrite">Overwrite</label>
+        </div>
+        <div class="form-check" data-bs-toggle="tooltip" data-bs-title="Preview what would be written without saving files">
+          <input class="form-check-input" type="checkbox" id="merge_dry_run" name="merge_dry_run">
+          <label class="form-check-label" for="merge_dry_run">Dry run</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-3">
+      <button class="btn btn-primary">Merge</button>
+    </div>
+  </form>
+</div>

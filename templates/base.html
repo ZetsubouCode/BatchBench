@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ config.APP_NAME or "BatchBench" }}</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <link rel="icon" href="{{ url_for('static', filename='icons/icon.ico') }}">
   <style>
     :root{
       --bb-bg:#0b1220; --bb-card:#0f172a; --bb-border:#1f2a44;
@@ -52,6 +53,23 @@
       color:var(--bs-tooltip-color);
       border:1px solid var(--bb-border);
     }
+    /* Busy overlay */
+    #bb-busy{
+      position:fixed; inset:0; display:none;
+      align-items:center; justify-content:center;
+      background:rgba(11,18,32,0.78);
+      z-index:2000;
+    }
+    #bb-busy.show{display:flex;}
+    #bb-busy .bb-busy-box{
+      background:var(--bb-card);
+      border:1px solid var(--bb-border);
+      padding:1.5rem 2rem;
+      border-radius:.75rem;
+      box-shadow:0 10px 40px rgba(0,0,0,0.45);
+      min-width:260px;
+      text-align:center;
+    }
   </style>
 </head>
 <body>
@@ -95,16 +113,18 @@
     </div>
   </div>
 
+  <!-- Busy overlay -->
+  <div id="bb-busy" class="d-none" aria-live="polite" aria-busy="true">
+    <div class="bb-busy-box">
+      <div class="spinner-border text-light mb-3" role="status"></div>
+      <div id="bb-busy-msg">Working...</div>
+      <div class="small text-muted mt-2">Please wait — this can take a bit.</div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script>
-    // Enable tooltips globally (after DOM is ready)
-    document.addEventListener("DOMContentLoaded", () => {
-      document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
-        new bootstrap.Tooltip(el);
-      });
-    });
-
-    // Folder picker logic
+    // Shared state for folder picker
     let bbTargetInput = null;
     let bbPath = "";
 
@@ -153,6 +173,80 @@
         if(bbTargetInput && bbPath){ bbTargetInput.value = bbPath; }
         modal.hide();
       };
+    });
+
+    // On DOM ready: tooltips, busy indicator, and form persistence
+    document.addEventListener("DOMContentLoaded", () => {
+      // Tooltips
+      document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
+        new bootstrap.Tooltip(el);
+      });
+
+      const busy = document.getElementById("bb-busy");
+      const busyMsg = document.getElementById("bb-busy-msg");
+      const showBusy = (msg) => {
+        if(!busy) return;
+        busyMsg.textContent = msg || "Working...";
+        busy.classList.remove("d-none");
+        busy.classList.add("show");
+      };
+
+      const persistForm = (form, key) => {
+        if(!key) return;
+        const storageKey = `bb-form-${key}`;
+        const fields = Array.from(form.querySelectorAll("input,select,textarea")).filter(el=>{
+          const t = (el.type||"").toLowerCase();
+          return !el.disabled && !el.readOnly && t !== "hidden" && t !== "button" && t !== "submit" && !el.hasAttribute("data-no-persist");
+        });
+
+        try {
+          const saved = JSON.parse(localStorage.getItem(storageKey) || "{}");
+          fields.forEach(el=>{
+            const name = el.name || el.id;
+            if(!name || !(name in saved)) return;
+            if((el.type||"").toLowerCase() === "checkbox"){
+              el.checked = !!saved[name];
+            }else{
+              el.value = saved[name];
+            }
+          });
+        } catch(e){}
+
+        const save = () => {
+          const data = {};
+          fields.forEach(el=>{
+            const name = el.name || el.id;
+            if(!name) return;
+            if((el.type||"").toLowerCase() === "checkbox"){
+              data[name] = el.checked;
+            }else{
+              data[name] = el.value;
+            }
+          });
+          try { localStorage.setItem(storageKey, JSON.stringify(data)); } catch(e){}
+        };
+
+        form.addEventListener("input", save);
+        form.addEventListener("change", save);
+      };
+
+      document.querySelectorAll("form").forEach(form=>{
+        const toolInput = form.querySelector('input[name="tool"]');
+        const toolKey = toolInput ? (toolInput.value || "").trim() : "";
+        if(toolKey && !form.hasAttribute("data-no-persist")){ persistForm(form, toolKey); }
+
+        if(!form.hasAttribute("data-no-busy")){
+          form.addEventListener("submit", ()=>{
+            const label = form.getAttribute("data-tool-label") || toolKey || "task";
+            showBusy(`Working on ${label}...`);
+            form.querySelectorAll('button[type="submit"],button:not([type])').forEach(btn=>{
+              btn.dataset.originalText = btn.innerHTML;
+              btn.disabled = true;
+              btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Working...';
+            });
+          });
+        }
+      });
     });
   </script>
 </body>

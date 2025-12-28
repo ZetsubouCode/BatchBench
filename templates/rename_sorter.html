@@ -1,0 +1,57 @@
+<!-- rename_sorter.html -->
+<div class="card p-4">
+    <form method="post">
+      <input type="hidden" name="tool" value="rename">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label">Root Folder</label>
+          <div class="input-group">
+            <input id="rs_root" name="rs_root" type="text" class="form-control" placeholder="D:\datasets\chapters"
+                   data-bs-toggle="tooltip" data-bs-title="Contains numbered subfolders like 1_bydate, 2_byname, 3 (defaults to by date)">
+            <button class="btn btn-outline-light btn-browse" type="button" data-target="rs_root" data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Output Folder</label>
+          <div class="input-group">
+            <input id="rs_out" name="rs_out" type="text" class="form-control" placeholder="(default: &lt;root&gt;\sorted_images)"
+                   data-bs-toggle="tooltip" data-bs-title="Renamed images will be written here">
+            <button class="btn btn-outline-light btn-browse" type="button" data-target="rs_out" data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
+          </div>
+        </div>
+      </div>
+  
+      <div class="row g-3 mt-1">
+        <div class="col-md-12">
+          <div class="alert alert-secondary small mb-0">
+            <strong>How it works:</strong> For each <em>subfolder</em> under the root:
+            <ul class="mb-0">
+              <li>Name it <code>12_byname</code> to sort by filename (natural sort). </li>
+              <li>Name it <code>12_bydate</code> (or just <code>12</code>) to sort by file modified time.</li>
+              <li>Output names become <code>12_001.png</code>, <code>12_002.png</code>, … per subfolder, with safe de-dup (<code>-1</code>, <code>-2</code>) if clashes occur.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+  
+      <div class="row g-3 mt-1">
+        <div class="col-md-4">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="rs_move" name="rs_move">
+            <label class="form-check-label" for="rs_move">Move instead of copy</label>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="rs_overwrite" name="rs_overwrite">
+            <label class="form-check-label" for="rs_overwrite">Overwrite if exists (otherwise use -1, -2…)</label>
+          </div>
+        </div>
+      </div>
+  
+      <div class="mt-3">
+        <button class="btn btn-primary">Run Rename & Sort</button>
+      </div>
+    </form>
+  </div>
+  
