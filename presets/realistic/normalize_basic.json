@@ -1,0 +1,52 @@
+{
+  "name": "realistic-normalize-basic",
+  "description": "Lightweight cleanup for realistic photo sets; keeps lighting/composition untouched.",
+  "version": "0.1.0",
+  "rules": {
+    "dedup": true,
+    "trim": true,
+    "remove_tags": [
+      "watermark",
+      "signature",
+      "jpeg artifacts",
+      "worst quality",
+      "lowres",
+      "nsfw"
+    ],
+    "remove_regex": [
+      "^rating:.*$"
+    ],
+    "replace_map": {
+      "upperbody": "upper body",
+      "cinematic lighting": "cinematic light"
+    },
+    "keep_tags": [
+      "portrait",
+      "headshot"
+    ],
+    "optional_handling": {
+      "move_to_optional_tags": [
+        "office",
+        "cafe",
+        "classroom"
+      ],
+      "move_to_optional_regex": [
+        "train interior"
+      ]
+    },
+    "sort": {
+      "enabled": true,
+      "priority_groups": [
+        ["person", "portrait", "headshot"],
+        ["day", "night", "indoors", "outdoors"]
+      ]
+    },
+    "background_policy": {
+      "enabled": true,
+      "allow_general": ["indoors", "outdoors", "city", "nature", "sky", "forest"],
+      "block_specific": ["classroom", "train interior", "bathroom"],
+      "move_specific_to_optional": true,
+      "frequency_threshold": 0.03
+    }
+  }
+}

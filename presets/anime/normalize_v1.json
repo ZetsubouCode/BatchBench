@@ -1,0 +1,55 @@
+{
+  "name": "anime-normalize-v1",
+  "description": "Remove junk tags, stabilize common tags, keep dataset neutral.",
+  "version": "1.0.0",
+  "rules": {
+    "dedup": true,
+    "trim": true,
+    "remove_tags": [
+      "watermark",
+      "signature",
+      "artist name",
+      "copyright name",
+      "jpeg artifacts",
+      "lowres",
+      "worst quality"
+    ],
+    "remove_regex": [
+      "^artist:.*$",
+      "^rating:.*$"
+    ],
+    "replace_map": {
+      "from back": "from behind",
+      "looking back": "looking back",
+      "upperbody": "upper body"
+    },
+    "keep_tags": [
+      "solo"
+    ],
+    "optional_handling": {
+      "move_to_optional_tags": [
+        "classroom",
+        "bedroom",
+        "kitchen"
+      ],
+      "move_to_optional_regex": []
+    },
+    "sort": {
+      "enabled": true,
+      "priority_groups": [
+        ["character_name", "series_name"],
+        ["solo"],
+        ["upper body", "cowboy shot", "full body", "close-up"],
+        ["from above", "from below", "from behind"],
+        ["day", "night", "indoors", "outdoors"]
+      ]
+    },
+    "background_policy": {
+      "enabled": true,
+      "allow_general": ["indoors", "outdoors", "city", "nature", "sky", "sea", "forest"],
+      "block_specific": ["classroom", "bedroom", "kitchen", "train interior"],
+      "move_specific_to_optional": true,
+      "frequency_threshold": 0.05
+    }
+  }
+}

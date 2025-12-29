@@ -6,10 +6,12 @@
     <li class="nav-item"><button class="nav-link {{ 'active' if tab=='webp' }}" data-bs-toggle="tab" data-bs-target="#tab-webp" type="button">WebP → PNG Converter</button></li>
     <li class="nav-item"><button class="nav-link {{ 'active' if tab=='batch' }}" data-bs-toggle="tab" data-bs-target="#tab-batch" type="button">Photo Adjust (preset)</button></li>
     <li class="nav-item"><button class="nav-link {{ 'active' if tab=='tags' }}" data-bs-toggle="tab" data-bs-target="#tab-tags" type="button">Dataset Tag Editor</button></li>
+    <li class="nav-item"><button class="nav-link {{ 'active' if tab=='normalize' }}" data-bs-toggle="tab" data-bs-target="#tab-normalize" type="button">Dataset Normalization</button></li>
     <li class="nav-item"><button class="nav-link {{ 'active' if tab=='combine' }}" data-bs-toggle="tab" data-bs-target="#tab-combine" type="button">Combine Image+Txt sets</button></li>
     <li class="nav-item"><button class="nav-link {{ 'active' if tab=='rename' }}" data-bs-toggle="tab" data-bs-target="#tab-rename" type="button">Flatten & Renumber</button></li>
     <li class="nav-item"><button class="nav-link {{ 'active' if tab=='merge' }}" data-bs-toggle="tab" data-bs-target="#tab-merge" type="button">Stitch Groups</button></li>
     <li class="nav-item"><button class="nav-link {{ 'active' if tab=='webtoon' }}" data-bs-toggle="tab" data-bs-target="#tab-webtoon" type="button">Webtoon Panel Splitter</button></li>
+    <li class="nav-item"><button class="nav-link {{ 'active' if tab=='pipeline' }}" data-bs-toggle="tab" data-bs-target="#tab-pipeline" type="button">Pipeline (beta)</button></li>
     <li class="nav-item ms-auto"><span class="nav-link disabled">Presets loaded: {{ preset_names|length }}</span></li>
   </ul>
 
@@ -26,6 +28,10 @@
       {% include "dataset_labeling.html" %}
     </div>
 
+    <div class="tab-pane fade {{ 'show active' if tab=='normalize' }}" id="tab-normalize">
+      {% include "normalize_dataset.html" %}
+    </div>
+
     <div class="tab-pane fade {{ 'show active' if tab=='combine' }}" id="tab-combine">
       {% include "combine_datasets.html" %}
     </div>
@@ -40,6 +46,10 @@
 
     <div class="tab-pane fade {{ 'show active' if tab=='webtoon' }}" id="tab-webtoon">
       {% include "webtoon_splitter.html" %}
+    </div>
+
+    <div class="tab-pane fade {{ 'show active' if tab=='pipeline' }}" id="tab-pipeline">
+      {% include "pipeline.html" %}
     </div>
   </div>
 

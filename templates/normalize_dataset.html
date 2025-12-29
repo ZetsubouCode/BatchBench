@@ -1,0 +1,425 @@
+<style>
+  .norm-card { background: var(--bb-card); border:1px solid var(--bb-border); border-radius:.75rem; }
+  .norm-panel { background:var(--bb-card); border:1px solid var(--bb-border); border-radius:.5rem; }
+  .norm-preview { border:1px solid var(--bb-border); border-radius:.5rem; padding:1rem; }
+  .norm-taglist { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace; white-space:pre-wrap; }
+  .norm-pill { background:var(--bb-code-bg); border:1px solid var(--bb-border); border-radius:999px; padding:.25rem .75rem; font-size:.85rem; }
+  .norm-badge { background:#1f2937; border:1px solid var(--bb-border); color:var(--bb-text); }
+  .norm-diff { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px,1fr)); gap:.75rem; }
+  .norm-diff textarea { min-height:140px; }
+  .norm-kv { display:flex; justify-content:space-between; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace; }
+  .norm-kv span { color:var(--bb-muted); }
+</style>
+
+<div class="card p-4 norm-card">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div>
+      <h4 class="mb-0">Dataset Normalization</h4>
+      <div class="text-muted small">Clean up junk tags, keep identity tags safe, and preview before writing.</div>
+    </div>
+    <div class="norm-pill text-warning-emphasis bg-dark border border-warning-subtle">Dry-run first, backups on.</div>
+  </div>
+
+  <div class="row g-3 align-items-end">
+    <div class="col-lg-5">
+      <label class="form-label">Dataset folder</label>
+      <div class="input-group">
+        <input id="norm-dataset" type="text" class="form-control" placeholder="D:\path\to\dataset">
+        <button class="btn btn-outline-light btn-browse" type="button" data-target="norm-dataset">Browse</button>
+      </div>
+    </div>
+    <div class="col-lg-3">
+      <label class="form-label">Image extensions</label>
+      <input id="norm-exts" type="text" class="form-control" value=".jpg,.jpeg,.png,.webp">
+    </div>
+    <div class="col-lg-2">
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" id="norm-recursive">
+        <label class="form-check-label" for="norm-recursive">Include subfolders</label>
+      </div>
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" id="norm-create-txt">
+        <label class="form-check-label" for="norm-create-txt">Create missing .txt</label>
+      </div>
+    </div>
+    <div class="col-lg-2">
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" id="norm-backup" checked>
+        <label class="form-check-label" for="norm-backup">Create backups (.bak)</label>
+      </div>
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" id="norm-sort" checked>
+        <label class="form-check-label" for="norm-sort">Normalize order</label>
+      </div>
+    </div>
+  </div>
+
+  <hr class="my-3">
+
+  <div class="row g-3">
+    <div class="col-lg-4">
+      <label class="form-label">Preset type</label>
+      <div class="input-group">
+        <select id="norm-preset-type" class="form-select"></select>
+        <button class="btn btn-outline-light" type="button" id="norm-reload-types">Reload</button>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <label class="form-label">Preset file</label>
+      <div class="input-group">
+        <select id="norm-preset-file" class="form-select"></select>
+        <button class="btn btn-outline-light" type="button" id="norm-reload-presets">Reload presets</button>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <div class="norm-panel p-3 h-100">
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <div class="fw-semibold">Preset summary</div>
+          <span class="badge bg-secondary" id="norm-preset-version">-</span>
+        </div>
+        <div class="small text-muted" id="norm-preset-desc">Choose a preset to see details.</div>
+        <div class="mt-2 small" id="norm-preset-stats"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mt-2">
+    <div class="col-lg-4">
+      <label class="form-label">Extra remove tags (comma or newline)</label>
+      <textarea id="norm-extra-remove" rows="3" class="form-control" placeholder="watermark, signature"></textarea>
+    </div>
+    <div class="col-lg-4">
+      <label class="form-label">Extra keep tags / protected</label>
+      <textarea id="norm-extra-keep" rows="3" class="form-control" placeholder="never delete these tags"></textarea>
+      <div class="small text-muted mt-1">keep_tags beats remove, background moves, and regex.</div>
+    </div>
+    <div class="col-lg-4">
+      <label class="form-label">Identity tags (optional)</label>
+      <textarea id="norm-identity" rows="3" class="form-control" placeholder="character_name, series_name"></textarea>
+      <div class="form-check mt-2">
+        <input class="form-check-input" type="checkbox" id="norm-move-unknown">
+        <label class="form-check-label" for="norm-move-unknown">Move unknown/specific backgrounds to #optional</label>
+      </div>
+      <div class="mt-2 d-flex align-items-center gap-2">
+        <label class="form-label mb-0">Background frequency threshold</label>
+        <input type="number" step="0.01" min="0" max="1" class="form-control form-control-sm w-25" id="norm-threshold" placeholder="0.05">
+      </div>
+    </div>
+  </div>
+
+  <div class="d-flex flex-wrap gap-2 align-items-center mt-3">
+    <div class="input-group" style="max-width:160px;">
+      <span class="input-group-text">Preview</span>
+      <input type="number" id="norm-preview-limit" class="form-control" value="30" min="1" max="500">
+    </div>
+    <button class="btn btn-outline-secondary" type="button" id="btn-norm-scan">Scan dataset</button>
+    <button class="btn btn-outline-info" type="button" id="btn-norm-dryrun">Dry-run preview</button>
+    <button class="btn btn-primary" type="button" id="btn-norm-apply" disabled>Apply normalization</button>
+    <div class="small text-muted" id="norm-status"></div>
+  </div>
+
+  <div class="row g-3 mt-3">
+    <div class="col-lg-5">
+      <div class="norm-panel p-3 h-100">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="fw-semibold">Scan stats</div>
+          <span class="badge bg-secondary" id="norm-scan-count">-</span>
+        </div>
+        <div class="small" id="norm-stats">No scan yet.</div>
+      </div>
+    </div>
+    <div class="col-lg-7">
+      <div class="norm-panel p-3 h-100">
+        <div class="fw-semibold mb-2">Tag histogram</div>
+        <div class="row small g-2">
+          <div class="col-md-6">
+            <div class="fw-semibold small text-muted">Top tags</div>
+            <div class="small" id="norm-top-tags"></div>
+          </div>
+          <div class="col-md-6">
+            <div class="fw-semibold small text-muted">Rare tags (under threshold)</div>
+            <div class="small" id="norm-rare-tags"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mt-3">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <div class="fw-semibold">Dry-run preview</div>
+      <span class="small text-muted">Before/after will appear here (limited by preview).</span>
+    </div>
+    <div id="norm-preview-list" class="d-grid gap-2"></div>
+  </div>
+
+  <div class="mt-3">
+    <div class="fw-semibold mb-1">Result log</div>
+    <pre class="monospace mb-0" id="norm-log" style="min-height:70px;"></pre>
+  </div>
+</div>
+
+<script>
+(() => {
+  const q = id => document.getElementById(id);
+  let readyForApply = false;
+
+  function setStatus(msg, ok=true){
+    const el = q('norm-status');
+    if(!el) return;
+    el.textContent = msg || '';
+    el.classList.toggle('text-warning', !ok);
+    el.classList.toggle('text-success', !!ok);
+  }
+
+  function setBusy(on, msg){
+    if(window.bbBusy){
+      if(on) window.bbBusy.show(msg || 'Working...');
+      else window.bbBusy.hide();
+    }
+  }
+
+  async function fetchJson(url, options={}){
+    const res = await fetch(url, {
+      headers: { 'Content-Type': 'application/json' },
+      ...options,
+    });
+    let data = null;
+    try { data = await res.json(); } catch(e){}
+    if(!res.ok || (data && data.ok === false)){
+      const err = (data && data.error) ? data.error : `Request failed (${res.status})`;
+      throw new Error(err);
+    }
+    return data || {};
+  }
+
+  function collectPayload(){
+    return {
+      dataset_path: (q('norm-dataset')?.value || '').trim(),
+      recursive: q('norm-recursive')?.checked || false,
+      include_missing_txt: q('norm-create-txt')?.checked || false,
+      preset_type: q('norm-preset-type')?.value || 'anime',
+      preset_file: q('norm-preset-file')?.value || '',
+      extra_remove: q('norm-extra-remove')?.value || '',
+      extra_keep: q('norm-extra-keep')?.value || '',
+      identity_tags: q('norm-identity')?.value || '',
+      move_unknown_background_to_optional: q('norm-move-unknown')?.checked || false,
+      background_threshold: q('norm-threshold')?.value || null,
+      normalize_order: q('norm-sort')?.checked ?? true,
+      preview_limit: parseInt(q('norm-preview-limit')?.value || '30', 10),
+      backup_enabled: q('norm-backup')?.checked ?? true,
+      image_exts: (q('norm-exts')?.value || '').trim(),
+    };
+  }
+
+  function renderPresetSummary(preset){
+    if(!preset){
+      q('norm-preset-desc').textContent = 'Choose a preset to see details.';
+      q('norm-preset-stats').textContent = '';
+      q('norm-preset-version').textContent = '-';
+      return;
+    }
+    q('norm-preset-desc').textContent = preset.description || '(no description)';
+    q('norm-preset-version').textContent = preset.version || '-';
+    const rules = preset.rules || {};
+    const parts = [];
+    parts.push(`remove: ${ (rules.remove_tags || []).length } tags, ${ (rules.remove_regex || []).length } regex`);
+    parts.push(`replace: ${ Object.keys(rules.replace_map || {}).length } mappings`);
+    parts.push(`keep: ${ (rules.keep_tags || []).length }`);
+    parts.push(`optional move: ${ (rules.optional_handling?.move_to_optional_tags || []).length } tags`);
+    if(rules.background_policy?.enabled){
+      parts.push(`background policy on (allow ${ (rules.background_policy.allow_general || []).length })`);
+    }
+    q('norm-preset-stats').textContent = parts.join(' | ');
+  }
+
+  function renderScan(result){
+    const statsEl = q('norm-stats');
+    if(!result || !result.ok){
+      statsEl.textContent = 'Scan failed.';
+      return;
+    }
+    const total = result.total_files || 0;
+    const files = result.tag_files || 0;
+    q('norm-scan-count').textContent = `${files} files`;
+    statsEl.innerHTML = `
+      <div class="norm-kv"><span>Total pairs</span><div>${files}</div></div>
+      <div class="norm-kv"><span>Tag entries scanned</span><div>${total}</div></div>
+      <div class="norm-kv"><span>Block-specific hits</span><div>${(result.block_specific_hits || []).length}</div></div>
+    `;
+
+    const topWrap = q('norm-top-tags');
+    topWrap.innerHTML = '';
+    (result.top_tags || []).slice(0,12).forEach(item=>{
+      const div = document.createElement('div');
+      div.className = 'norm-kv';
+      div.innerHTML = `<span>${item.tag}</span><div>${item.count}</div>`;
+      topWrap.appendChild(div);
+    });
+    if(!topWrap.childElementCount){ topWrap.textContent = '(no data)'; }
+
+    const rareWrap = q('norm-rare-tags');
+    rareWrap.innerHTML = '';
+    (result.rare_tags || []).slice(0,20).forEach(tag=>{
+      const div = document.createElement('div');
+      div.textContent = tag;
+      rareWrap.appendChild(div);
+    });
+    if(!rareWrap.childElementCount){ rareWrap.textContent = 'No rare tags under threshold.'; }
+  }
+
+  function renderPreviews(list){
+    const wrap = q('norm-preview-list');
+    wrap.innerHTML = '';
+    if(!list || !list.length){
+      wrap.innerHTML = '<div class="text-muted small">No preview data yet.</div>';
+      return;
+    }
+    list.forEach(item=>{
+      const card = document.createElement('div');
+      card.className = 'norm-preview';
+      card.innerHTML = `
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="fw-semibold small">${item.file}</div>
+          <span class="badge ${item.changed ? 'bg-success' : 'bg-secondary'}">${item.changed ? 'changed' : 'unchanged'}</span>
+        </div>
+        <div class="norm-diff">
+          <div>
+            <label class="form-label small mb-1">Before</label>
+            <textarea class="form-control norm-taglist" readonly>${item.before || ''}</textarea>
+          </div>
+          <div>
+            <label class="form-label small mb-1">After</label>
+            <textarea class="form-control norm-taglist" readonly>${item.after || ''}</textarea>
+          </div>
+        </div>
+        <div class="small text-muted mt-2">Actions: ${JSON.stringify(item.actions || {})}</div>
+      `;
+      wrap.appendChild(card);
+    });
+  }
+
+  async function loadPresetTypes(){
+    try{
+      const data = await fetchJson('/api/preset-types');
+      const types = data.types && data.types.length ? data.types : ['anime','realistic','misc'];
+      const sel = q('norm-preset-type');
+      sel.innerHTML = '';
+      types.forEach(t=>{
+        const opt = document.createElement('option');
+        opt.value = t; opt.textContent = t;
+        sel.appendChild(opt);
+      });
+    }catch(err){
+      console.warn(err);
+    }
+  }
+
+  async function loadPresetFiles(){
+    const type = q('norm-preset-type')?.value || 'anime';
+    try{
+      const data = await fetchJson(`/api/presets?type=${encodeURIComponent(type)}`);
+      const sel = q('norm-preset-file');
+      sel.innerHTML = '';
+      (data.presets || []).forEach(name=>{
+        const opt = document.createElement('option');
+        opt.value = name; opt.textContent = name;
+        sel.appendChild(opt);
+      });
+      if(!sel.value && sel.options.length){ sel.selectedIndex = 0; }
+      if(sel.value){ loadPresetSummary(); }
+    }catch(err){
+      setStatus(err.message, false);
+    }
+  }
+
+  async function loadPresetSummary(){
+    const type = q('norm-preset-type')?.value || 'anime';
+    const name = q('norm-preset-file')?.value || '';
+    if(!name){ renderPresetSummary(null); return; }
+    try{
+      const data = await fetchJson(`/api/preset?type=${encodeURIComponent(type)}&file=${encodeURIComponent(name)}`);
+      renderPresetSummary(data.preset);
+    }catch(err){
+      renderPresetSummary(null);
+      setStatus(err.message, false);
+    }
+  }
+
+  async function onScan(){
+    readyForApply = false;
+    setBusy(true, 'Scanning dataset...');
+    setStatus('Scanning...');
+    try{
+      const payload = collectPayload();
+      const data = await fetchJson('/api/normalize/scan', { method:'POST', body: JSON.stringify(payload) });
+      renderScan(data);
+      renderPreviews([]); // clear preview
+      setStatus('Scan complete.', true);
+      readyForApply = true;
+      q('btn-norm-apply').disabled = false;
+      q('norm-log').textContent = JSON.stringify({ total_files: data.total_files, tag_files: data.tag_files }, null, 2);
+    }catch(err){
+      setStatus(err.message, false);
+      q('norm-log').textContent = err.message;
+      q('btn-norm-apply').disabled = true;
+    }finally{
+      setBusy(false);
+    }
+  }
+
+  async function onDryRun(){
+    readyForApply = false;
+    setBusy(true, 'Running dry-run preview...');
+    setStatus('Dry-run in progress...');
+    try{
+      const payload = collectPayload();
+      const data = await fetchJson('/api/normalize/dryrun', { method:'POST', body: JSON.stringify(payload) });
+      renderPreviews(data.previews || []);
+      setStatus('Dry-run done.', true);
+      readyForApply = true;
+      q('btn-norm-apply').disabled = false;
+      q('norm-log').textContent = `Dry-run previews: ${ (data.previews || []).length }`;
+    }catch(err){
+      setStatus(err.message, false);
+      q('norm-log').textContent = err.message;
+      q('btn-norm-apply').disabled = true;
+    }finally{
+      setBusy(false);
+    }
+  }
+
+  async function onApply(){
+    if(!readyForApply){
+      setStatus('Run scan or dry-run first.', false);
+      return;
+    }
+    setBusy(true, 'Applying normalization...');
+    setStatus('Applying normalization...');
+    try{
+      const payload = collectPayload();
+      const data = await fetchJson('/api/normalize/apply', { method:'POST', body: JSON.stringify(payload) });
+      const summary = `Changed ${data.changed_files || 0} of ${data.total_files || 0} files. Backups: ${data.backups_made || 0}`;
+      setStatus('Apply complete.', true);
+      q('norm-log').textContent = summary + '\nActions: ' + JSON.stringify(data.actions || {});
+    }catch(err){
+      setStatus(err.message, false);
+      q('norm-log').textContent = err.message;
+    }finally{
+      setBusy(false);
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    loadPresetTypes().then(loadPresetFiles);
+    q('norm-reload-types')?.addEventListener('click', loadPresetTypes);
+    q('norm-reload-presets')?.addEventListener('click', loadPresetFiles);
+    q('norm-preset-type')?.addEventListener('change', loadPresetFiles);
+    q('norm-preset-file')?.addEventListener('change', loadPresetSummary);
+
+    q('btn-norm-scan')?.addEventListener('click', onScan);
+    q('btn-norm-dryrun')?.addEventListener('click', onDryRun);
+    q('btn-norm-apply')?.addEventListener('click', onApply);
+  });
+})();
+</script>

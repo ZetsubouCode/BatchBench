@@ -190,6 +190,12 @@
         busy.classList.remove("d-none");
         busy.classList.add("show");
       };
+      const hideBusy = () => {
+        if(!busy) return;
+        busy.classList.add("d-none");
+        busy.classList.remove("show");
+      };
+      window.bbBusy = { show: showBusy, hide: hideBusy };
 
       const persistForm = (form, key) => {
         if(!key) return;

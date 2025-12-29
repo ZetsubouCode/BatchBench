@@ -1,0 +1,403 @@
+<style>
+  .pipe-card { background:var(--bb-card); border:1px solid var(--bb-border); border-radius:.75rem; }
+  .pipe-panel { background:var(--bb-card); border:1px solid var(--bb-border); border-radius:.5rem; padding:1rem; }
+  .pipe-progress { height:10px; }
+  .pipe-log { max-height:260px; overflow-y:auto; background:var(--bb-code-bg); border:1px solid var(--bb-border); border-radius:.5rem; padding:.75rem; }
+  .pipe-step { padding:.35rem .5rem; border-radius:.35rem; border:1px solid var(--bb-border); }
+  .pipe-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:.5rem; }
+</style>
+
+<div class="card p-4 pipe-card">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div>
+      <h4 class="mb-0">A-to-Z Pipeline</h4>
+      <div class="text-muted small">Zip for CivitAI autotag, wait for download, normalize, pause for manual edits, and zip final.</div>
+    </div>
+    <span class="badge bg-secondary" id="pipe-status-badge">idle</span>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-4">
+      <label class="form-label">Dataset Source Folder</label>
+      <div class="input-group">
+        <input id="pipe-dataset" class="form-control" placeholder="D:\dataset">
+        <button class="btn btn-outline-light btn-browse" type="button" data-target="pipe-dataset">Browse</button>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <label class="form-label">Working Directory</label>
+      <div class="input-group">
+        <input id="pipe-workdir" class="form-control" placeholder="D:\work\pipeline">
+        <button class="btn btn-outline-light btn-browse" type="button" data-target="pipe-workdir">Browse</button>
+      </div>
+      <div class="small text-muted mt-1">State + intermediate files stored here (.pipeline_job.json).</div>
+    </div>
+    <div class="col-lg-4">
+      <label class="form-label">Output Directory</label>
+      <div class="input-group">
+        <input id="pipe-output" class="form-control" placeholder="D:\output">
+        <button class="btn btn-outline-light btn-browse" type="button" data-target="pipe-output">Browse</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mt-1">
+    <div class="col-lg-3">
+      <label class="form-label">Preset type</label>
+      <select id="pipe-preset-type" class="form-select"></select>
+    </div>
+    <div class="col-lg-3">
+      <label class="form-label">Preset file</label>
+      <select id="pipe-preset-file" class="form-select"></select>
+    </div>
+    <div class="col-lg-3">
+      <label class="form-label">Image extensions</label>
+      <input id="pipe-exts" class="form-control" value=".jpg,.jpeg,.png,.webp">
+      <div class="form-check mt-1">
+        <input class="form-check-input" type="checkbox" id="pipe-recursive">
+        <label class="form-check-label" for="pipe-recursive">Include subfolders</label>
+      </div>
+    </div>
+    <div class="col-lg-3 d-flex flex-column gap-2">
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" id="pipe-autotag" checked>
+        <label class="form-check-label" for="pipe-autotag">Run CivitAI autotag step</label>
+      </div>
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" id="pipe-manual" checked disabled>
+        <label class="form-check-label" for="pipe-manual">Pause for manual retagging (required)</label>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mt-1">
+    <div class="col-lg-4">
+      <label class="form-label">Extra remove tags</label>
+      <textarea id="pipe-extra-remove" rows="3" class="form-control" placeholder="watermark, signature"></textarea>
+    </div>
+    <div class="col-lg-4">
+      <label class="form-label">Extra keep / protected tags</label>
+      <textarea id="pipe-extra-keep" rows="3" class="form-control" placeholder="identity tags"></textarea>
+    </div>
+    <div class="col-lg-4">
+      <label class="form-label">Identity tags</label>
+      <textarea id="pipe-identity" rows="3" class="form-control" placeholder="character_name, series_name"></textarea>
+      <div class="form-check mt-2">
+        <input class="form-check-input" type="checkbox" id="pipe-move-unknown">
+        <label class="form-check-label" for="pipe-move-unknown">Move unknown backgrounds to #optional</label>
+      </div>
+    </div>
+  </div>
+
+  <hr class="my-3">
+
+  <div class="row g-3">
+    <div class="col-lg-6">
+      <div class="pipe-panel h-100">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="fw-semibold">CivitAI Autotag (manual assisted)</div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="pipe-autodetect" checked>
+            <label class="form-check-label" for="pipe-autodetect">Auto-detect download</label>
+          </div>
+        </div>
+        <div class="mb-2">
+          <label class="form-label small mb-1">Downloads watch folder</label>
+          <input id="pipe-watch" class="form-control" placeholder="C:\Users\you\Downloads">
+        </div>
+        <div class="mb-2">
+          <label class="form-label small mb-1">Expected filename pattern (optional)</label>
+          <input id="pipe-pattern" class="form-control" placeholder="autotag">
+        </div>
+        <div class="row g-2">
+          <div class="col-md-6">
+            <label class="form-label small mb-1">Timeout (seconds)</label>
+            <input id="pipe-timeout" type="number" class="form-control" value="300">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small mb-1">Poll interval (seconds)</label>
+            <input id="pipe-poll" type="number" class="form-control" value="2">
+          </div>
+        </div>
+        <div class="d-flex flex-wrap gap-2 mt-3">
+          <button class="btn btn-outline-light btn-sm" type="button" id="pipe-open-civitai">Open CivitAI Upload Page</button>
+          <button class="btn btn-outline-secondary btn-sm" type="button" id="pipe-copy-zip">Copy zip path</button>
+          <button class="btn btn-outline-secondary btn-sm" type="button" id="pipe-open-zip-folder">Open zip folder</button>
+        </div>
+        <div class="small text-muted mt-2">Upload step is manual; resume pipeline after upload starts.</div>
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="pipe-panel h-100">
+        <div class="fw-semibold mb-2">Run Control</div>
+        <div class="d-flex flex-wrap gap-2">
+          <button class="btn btn-primary" type="button" id="pipe-run">Run Pipeline</button>
+          <button class="btn btn-outline-warning" type="button" id="pipe-pause">Pause</button>
+          <button class="btn btn-outline-success" type="button" id="pipe-resume">Resume</button>
+          <button class="btn btn-outline-danger" type="button" id="pipe-stop">Stop</button>
+          <button class="btn btn-outline-secondary" type="button" id="pipe-open-work">Open working folder</button>
+        </div>
+        <div class="progress pipe-progress mt-3">
+          <div class="progress-bar" id="pipe-progress" style="width:0%;"></div>
+        </div>
+        <div class="mt-2 small" id="pipe-step-text">Idle</div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="my-3">
+
+  <div class="row g-3">
+    <div class="col-lg-6">
+      <div class="pipe-panel h-100">
+        <div class="fw-semibold mb-2">Steps</div>
+        <div id="pipe-steps" class="pipe-grid"></div>
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="pipe-panel h-100">
+        <div class="fw-semibold mb-2">Logs</div>
+        <div class="pipe-log" id="pipe-log"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mt-3">
+    <div class="fw-semibold">Artifacts</div>
+    <div class="small" id="pipe-artifacts">No job yet.</div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const q = id => document.getElementById(id);
+  let currentJobId = null;
+  let pollTimer = null;
+  let lastArtifacts = {};
+
+  function setStatusBadge(text, type='secondary'){
+    const el = q('pipe-status-badge');
+    if(!el) return;
+    el.textContent = text || 'idle';
+    el.className = `badge bg-${type}`;
+  }
+
+  function setProgress(idx, total){
+    const bar = q('pipe-progress');
+    const safeIdx = Math.min(idx, Math.max(total-1, 0));
+    const pct = total ? Math.round((safeIdx/Math.max(total-1,1))*100) : 0;
+    if(bar){ bar.style.width = pct + '%'; }
+  }
+
+  function renderSteps(steps, currentStep){
+    const wrap = q('pipe-steps');
+    wrap.innerHTML = '';
+    if(!steps || !steps.length){
+      wrap.innerHTML = '<div class="text-muted small">No steps yet.</div>';
+      return;
+    }
+    steps.forEach((name, idx)=>{
+      const div = document.createElement('div');
+      div.className = 'pipe-step d-flex justify-content-between align-items-center';
+      div.innerHTML = `<span>${idx+1}. ${name}</span>`;
+      if(name === currentStep){
+        div.classList.add('border-primary');
+      }
+      wrap.appendChild(div);
+    });
+  }
+
+  function renderLogs(logs){
+    const wrap = q('pipe-log');
+    if(!wrap) return;
+    wrap.innerHTML = '';
+    (logs || []).slice(-200).forEach(item=>{
+      const div = document.createElement('div');
+      div.className = 'small';
+      div.textContent = `[${item.ts}] (${item.level}) ${item.message}`;
+      wrap.appendChild(div);
+    });
+  }
+
+  function renderArtifacts(art){
+    const el = q('pipe-artifacts');
+    if(!el) return;
+    if(!art || !Object.keys(art).length){
+      el.textContent = 'No artifacts yet.';
+      return;
+    }
+    lastArtifacts = art;
+    const lines = [];
+    for(const [k,v] of Object.entries(art)){
+      lines.push(`${k}: ${v}`);
+    }
+    el.innerHTML = lines.map(l=>`<div class="small">${l}</div>`).join('');
+  }
+
+  async function fetchJson(url, options={}){
+    const res = await fetch(url, {
+      headers: { 'Content-Type':'application/json' },
+      ...options
+    });
+    let data = null;
+    try{ data = await res.json(); }catch(e){}
+    if(!res.ok || (data && data.ok === false)){
+      const err = (data && data.error) ? data.error : `HTTP ${res.status}`;
+      throw new Error(err);
+    }
+    return data || {};
+  }
+
+  function collectPayload(){
+    return {
+      dataset_path: q('pipe-dataset')?.value || '',
+      working_dir: q('pipe-workdir')?.value || '',
+      output_dir: q('pipe-output')?.value || '',
+      preset_type: q('pipe-preset-type')?.value || 'anime',
+      preset_file: q('pipe-preset-file')?.value || '',
+      run_autotag: q('pipe-autotag')?.checked || false,
+      recursive: q('pipe-recursive')?.checked || false,
+      image_exts: q('pipe-exts')?.value || '',
+      downloads_watch: q('pipe-watch')?.value || '',
+      download_pattern: q('pipe-pattern')?.value || '',
+      download_timeout: parseInt(q('pipe-timeout')?.value || '300', 10),
+      download_poll_interval: parseInt(q('pipe-poll')?.value || '2', 10),
+      auto_detect_download: q('pipe-autodetect')?.checked || false,
+      extra_remove: q('pipe-extra-remove')?.value || '',
+      extra_keep: q('pipe-extra-keep')?.value || '',
+      identity_tags: q('pipe-identity')?.value || '',
+      move_unknown_background_to_optional: q('pipe-move-unknown')?.checked || false
+    };
+  }
+
+  async function loadPresets(){
+    try{
+      const data = await fetchJson('/api/pipeline/presets');
+      const types = data.types || ['anime'];
+      const typeSel = q('pipe-preset-type');
+      typeSel.innerHTML = '';
+      types.forEach(t=>{
+        const opt = document.createElement('option');
+        opt.value = t; opt.textContent = t;
+        typeSel.appendChild(opt);
+      });
+      typeSel.addEventListener('change', ()=> fillPresetFiles(data));
+      fillPresetFiles(data);
+    }catch(err){
+      console.warn(err);
+    }
+  }
+
+  function fillPresetFiles(data){
+    const typeSel = q('pipe-preset-type');
+    const fileSel = q('pipe-preset-file');
+    const currentType = typeSel?.value || 'anime';
+    const files = (data.files && data.files[currentType]) || [];
+    fileSel.innerHTML = '';
+    files.forEach(f=>{
+      const opt = document.createElement('option');
+      opt.value = f; opt.textContent = f;
+      fileSel.appendChild(opt);
+    });
+    if(!fileSel.value && fileSel.options.length){ fileSel.selectedIndex = 0; }
+  }
+
+  async function startPipeline(){
+    try{
+      const payload = collectPayload();
+      const data = await fetchJson('/api/pipeline/start', { method:'POST', body: JSON.stringify(payload) });
+      currentJobId = data.job_id;
+      setStatusBadge('running', 'primary');
+      pollStatus(true);
+    }catch(err){
+      alert(err.message);
+    }
+  }
+
+  async function pausePipeline(){
+    if(!currentJobId) return;
+    try{
+      await fetchJson('/api/pipeline/pause', { method:'POST', body: JSON.stringify({ job_id: currentJobId }) });
+      pollStatus(true);
+    }catch(err){ alert(err.message); }
+  }
+
+  async function resumePipeline(){
+    if(!currentJobId) return;
+    try{
+      await fetchJson('/api/pipeline/resume', { method:'POST', body: JSON.stringify({ job_id: currentJobId }) });
+      pollStatus(true);
+    }catch(err){ alert(err.message); }
+  }
+
+  async function stopPipeline(){
+    if(!currentJobId) return;
+    try{
+      await fetchJson('/api/pipeline/stop', { method:'POST', body: JSON.stringify({ job_id: currentJobId }) });
+      pollStatus(true);
+    }catch(err){ alert(err.message); }
+  }
+
+  async function pollStatus(immediate){
+    if(pollTimer){ clearTimeout(pollTimer); }
+    if(!currentJobId){
+      pollTimer = setTimeout(()=>pollStatus(), 4000);
+      return;
+    }
+    try{
+      const data = await fetchJson(`/api/pipeline/status?job_id=${encodeURIComponent(currentJobId)}`);
+      const job = data.job;
+      renderSteps(job.steps, job.current_step);
+      renderLogs(job.log);
+      renderArtifacts(job.artifacts);
+      q('pipe-step-text').textContent = `${job.current_step} (${job.status}) ${job.waiting_reason || ''}`;
+      setProgress(job.step_index || 0, (job.steps||[]).length);
+      const state = (job.status || 'idle').toLowerCase();
+      const badgeType = state.startsWith('fail') ? 'danger' :
+                        state.startsWith('wait') ? 'warning' :
+                        state.startsWith('comp') ? 'success' :
+                        state.startsWith('stop') ? 'secondary' : 'primary';
+      setStatusBadge(job.status, badgeType);
+      if(job.status === 'COMPLETED' || job.status === 'FAILED' || job.status === 'STOPPED'){
+        // stop polling slowly
+        pollTimer = setTimeout(()=>pollStatus(), 6000);
+      }else{
+        pollTimer = setTimeout(()=>pollStatus(), immediate ? 2000 : 4000);
+      }
+    }catch(err){
+      setStatusBadge('idle','secondary');
+      pollTimer = setTimeout(()=>pollStatus(), 6000);
+    }
+  }
+
+  async function openPath(path){
+    if(!path) return;
+    try{
+      await fetchJson('/api/pipeline/open-path', { method:'POST', body: JSON.stringify({ path }) });
+    }catch(err){
+      alert(err.message);
+    }
+  }
+
+  function wireButtons(){
+    q('pipe-run')?.addEventListener('click', startPipeline);
+    q('pipe-pause')?.addEventListener('click', pausePipeline);
+    q('pipe-resume')?.addEventListener('click', resumePipeline);
+    q('pipe-stop')?.addEventListener('click', stopPipeline);
+    q('pipe-open-civitai')?.addEventListener('click', ()=> window.open('https://civitai.com/images/ai-tool', '_blank'));
+    q('pipe-copy-zip')?.addEventListener('click', async ()=>{
+      const text = lastArtifacts.source_zip_path || '';
+      if(!text) { alert('No source zip yet.'); return; }
+      try{ await navigator.clipboard.writeText(text); }catch(e){}
+    });
+    q('pipe-open-zip-folder')?.addEventListener('click', ()=> openPath(lastArtifacts.raw_zip_dir || lastArtifacts.civitai_dir || ''));
+    q('pipe-open-work')?.addEventListener('click', ()=> openPath(lastArtifacts.normalized_dir || q('pipe-workdir')?.value));
+  }
+
+  document.addEventListener('DOMContentLoaded', ()=>{
+    loadPresets();
+    wireButtons();
+    pollStatus();
+  });
+})();
+</script>
