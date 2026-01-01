@@ -12,7 +12,8 @@
       "copyright name",
       "jpeg artifacts",
       "lowres",
-      "worst quality"
+      "worst quality",
+      "parody"
     ],
     "remove_regex": [
       "^artist:.*$",

@@ -205,3 +205,11 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Local ML models / Hugging Face cache
+models/
+model_cache/
+hf_cache/
+huggingface/
+.hf_cache/
+*.safetensors

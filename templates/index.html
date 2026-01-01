@@ -6,8 +6,9 @@
     <li class="nav-item"><button class="nav-link {{ 'active' if tab=='webp' }}" data-bs-toggle="tab" data-bs-target="#tab-webp" type="button">WebP → PNG Converter</button></li>
     <li class="nav-item"><button class="nav-link {{ 'active' if tab=='batch' }}" data-bs-toggle="tab" data-bs-target="#tab-batch" type="button">Photo Adjust (preset)</button></li>
     <li class="nav-item"><button class="nav-link {{ 'active' if tab=='tags' }}" data-bs-toggle="tab" data-bs-target="#tab-tags" type="button">Dataset Tag Editor</button></li>
+    <li class="nav-item"><button class="nav-link {{ 'active' if tab=='offline_tagger' }}" data-bs-toggle="tab" data-bs-target="#tab-offline-tagger" type="button">Offline Tagger (WD v3)</button></li>
     <li class="nav-item"><button class="nav-link {{ 'active' if tab=='normalize' }}" data-bs-toggle="tab" data-bs-target="#tab-normalize" type="button">Dataset Normalization</button></li>
-    <li class="nav-item"><button class="nav-link {{ 'active' if tab=='combine' }}" data-bs-toggle="tab" data-bs-target="#tab-combine" type="button">Combine Image+Txt sets</button></li>
+    <li class="nav-item"><button class="nav-link {{ 'active' if tab=='combine' }}" data-bs-toggle="tab" data-bs-target="#tab-combine" type="button">Combine Dataset</button></li>
     <li class="nav-item"><button class="nav-link {{ 'active' if tab=='rename' }}" data-bs-toggle="tab" data-bs-target="#tab-rename" type="button">Flatten & Renumber</button></li>
     <li class="nav-item"><button class="nav-link {{ 'active' if tab=='merge' }}" data-bs-toggle="tab" data-bs-target="#tab-merge" type="button">Stitch Groups</button></li>
     <li class="nav-item"><button class="nav-link {{ 'active' if tab=='webtoon' }}" data-bs-toggle="tab" data-bs-target="#tab-webtoon" type="button">Webtoon Panel Splitter</button></li>
@@ -26,6 +27,10 @@
 
     <div class="tab-pane fade {{ 'show active' if tab=='tags' }}" id="tab-tags">
       {% include "dataset_labeling.html" %}
+    </div>
+
+    <div class="tab-pane fade {{ 'show active' if tab=='offline_tagger' }}" id="tab-offline-tagger">
+      {% include "offline_tagger.html" %}
     </div>
 
     <div class="tab-pane fade {{ 'show active' if tab=='normalize' }}" id="tab-normalize">

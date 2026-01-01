@@ -1,13 +1,14 @@
 import os, json, sys
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict, Any
-from flask import Flask, render_template, request, flash, jsonify
+from flask import Flask, render_template, request, flash, jsonify, redirect, url_for, session
 from dotenv import load_dotenv
 
 from utils.io import readable_path, windows_drives
 
 from services.registry import TOOL_REGISTRY
 from services import normalizer
+from services import tag_editor
 from services.pipeline import PIPELINE_MANAGER
 
 load_dotenv()
@@ -140,6 +141,18 @@ def api_list_dir():
     out["dirs"] = dirs
     return jsonify(out)
 
+@app.post("/api/tags/scan")
+def api_tags_scan():
+    payload = request.get_json(silent=True) or {}
+    folder = (payload.get("folder") or "").strip()
+    if not folder:
+        return jsonify({"ok": False, "error": "folder is required"}), 400
+    exts = _parse_exts(payload.get("exts"))
+    recursive = _parse_bool(payload.get("recursive"))
+    result = tag_editor.scan_tags(readable_path(folder), exts, recursive=recursive)
+    code = 200 if result.get("ok") else 400
+    return jsonify(result), code
+
 
 # -------- Normalization APIs --------
 @app.get("/api/presets")
@@ -221,6 +234,7 @@ def api_pipeline_presets():
 def api_pipeline_start():
     payload = request.get_json(silent=True) or {}
     payload["preset_root"] = str(NORMALIZE_PRESET_ROOT)
+    payload["preset_library"] = PRESET_FILES
     payload["dataset_path"] = (payload.get("dataset_path") or "").strip()
     payload["working_dir"] = (payload.get("working_dir") or "").strip()
     payload["output_dir"] = (payload.get("output_dir") or "").strip()
@@ -229,12 +243,9 @@ def api_pipeline_start():
     payload["image_exts"] = _parse_exts(payload.get("image_exts"))
     payload["recursive"] = _parse_bool(payload.get("recursive"))
     payload["run_autotag"] = _parse_bool(payload.get("run_autotag", True), True)
-    payload["auto_detect_download"] = _parse_bool(payload.get("auto_detect_download", True), True)
     payload["move_unknown_background_to_optional"] = _parse_bool(
         payload.get("move_unknown_background_to_optional")
     )
-    payload["download_timeout"] = int(payload.get("download_timeout") or 300)
-    payload["download_poll_interval"] = int(payload.get("download_poll_interval") or 2)
     payload["extra_remove"] = payload.get("extra_remove") or ""
     payload["extra_keep"] = payload.get("extra_keep") or ""
     payload["identity_tags"] = payload.get("identity_tags") or ""
@@ -318,6 +329,15 @@ def index():
 
         if is_ajax:
             return jsonify({"ok": True, "active_tab": active_tab, "log": log})
+        session["last_log"] = log
+        session["last_tab"] = active_tab
+        return redirect(url_for("index", tab=active_tab))
+
+    if "last_log" in session:
+        log = session.pop("last_log", "")
+        last_tab = session.pop("last_tab", None)
+        if "tab" not in request.values and last_tab:
+            active_tab = last_tab
 
     return render_template(
         "index.html",

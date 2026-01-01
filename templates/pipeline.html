@@ -5,13 +5,30 @@
   .pipe-log { max-height:260px; overflow-y:auto; background:var(--bb-code-bg); border:1px solid var(--bb-border); border-radius:.5rem; padding:.75rem; }
   .pipe-step { padding:.35rem .5rem; border-radius:.35rem; border:1px solid var(--bb-border); }
   .pipe-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:.5rem; }
+  .pipe-step-list { display:flex; flex-direction:column; gap:.75rem; }
+  .pipe-step-card { border:1px solid var(--bb-border); border-radius:.6rem; background:var(--bb-card); }
+  .pipe-step-card.dragging {
+    opacity:.75;
+    border-color: var(--bb-link);
+    background: rgba(121,192,255,0.08);
+    box-shadow: 0 0 0 .2rem rgba(121,192,255,0.25);
+  }
+  .pipe-step-card.dragging .pipe-drag-handle { cursor:grabbing; color:var(--bb-link); }
+  .pipe-step-header { display:flex; align-items:flex-start; justify-content:space-between; gap:.5rem; padding:.6rem .75rem; border-bottom:1px solid var(--bb-border); }
+  .pipe-step-body { padding:.75rem; }
+  .pipe-step-card.is-collapsed .pipe-step-body { display:none; }
+  .pipe-step-title { font-weight:600; }
+  .pipe-step-meta { color:var(--bb-muted); font-size:.85rem; }
+  .pipe-drag-handle { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace; cursor:grab; color:var(--bb-muted); user-select:none; }
+  .pipe-step-index { min-width:2rem; text-align:center; }
+  .pipe-inline-note { color:var(--bb-muted); font-size:.85rem; }
 </style>
 
 <div class="card p-4 pipe-card">
   <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
     <div>
       <h4 class="mb-0">A-to-Z Pipeline</h4>
-      <div class="text-muted small">Zip for CivitAI autotag, wait for download, normalize, pause for manual edits, and zip final.</div>
+      <div class="text-muted small">Mix, reorder, and run steps with pauses for manual edits.</div>
     </div>
     <span class="badge bg-secondary" id="pipe-status-badge">idle</span>
   </div>
@@ -20,7 +37,7 @@
     <div class="col-lg-4">
       <label class="form-label">Dataset Source Folder</label>
       <div class="input-group">
-        <input id="pipe-dataset" class="form-control" placeholder="D:\dataset">
+        <input id="pipe-dataset" class="form-control" placeholder="D:\dataset" data-root-sync="1">
         <button class="btn btn-outline-light btn-browse" type="button" data-target="pipe-dataset">Browse</button>
       </div>
     </div>
@@ -30,7 +47,7 @@
         <input id="pipe-workdir" class="form-control" placeholder="D:\work\pipeline">
         <button class="btn btn-outline-light btn-browse" type="button" data-target="pipe-workdir">Browse</button>
       </div>
-      <div class="small text-muted mt-1">State + intermediate files stored here (.pipeline_job.json).</div>
+      <div class="small text-muted mt-1">Working copy + state stored here (.pipeline_job.json).</div>
     </div>
     <div class="col-lg-4">
       <label class="form-label">Output Directory</label>
@@ -42,15 +59,7 @@
   </div>
 
   <div class="row g-3 mt-1">
-    <div class="col-lg-3">
-      <label class="form-label">Preset type</label>
-      <select id="pipe-preset-type" class="form-select"></select>
-    </div>
-    <div class="col-lg-3">
-      <label class="form-label">Preset file</label>
-      <select id="pipe-preset-file" class="form-select"></select>
-    </div>
-    <div class="col-lg-3">
+    <div class="col-lg-4">
       <label class="form-label">Image extensions</label>
       <input id="pipe-exts" class="form-control" value=".jpg,.jpeg,.png,.webp">
       <div class="form-check mt-1">
@@ -58,75 +67,34 @@
         <label class="form-check-label" for="pipe-recursive">Include subfolders</label>
       </div>
     </div>
-    <div class="col-lg-3 d-flex flex-column gap-2">
-      <div class="form-check">
-        <input class="form-check-input" type="checkbox" id="pipe-autotag" checked>
-        <label class="form-check-label" for="pipe-autotag">Run CivitAI autotag step</label>
-      </div>
-      <div class="form-check">
-        <input class="form-check-input" type="checkbox" id="pipe-manual" checked disabled>
-        <label class="form-check-label" for="pipe-manual">Pause for manual retagging (required)</label>
-      </div>
-    </div>
-  </div>
-
-  <div class="row g-3 mt-1">
-    <div class="col-lg-4">
-      <label class="form-label">Extra remove tags</label>
-      <textarea id="pipe-extra-remove" rows="3" class="form-control" placeholder="watermark, signature"></textarea>
-    </div>
-    <div class="col-lg-4">
-      <label class="form-label">Extra keep / protected tags</label>
-      <textarea id="pipe-extra-keep" rows="3" class="form-control" placeholder="identity tags"></textarea>
-    </div>
-    <div class="col-lg-4">
-      <label class="form-label">Identity tags</label>
-      <textarea id="pipe-identity" rows="3" class="form-control" placeholder="character_name, series_name"></textarea>
-      <div class="form-check mt-2">
-        <input class="form-check-input" type="checkbox" id="pipe-move-unknown">
-        <label class="form-check-label" for="pipe-move-unknown">Move unknown backgrounds to #optional</label>
+    <div class="col-lg-8">
+      <div class="pipe-panel h-100">
+        <div class="fw-semibold mb-1">How it works</div>
+        <div class="small text-muted">Dataset is copied into the working folder first. Steps run against the working copy unless you override a step path.</div>
       </div>
     </div>
   </div>
 
   <hr class="my-3">
 
-  <div class="row g-3">
-    <div class="col-lg-6">
-      <div class="pipe-panel h-100">
-        <div class="d-flex justify-content-between align-items-center mb-2">
-          <div class="fw-semibold">CivitAI Autotag (manual assisted)</div>
-          <div class="form-check">
-            <input class="form-check-input" type="checkbox" id="pipe-autodetect" checked>
-            <label class="form-check-label" for="pipe-autodetect">Auto-detect download</label>
-          </div>
-        </div>
-        <div class="mb-2">
-          <label class="form-label small mb-1">Downloads watch folder</label>
-          <input id="pipe-watch" class="form-control" placeholder="C:\Users\you\Downloads">
-        </div>
-        <div class="mb-2">
-          <label class="form-label small mb-1">Expected filename pattern (optional)</label>
-          <input id="pipe-pattern" class="form-control" placeholder="autotag">
-        </div>
-        <div class="row g-2">
-          <div class="col-md-6">
-            <label class="form-label small mb-1">Timeout (seconds)</label>
-            <input id="pipe-timeout" type="number" class="form-control" value="300">
-          </div>
-          <div class="col-md-6">
-            <label class="form-label small mb-1">Poll interval (seconds)</label>
-            <input id="pipe-poll" type="number" class="form-control" value="2">
-          </div>
-        </div>
-        <div class="d-flex flex-wrap gap-2 mt-3">
-          <button class="btn btn-outline-light btn-sm" type="button" id="pipe-open-civitai">Open CivitAI Upload Page</button>
-          <button class="btn btn-outline-secondary btn-sm" type="button" id="pipe-copy-zip">Copy zip path</button>
-          <button class="btn btn-outline-secondary btn-sm" type="button" id="pipe-open-zip-folder">Open zip folder</button>
-        </div>
-        <div class="small text-muted mt-2">Upload step is manual; resume pipeline after upload starts.</div>
+  <div class="pipe-panel">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+      <div>
+        <div class="fw-semibold">Pipeline Steps</div>
+        <div class="pipe-inline-note">Drag to reorder. Minimize to keep the layout clean.</div>
+      </div>
+      <div class="d-flex flex-wrap gap-2 align-items-center">
+        <select id="pipe-add-step" class="form-select form-select-sm" style="min-width:220px;"></select>
+        <button class="btn btn-outline-light btn-sm" type="button" id="pipe-add-step-btn">Add step</button>
+        <button class="btn btn-outline-secondary btn-sm" type="button" id="pipe-reset-steps">Reset default</button>
       </div>
     </div>
+    <div id="pipe-step-builder" class="pipe-step-list mt-3"></div>
+  </div>
+
+  <hr class="my-3">
+
+  <div class="row g-3">
     <div class="col-lg-6">
       <div class="pipe-panel h-100">
         <div class="fw-semibold mb-2">Run Control</div>
@@ -143,18 +111,16 @@
         <div class="mt-2 small" id="pipe-step-text">Idle</div>
       </div>
     </div>
-  </div>
-
-  <hr class="my-3">
-
-  <div class="row g-3">
     <div class="col-lg-6">
       <div class="pipe-panel h-100">
-        <div class="fw-semibold mb-2">Steps</div>
+        <div class="fw-semibold mb-2">Execution Steps</div>
         <div id="pipe-steps" class="pipe-grid"></div>
       </div>
     </div>
-    <div class="col-lg-6">
+  </div>
+
+  <div class="row g-3 mt-1">
+    <div class="col-lg-12">
       <div class="pipe-panel h-100">
         <div class="fw-semibold mb-2">Logs</div>
         <div class="pipe-log" id="pipe-log"></div>
@@ -171,11 +137,689 @@
 <script>
 (() => {
   const q = id => document.getElementById(id);
+  const qsa = (sel, el = document) => Array.from(el.querySelectorAll(sel));
   let currentJobId = null;
   let pollTimer = null;
   let lastArtifacts = {};
+  let presetData = { types: [], files: {} };
 
-  function setStatusBadge(text, type='secondary'){
+  const batchPresets = Object.keys({{ presets|tojson }} || {});
+
+  const STEP_ORDER = [
+    'offline_tagger',
+    'tag_editor',
+    'normalize',
+    'zip_final',
+    'dedup_tags',
+    'webp_to_png',
+    'batch_adjust',
+    'combine_datasets',
+    'flatten_renumber',
+    'merge_groups',
+    'webtoon_split'
+  ];
+
+  const STEP_DEFS = {
+    offline_tagger: {
+      label: 'Offline Tagger (WD v3)',
+      summary: 'Auto-tag images with the offline model.',
+      defaults: {
+        model_id: 'SmilingWolf/wd-swinv2-tagger-v3',
+        device: 'auto',
+        batch_size: 4,
+        general_threshold: 0.35,
+        character_threshold: 0.85,
+        max_tags: 0,
+        write_mode: 'append',
+        include_character: false,
+        include_rating: true,
+        replace_underscore: true,
+        skip_empty: true,
+        local_only: false,
+        preview_only: false,
+        preview_limit: 5,
+        limit: 0
+      },
+      body: `
+        <div class="row g-3">
+          <div class="col-lg-6">
+            <label class="form-label">Target folder (optional override)</label>
+            <div class="input-group">
+              <input class="form-control" data-field="input_dir" data-browse="1" placeholder="Default: working copy">
+              <button class="btn btn-outline-light btn-browse" type="button" data-browse-target="input_dir">Browse</button>
+            </div>
+          </div>
+          <div class="col-lg-6">
+            <label class="form-label">Model ID or local path</label>
+            <input class="form-control" data-field="model_id">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Device</label>
+            <select class="form-select" data-field="device">
+              <option value="auto">auto</option>
+              <option value="cpu">cpu</option>
+              <option value="cuda">cuda</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Batch size</label>
+            <input class="form-control" type="number" min="1" data-field="batch_size">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">General threshold</label>
+            <input class="form-control" type="number" step="0.01" data-field="general_threshold">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Character threshold</label>
+            <input class="form-control" type="number" step="0.01" data-field="character_threshold">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Max tags (0 = unlimited)</label>
+            <input class="form-control" type="number" min="0" data-field="max_tags">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Write mode</label>
+            <select class="form-select" data-field="write_mode">
+              <option value="append">append</option>
+              <option value="overwrite">overwrite</option>
+              <option value="skip">skip if .txt has content</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Preview limit</label>
+            <input class="form-control" type="number" min="0" data-field="preview_limit">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Image limit (0 = all)</label>
+            <input class="form-control" type="number" min="0" data-field="limit">
+          </div>
+          <div class="col-12 d-flex flex-wrap gap-4">
+            <label class="form-check">
+              <input class="form-check-input" type="checkbox" data-field="include_character">
+              <span class="form-check-label">Include character tags</span>
+            </label>
+            <label class="form-check">
+              <input class="form-check-input" type="checkbox" data-field="include_rating">
+              <span class="form-check-label">Include rating tags</span>
+            </label>
+            <label class="form-check">
+              <input class="form-check-input" type="checkbox" data-field="replace_underscore">
+              <span class="form-check-label">Replace underscores</span>
+            </label>
+            <label class="form-check">
+              <input class="form-check-input" type="checkbox" data-field="skip_empty">
+              <span class="form-check-label">Skip empty results</span>
+            </label>
+            <label class="form-check">
+              <input class="form-check-input" type="checkbox" data-field="local_only">
+              <span class="form-check-label">Local files only</span>
+            </label>
+            <label class="form-check">
+              <input class="form-check-input" type="checkbox" data-field="preview_only">
+              <span class="form-check-label">Preview only</span>
+            </label>
+          </div>
+        </div>
+      `
+    },
+    tag_editor: {
+      label: 'Dataset Tag Editor',
+      summary: 'Manual pause or batch tag edits before normalization.',
+      defaults: {
+        mode: 'manual',
+        edit_target: 'recursive',
+        backup: false
+      },
+      body: `
+        <div class="row g-3">
+          <div class="col-lg-4">
+            <label class="form-label">Mode</label>
+            <select class="form-select" data-field="mode" data-tag-editor-mode="1">
+              <option value="manual">manual pause</option>
+              <option value="insert">insert</option>
+              <option value="delete">delete</option>
+              <option value="replace">replace</option>
+              <option value="move">move</option>
+              <option value="dedup">dedup</option>
+              <option value="undo">undo</option>
+            </select>
+            <div class="pipe-inline-note mt-1">Manual pause opens time to edit tags in the working copy.</div>
+          </div>
+          <div class="col-lg-8">
+            <label class="form-label">Target folder (optional override)</label>
+            <div class="input-group">
+              <input class="form-control" data-field="input_dir" data-browse="1" placeholder="Default: working copy">
+              <button class="btn btn-outline-light btn-browse" type="button" data-browse-target="input_dir">Browse</button>
+            </div>
+          </div>
+        </div>
+        <div class="row g-3 mt-1" data-tag-editor-fields="1">
+          <div class="col-lg-6">
+            <label class="form-label">Tags / mapping</label>
+            <input class="form-control" data-field="tags" placeholder="tag1, tag2 or old->new; old2->new2">
+          </div>
+          <div class="col-lg-3">
+            <label class="form-label">Edit target</label>
+            <select class="form-select" data-field="edit_target">
+              <option value="recursive">recursive (stage to _temp)</option>
+              <option value="temp">temp only</option>
+              <option value="base">base only</option>
+            </select>
+          </div>
+          <div class="col-lg-3 d-flex align-items-end">
+            <label class="form-check">
+              <input class="form-check-input" type="checkbox" data-field="backup">
+              <span class="form-check-label">Create .bak backups</span>
+            </label>
+          </div>
+          <div class="col-lg-6">
+            <label class="form-label">Temp folder (optional override)</label>
+            <div class="input-group">
+              <input class="form-control" data-field="temp_dir" data-browse="1" placeholder="Default: <folder>\\_temp">
+              <button class="btn btn-outline-light btn-browse" type="button" data-browse-target="temp_dir">Browse</button>
+            </div>
+          </div>
+        </div>
+      `
+    },
+    normalize: {
+      label: 'Dataset Normalization',
+      summary: 'Apply preset rules, remove/keep tags, and reorder.',
+      defaults: {
+        include_missing_txt: true,
+        normalize_order: true,
+        backup_enabled: true
+      },
+      body: `
+        <div class="row g-3">
+          <div class="col-lg-3">
+            <label class="form-label">Preset type</label>
+            <select class="form-select" data-field="preset_type"></select>
+          </div>
+          <div class="col-lg-3">
+            <label class="form-label">Preset file</label>
+            <select class="form-select" data-field="preset_file"></select>
+          </div>
+          <div class="col-lg-3 d-flex align-items-end">
+            <label class="form-check">
+              <input class="form-check-input" type="checkbox" data-field="include_missing_txt">
+              <span class="form-check-label">Create missing .txt</span>
+            </label>
+          </div>
+          <div class="col-lg-3 d-flex align-items-end">
+            <label class="form-check">
+              <input class="form-check-input" type="checkbox" data-field="backup_enabled">
+              <span class="form-check-label">Backup original tags</span>
+            </label>
+          </div>
+          <div class="col-lg-4">
+            <label class="form-label">Extra remove tags</label>
+            <textarea rows="3" class="form-control" data-field="extra_remove" placeholder="watermark, signature"></textarea>
+          </div>
+          <div class="col-lg-4">
+            <label class="form-label">Extra keep / protected tags</label>
+            <textarea rows="3" class="form-control" data-field="extra_keep" placeholder="identity tags"></textarea>
+          </div>
+          <div class="col-lg-4">
+            <label class="form-label">Identity tags</label>
+            <textarea rows="3" class="form-control" data-field="identity_tags" placeholder="character_name, series_name"></textarea>
+            <label class="form-check mt-2">
+              <input class="form-check-input" type="checkbox" data-field="move_unknown_background_to_optional">
+              <span class="form-check-label">Move unknown backgrounds to #optional</span>
+            </label>
+          </div>
+        </div>
+      `
+    },
+    zip_final: {
+      label: 'Zip Result',
+      summary: 'Archive the working copy into the output folder.',
+      defaults: { include_txt: true },
+      body: `
+        <div class="row g-3">
+          <div class="col-lg-6">
+            <label class="form-label">Target folder (optional override)</label>
+            <div class="input-group">
+              <input class="form-control" data-field="input_dir" data-browse="1" placeholder="Default: working copy">
+              <button class="btn btn-outline-light btn-browse" type="button" data-browse-target="input_dir">Browse</button>
+            </div>
+          </div>
+          <div class="col-lg-6">
+            <label class="form-label">Output folder (optional override)</label>
+            <div class="input-group">
+              <input class="form-control" data-field="output_dir" data-browse="1" placeholder="Default: pipeline output folder">
+              <button class="btn btn-outline-light btn-browse" type="button" data-browse-target="output_dir">Browse</button>
+            </div>
+          </div>
+          <div class="col-12">
+            <label class="form-check">
+              <input class="form-check-input" type="checkbox" data-field="include_txt">
+              <span class="form-check-label">Include .txt tag files</span>
+            </label>
+          </div>
+        </div>
+      `
+    },
+    dedup_tags: {
+      label: 'Tag Cleanup (Dedup)',
+      summary: 'Remove duplicate tags inside each .txt file.',
+      defaults: {},
+      body: `
+        <div class="row g-3">
+          <div class="col-lg-6">
+            <label class="form-label">Target folder (optional override)</label>
+            <div class="input-group">
+              <input class="form-control" data-field="input_dir" data-browse="1" placeholder="Default: working copy">
+              <button class="btn btn-outline-light btn-browse" type="button" data-browse-target="input_dir">Browse</button>
+            </div>
+          </div>
+          <div class="col-lg-6 d-flex align-items-center">
+            <div class="pipe-inline-note">Use this if you want extra cleanup after tag edits.</div>
+          </div>
+        </div>
+      `
+    },
+    webp_to_png: {
+      label: 'WebP to PNG',
+      summary: 'Convert .webp files into PNGs.',
+      defaults: {},
+      body: `
+        <div class="row g-3">
+          <div class="col-lg-6">
+            <label class="form-label">Input folder</label>
+            <div class="input-group">
+              <input class="form-control" data-field="input_dir" data-browse="1" placeholder="Default: working copy">
+              <button class="btn btn-outline-light btn-browse" type="button" data-browse-target="input_dir">Browse</button>
+            </div>
+          </div>
+          <div class="col-lg-6">
+            <label class="form-label">Output folder</label>
+            <div class="input-group">
+              <input class="form-control" data-field="output_dir" data-browse="1" placeholder="Default: working_dir\\webp_to_png">
+              <button class="btn btn-outline-light btn-browse" type="button" data-browse-target="output_dir">Browse</button>
+            </div>
+          </div>
+        </div>
+      `
+    },
+    batch_adjust: {
+      label: 'Photo Adjust (Preset)',
+      summary: 'Apply color presets to images.',
+      defaults: { suffix: '_adj', limit: 0 },
+      body: `
+        <div class="row g-3">
+          <div class="col-lg-6">
+            <label class="form-label">Input folder</label>
+            <div class="input-group">
+              <input class="form-control" data-field="input_dir" data-browse="1" placeholder="Default: working copy">
+              <button class="btn btn-outline-light btn-browse" type="button" data-browse-target="input_dir">Browse</button>
+            </div>
+          </div>
+          <div class="col-lg-6">
+            <label class="form-label">Output folder</label>
+            <div class="input-group">
+              <input class="form-control" data-field="output_dir" data-browse="1" placeholder="Default: working_dir\\adjusted">
+              <button class="btn btn-outline-light btn-browse" type="button" data-browse-target="output_dir">Browse</button>
+            </div>
+          </div>
+          <div class="col-lg-4">
+            <label class="form-label">Preset</label>
+            <select class="form-select" data-field="preset_name"></select>
+          </div>
+          <div class="col-lg-4">
+            <label class="form-label">Filename suffix</label>
+            <input class="form-control" data-field="suffix">
+          </div>
+          <div class="col-lg-4">
+            <label class="form-label">Limit (0 = all)</label>
+            <input class="form-control" type="number" min="0" data-field="limit">
+          </div>
+        </div>
+      `
+    },
+    combine_datasets: {
+      label: 'Combine Dataset',
+      summary: 'Merge multiple datasets into one folder.',
+      defaults: { suffix: '_B', exts: '.jpg,.jpeg,.png,.webp', move_instead: false },
+      body: `
+        <div class="row g-3">
+          <div class="col-lg-6">
+            <label class="form-label">Folder A</label>
+            <div class="input-group">
+              <input class="form-control" data-field="folder_a" data-browse="1" placeholder="Default: working copy">
+              <button class="btn btn-outline-light btn-browse" type="button" data-browse-target="folder_a">Browse</button>
+            </div>
+          </div>
+          <div class="col-lg-6">
+            <label class="form-label">Folder B</label>
+            <div class="input-group">
+              <input class="form-control" data-field="folder_b" data-browse="1" placeholder="Required if no extra folders">
+              <button class="btn btn-outline-light btn-browse" type="button" data-browse-target="folder_b">Browse</button>
+            </div>
+          </div>
+          <div class="col-lg-6">
+            <label class="form-label">Extra folders (one per line)</label>
+            <textarea class="form-control" rows="3" data-field="extra_folders"></textarea>
+          </div>
+          <div class="col-lg-6">
+            <label class="form-label">Output folder</label>
+            <div class="input-group">
+              <input class="form-control" data-field="output_dir" data-browse="1" placeholder="Default: working_dir\\combined">
+              <button class="btn btn-outline-light btn-browse" type="button" data-browse-target="output_dir">Browse</button>
+            </div>
+          </div>
+          <div class="col-lg-4">
+            <label class="form-label">Suffix for rename</label>
+            <input class="form-control" data-field="suffix">
+          </div>
+          <div class="col-lg-4">
+            <label class="form-label">Extensions</label>
+            <input class="form-control" data-field="exts">
+          </div>
+          <div class="col-lg-4 d-flex align-items-end">
+            <label class="form-check">
+              <input class="form-check-input" type="checkbox" data-field="move_instead">
+              <span class="form-check-label">Move instead of copy</span>
+            </label>
+          </div>
+        </div>
+      `
+    },
+    flatten_renumber: {
+      label: 'Flatten & Renumber',
+      summary: 'Flatten folders and rename into a single sequence.',
+      defaults: {
+        exts: '.png,.jpg,.jpeg,.webp',
+        start: 1,
+        pad: 3,
+        suffix_pad: 0,
+        sep: '_',
+        top_order: 'name',
+        folder_order: 'name',
+        inside_order: 'name',
+        include_txt: true,
+        move_instead: false,
+        dry_run: false
+      },
+      body: `
+        <div class="row g-3">
+          <div class="col-lg-6">
+            <label class="form-label">Root folder</label>
+            <div class="input-group">
+              <input class="form-control" data-field="input_dir" data-browse="1" placeholder="Default: working copy">
+              <button class="btn btn-outline-light btn-browse" type="button" data-browse-target="input_dir">Browse</button>
+            </div>
+          </div>
+          <div class="col-lg-6">
+            <label class="form-label">Output folder</label>
+            <div class="input-group">
+              <input class="form-control" data-field="output_dir" data-browse="1" placeholder="Default: working_dir\\renamed">
+              <button class="btn btn-outline-light btn-browse" type="button" data-browse-target="output_dir">Browse</button>
+            </div>
+          </div>
+          <div class="col-lg-4">
+            <label class="form-label">Extensions</label>
+            <input class="form-control" data-field="exts">
+          </div>
+          <div class="col-lg-2">
+            <label class="form-label">Start</label>
+            <input class="form-control" type="number" min="1" data-field="start">
+          </div>
+          <div class="col-lg-2">
+            <label class="form-label">Prefix pad</label>
+            <input class="form-control" type="number" min="1" data-field="pad">
+          </div>
+          <div class="col-lg-2">
+            <label class="form-label">Suffix pad</label>
+            <input class="form-control" type="number" min="0" data-field="suffix_pad">
+          </div>
+          <div class="col-lg-2">
+            <label class="form-label">Separator</label>
+            <input class="form-control" data-field="sep">
+          </div>
+          <div class="col-lg-4">
+            <label class="form-label">Top-level order</label>
+            <select class="form-select" data-field="top_order">
+              <option value="name">Name (natural)</option>
+              <option value="ctime">Date created</option>
+              <option value="mtime">Date modified</option>
+            </select>
+          </div>
+          <div class="col-lg-4">
+            <label class="form-label">Folder order</label>
+            <select class="form-select" data-field="folder_order">
+              <option value="name">Name (natural)</option>
+              <option value="ctime">Date created</option>
+              <option value="mtime">Date modified</option>
+            </select>
+          </div>
+          <div class="col-lg-4">
+            <label class="form-label">Inside-folder order</label>
+            <select class="form-select" data-field="inside_order">
+              <option value="name">Name (natural)</option>
+              <option value="ctime">Date created</option>
+              <option value="mtime">Date modified</option>
+            </select>
+          </div>
+          <div class="col-12 d-flex flex-wrap gap-4">
+            <label class="form-check">
+              <input class="form-check-input" type="checkbox" data-field="include_txt">
+              <span class="form-check-label">Include .txt</span>
+            </label>
+            <label class="form-check">
+              <input class="form-check-input" type="checkbox" data-field="move_instead">
+              <span class="form-check-label">Move instead of copy</span>
+            </label>
+            <label class="form-check">
+              <input class="form-check-input" type="checkbox" data-field="dry_run">
+              <span class="form-check-label">Dry run</span>
+            </label>
+          </div>
+        </div>
+      `
+    },
+    merge_groups: {
+      label: 'Stitch Groups',
+      summary: 'Merge sequences like prefix_01, prefix_02 into one image.',
+      defaults: {
+        glob: '*_*.*',
+        exts: '.png,.jpg,.jpeg,.webp',
+        orientation: 'v',
+        resize: 'auto',
+        align: 'center',
+        gap: 0,
+        bg: '#FFFFFF',
+        skip_single: false,
+        reverse: false,
+        overwrite: false,
+        dry_run: false
+      },
+      body: `
+        <div class="row g-3">
+          <div class="col-lg-6">
+            <label class="form-label">Source folder</label>
+            <div class="input-group">
+              <input class="form-control" data-field="input_dir" data-browse="1" placeholder="Default: working copy">
+              <button class="btn btn-outline-light btn-browse" type="button" data-browse-target="input_dir">Browse</button>
+            </div>
+          </div>
+          <div class="col-lg-6">
+            <label class="form-label">Output folder</label>
+            <div class="input-group">
+              <input class="form-control" data-field="output_dir" data-browse="1" placeholder="Default: working_dir\\merged">
+              <button class="btn btn-outline-light btn-browse" type="button" data-browse-target="output_dir">Browse</button>
+            </div>
+          </div>
+          <div class="col-lg-4">
+            <label class="form-label">Filename glob</label>
+            <input class="form-control" data-field="glob">
+          </div>
+          <div class="col-lg-4">
+            <label class="form-label">Extensions</label>
+            <input class="form-control" data-field="exts">
+          </div>
+          <div class="col-lg-4">
+            <label class="form-label">Stack direction</label>
+            <select class="form-select" data-field="orientation">
+              <option value="v">Vertical</option>
+              <option value="h">Horizontal</option>
+            </select>
+          </div>
+          <div class="col-lg-4">
+            <label class="form-label">Resize rule</label>
+            <select class="form-select" data-field="resize">
+              <option value="auto">Auto align</option>
+              <option value="none">No resize</option>
+              <option value="match-height">Match height</option>
+              <option value="match-width">Match width</option>
+            </select>
+          </div>
+          <div class="col-lg-2">
+            <label class="form-label">Gap (px)</label>
+            <input class="form-control" type="number" min="0" data-field="gap">
+          </div>
+          <div class="col-lg-2">
+            <label class="form-label">Background</label>
+            <input class="form-control" data-field="bg">
+          </div>
+          <div class="col-12 d-flex flex-wrap gap-4">
+            <label class="form-check">
+              <input class="form-check-input" type="checkbox" data-field="skip_single">
+              <span class="form-check-label">Skip single</span>
+            </label>
+            <label class="form-check">
+              <input class="form-check-input" type="checkbox" data-field="reverse">
+              <span class="form-check-label">Reverse order</span>
+            </label>
+            <label class="form-check">
+              <input class="form-check-input" type="checkbox" data-field="overwrite">
+              <span class="form-check-label">Overwrite</span>
+            </label>
+            <label class="form-check">
+              <input class="form-check-input" type="checkbox" data-field="dry_run">
+              <span class="form-check-label">Dry run</span>
+            </label>
+          </div>
+        </div>
+      `
+    },
+    webtoon_split: {
+      label: 'Webtoon Panel Splitter',
+      summary: 'Stack pages, detect stripes, and slice into panels.',
+      defaults: {
+        glob: '*.*',
+        exts: '.png,.jpg,.jpeg,.webp',
+        resize: 'match-width',
+        white_threshold: 245,
+        row_ratio: 98,
+        min_stripe: 12,
+        max_gap: 2,
+        min_panel: 128,
+        save_strip: true,
+        overwrite: false,
+        dry_run: false
+      },
+      body: `
+        <div class="row g-3">
+          <div class="col-lg-6">
+            <label class="form-label">Source folder</label>
+            <div class="input-group">
+              <input class="form-control" data-field="input_dir" data-browse="1" placeholder="Default: working copy">
+              <button class="btn btn-outline-light btn-browse" type="button" data-browse-target="input_dir">Browse</button>
+            </div>
+          </div>
+          <div class="col-lg-6">
+            <label class="form-label">Output folder</label>
+            <div class="input-group">
+              <input class="form-control" data-field="output_dir" data-browse="1" placeholder="Default: working_dir\\panels">
+              <button class="btn btn-outline-light btn-browse" type="button" data-browse-target="output_dir">Browse</button>
+            </div>
+          </div>
+          <div class="col-lg-4">
+            <label class="form-label">Filename glob</label>
+            <input class="form-control" data-field="glob">
+          </div>
+          <div class="col-lg-4">
+            <label class="form-label">Extensions</label>
+            <input class="form-control" data-field="exts">
+          </div>
+          <div class="col-lg-4">
+            <label class="form-label">Width alignment</label>
+            <select class="form-select" data-field="resize">
+              <option value="match-width">Match width</option>
+              <option value="none">No resize</option>
+            </select>
+          </div>
+          <div class="col-lg-3">
+            <label class="form-label">Min stripe height</label>
+            <input class="form-control" type="number" min="1" data-field="min_stripe">
+          </div>
+          <div class="col-lg-3">
+            <label class="form-label">White threshold (0-255)</label>
+            <input class="form-control" type="number" min="0" max="255" data-field="white_threshold">
+          </div>
+          <div class="col-lg-3">
+            <label class="form-label">Row coverage (%)</label>
+            <input class="form-control" type="number" min="50" max="100" data-field="row_ratio">
+          </div>
+          <div class="col-lg-3">
+            <label class="form-label">Stripe gap tolerance</label>
+            <input class="form-control" type="number" min="0" data-field="max_gap">
+          </div>
+          <div class="col-lg-3">
+            <label class="form-label">Min panel height</label>
+            <input class="form-control" type="number" min="1" data-field="min_panel">
+          </div>
+          <div class="col-12 d-flex flex-wrap gap-4">
+            <label class="form-check">
+              <input class="form-check-input" type="checkbox" data-field="save_strip">
+              <span class="form-check-label">Save full strip</span>
+            </label>
+            <label class="form-check">
+              <input class="form-check-input" type="checkbox" data-field="overwrite">
+              <span class="form-check-label">Overwrite</span>
+            </label>
+            <label class="form-check">
+              <input class="form-check-input" type="checkbox" data-field="dry_run">
+              <span class="form-check-label">Dry run</span>
+            </label>
+          </div>
+        </div>
+      `
+    }
+  };
+
+  const DEFAULT_STEPS = ['offline_tagger', 'tag_editor', 'normalize', 'zip_final'];
+  const TAG_STEPS = new Set(['offline_tagger', 'tag_editor', 'normalize', 'dedup_tags']);
+  const IMAGE_ONLY_STEPS = new Set(['webp_to_png', 'batch_adjust', 'merge_groups', 'webtoon_split']);
+
+  function validateStepOrder(steps){
+    const ids = (steps || []).map(step => step.id).filter(Boolean);
+    if(!ids.length){
+      return { ok: false, message: 'Minimal 1 step harus dipilih.' };
+    }
+    const zipIndex = ids.indexOf('zip_final');
+    if(zipIndex !== -1 && zipIndex !== ids.length - 1){
+      return { ok: false, message: 'Zip result sebaiknya jadi step terakhir agar hasilnya selalu terbaru.' };
+    }
+    const firstTag = ids.findIndex(id => TAG_STEPS.has(id));
+    let lastImageStep = -1;
+    ids.forEach((id, idx) => {
+      if(IMAGE_ONLY_STEPS.has(id)){
+        lastImageStep = idx;
+      }
+    });
+    if(firstTag !== -1 && lastImageStep !== -1 && lastImageStep > firstTag){
+      const offenders = ids.filter((id, idx) => IMAGE_ONLY_STEPS.has(id) && idx > firstTag);
+      const labels = offenders.map(id => STEP_DEFS[id]?.label || id).join(', ');
+      return {
+        ok: false,
+        message: `Step image-only (${labels}) harus ditaruh sebelum step tag (Offline Tagger / Tag Editor / Normalization / Tag Cleanup).`
+      };
+    }
+    return { ok: true };
+  }
+  function setStatusBadge(text, type = 'secondary'){
     const el = q('pipe-status-badge');
     if(!el) return;
     el.textContent = text || 'idle';
@@ -184,8 +828,8 @@
 
   function setProgress(idx, total){
     const bar = q('pipe-progress');
-    const safeIdx = Math.min(idx, Math.max(total-1, 0));
-    const pct = total ? Math.round((safeIdx/Math.max(total-1,1))*100) : 0;
+    const safeIdx = Math.min(idx, Math.max(total - 1, 0));
+    const pct = total ? Math.round((safeIdx / Math.max(total - 1, 1)) * 100) : 0;
     if(bar){ bar.style.width = pct + '%'; }
   }
 
@@ -199,7 +843,7 @@
     steps.forEach((name, idx)=>{
       const div = document.createElement('div');
       div.className = 'pipe-step d-flex justify-content-between align-items-center';
-      div.innerHTML = `<span>${idx+1}. ${name}</span>`;
+      div.innerHTML = `<span>${idx + 1}. ${name}</span>`;
       if(name === currentStep){
         div.classList.add('border-primary');
       }
@@ -234,7 +878,7 @@
     el.innerHTML = lines.map(l=>`<div class="small">${l}</div>`).join('');
   }
 
-  async function fetchJson(url, options={}){
+  async function fetchJson(url, options = {}){
     const res = await fetch(url, {
       headers: { 'Content-Type':'application/json' },
       ...options
@@ -248,63 +892,266 @@
     return data || {};
   }
 
+  function collectStepConfig(card){
+    const cfg = {};
+    qsa('[data-field]', card).forEach(el=>{
+      const key = el.getAttribute('data-field');
+      if(!key) return;
+      if((el.type || '').toLowerCase() === 'checkbox'){
+        cfg[key] = !!el.checked;
+      }else{
+        cfg[key] = el.value;
+      }
+    });
+    return cfg;
+  }
+
   function collectPayload(){
+    const steps = qsa('.pipe-step-card', q('pipe-step-builder')).map(card => ({
+      id: card.dataset.stepId,
+      config: collectStepConfig(card)
+    }));
     return {
       dataset_path: q('pipe-dataset')?.value || '',
       working_dir: q('pipe-workdir')?.value || '',
       output_dir: q('pipe-output')?.value || '',
-      preset_type: q('pipe-preset-type')?.value || 'anime',
-      preset_file: q('pipe-preset-file')?.value || '',
-      run_autotag: q('pipe-autotag')?.checked || false,
-      recursive: q('pipe-recursive')?.checked || false,
       image_exts: q('pipe-exts')?.value || '',
-      downloads_watch: q('pipe-watch')?.value || '',
-      download_pattern: q('pipe-pattern')?.value || '',
-      download_timeout: parseInt(q('pipe-timeout')?.value || '300', 10),
-      download_poll_interval: parseInt(q('pipe-poll')?.value || '2', 10),
-      auto_detect_download: q('pipe-autodetect')?.checked || false,
-      extra_remove: q('pipe-extra-remove')?.value || '',
-      extra_keep: q('pipe-extra-keep')?.value || '',
-      identity_tags: q('pipe-identity')?.value || '',
-      move_unknown_background_to_optional: q('pipe-move-unknown')?.checked || false
+      recursive: q('pipe-recursive')?.checked || false,
+      steps
     };
   }
 
-  async function loadPresets(){
-    try{
-      const data = await fetchJson('/api/pipeline/presets');
-      const types = data.types || ['anime'];
-      const typeSel = q('pipe-preset-type');
-      typeSel.innerHTML = '';
-      types.forEach(t=>{
-        const opt = document.createElement('option');
-        opt.value = t; opt.textContent = t;
-        typeSel.appendChild(opt);
-      });
-      typeSel.addEventListener('change', ()=> fillPresetFiles(data));
-      fillPresetFiles(data);
-    }catch(err){
-      console.warn(err);
+  function updateStepNumbers(){
+    qsa('.pipe-step-card', q('pipe-step-builder')).forEach((card, idx)=>{
+      const badge = card.querySelector('.pipe-step-index');
+      if(badge){ badge.textContent = idx + 1; }
+    });
+  }
+
+  function refreshStepPicker(){
+    const sel = q('pipe-add-step');
+    if(!sel) return;
+    const used = new Set(qsa('.pipe-step-card', q('pipe-step-builder')).map(card => card.dataset.stepId));
+    sel.innerHTML = '';
+    STEP_ORDER.forEach(stepId => {
+      if(used.has(stepId)) return;
+      const def = STEP_DEFS[stepId];
+      if(!def) return;
+      const opt = document.createElement('option');
+      opt.value = stepId;
+      opt.textContent = def.label;
+      sel.appendChild(opt);
+    });
+    if(!sel.options.length){
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = 'All steps already added';
+      sel.appendChild(opt);
     }
   }
 
-  function fillPresetFiles(data){
-    const typeSel = q('pipe-preset-type');
-    const fileSel = q('pipe-preset-file');
-    const currentType = typeSel?.value || 'anime';
-    const files = (data.files && data.files[currentType]) || [];
+  function applyStepDefaults(card, defaults, config){
+    const values = { ...(defaults || {}), ...(config || {}) };
+    qsa('[data-field]', card).forEach(el=>{
+      const key = el.getAttribute('data-field');
+      if(!key || !(key in values)) return;
+      if((el.type || '').toLowerCase() === 'checkbox'){
+        el.checked = !!values[key];
+      }else{
+        el.value = values[key];
+      }
+    });
+  }
+
+  function wireBrowseTargets(card){
+    qsa('[data-browse]', card).forEach(input => {
+      const key = input.getAttribute('data-field') || Math.random().toString(36).slice(2);
+      const id = `pipe-${card.dataset.stepId}-${key}-${Math.random().toString(36).slice(2,7)}`;
+      input.id = id;
+      const btn = card.querySelector(`[data-browse-target="${key}"]`);
+      if(btn){ btn.setAttribute('data-target', id); }
+    });
+  }
+
+  function updateTagEditorMode(card){
+    const modeSel = card.querySelector('[data-tag-editor-mode]');
+    const fields = card.querySelector('[data-tag-editor-fields]');
+    if(!modeSel || !fields) return;
+    const mode = (modeSel.value || '').toLowerCase();
+    fields.style.display = (mode === 'manual' || mode === 'pause') ? 'none' : '';
+  }
+
+  function fillNormalizeCard(card){
+    const typeSel = card.querySelector('[data-field="preset_type"]');
+    const fileSel = card.querySelector('[data-field="preset_file"]');
+    if(!typeSel || !fileSel) return;
+    const types = (presetData.types || []).length ? presetData.types : ['anime'];
+    const currentType = typeSel.value || types[0];
+    typeSel.innerHTML = '';
+    types.forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t; opt.textContent = t;
+      typeSel.appendChild(opt);
+    });
+    typeSel.value = currentType;
+    const files = (presetData.files && presetData.files[typeSel.value]) || [];
     fileSel.innerHTML = '';
-    files.forEach(f=>{
+    files.forEach(f => {
       const opt = document.createElement('option');
       opt.value = f; opt.textContent = f;
       fileSel.appendChild(opt);
     });
     if(!fileSel.value && fileSel.options.length){ fileSel.selectedIndex = 0; }
+    if(!typeSel.dataset.bound){
+      typeSel.addEventListener('change', () => fillNormalizeCard(card));
+      typeSel.dataset.bound = '1';
+    }
+  }
+
+  function fillBatchPresets(card){
+    const sel = card.querySelector('[data-field="preset_name"]');
+    if(!sel) return;
+    sel.innerHTML = '';
+    (batchPresets.length ? batchPresets : ['']).forEach(name => {
+      const opt = document.createElement('option');
+      opt.value = name; opt.textContent = name || 'No presets available';
+      sel.appendChild(opt);
+    });
+    if(!sel.value && sel.options.length){ sel.selectedIndex = 0; }
+  }
+
+  function createStepCard(stepId, config){
+    const def = STEP_DEFS[stepId];
+    if(!def) return null;
+    const card = document.createElement('div');
+    card.className = 'pipe-step-card';
+    card.dataset.stepId = stepId;
+    card.innerHTML = `
+      <div class="pipe-step-header">
+        <div class="d-flex align-items-start gap-2">
+          <div class="pipe-drag-handle" draggable="true">::</div>
+          <div class="badge bg-secondary pipe-step-index">1</div>
+          <div>
+            <div class="pipe-step-title">${def.label}</div>
+            <div class="pipe-step-meta">${def.summary || ''}</div>
+          </div>
+        </div>
+        <div class="d-flex gap-2">
+          <button type="button" class="btn btn-outline-secondary btn-sm pipe-step-toggle">Minimize</button>
+          <button type="button" class="btn btn-outline-danger btn-sm pipe-step-remove">Remove</button>
+        </div>
+      </div>
+      <div class="pipe-step-body">${def.body}</div>
+    `;
+
+    wireBrowseTargets(card);
+    applyStepDefaults(card, def.defaults, config);
+
+    if(stepId === 'tag_editor'){
+      updateTagEditorMode(card);
+      const modeSel = card.querySelector('[data-tag-editor-mode]');
+      modeSel?.addEventListener('change', () => updateTagEditorMode(card));
+    }
+
+    if(stepId === 'normalize'){
+      fillNormalizeCard(card);
+    }
+
+    if(stepId === 'batch_adjust'){
+      fillBatchPresets(card);
+    }
+
+    const toggleBtn = card.querySelector('.pipe-step-toggle');
+    toggleBtn?.addEventListener('click', () => {
+      card.classList.toggle('is-collapsed');
+      toggleBtn.textContent = card.classList.contains('is-collapsed') ? 'Expand' : 'Minimize';
+    });
+
+    const removeBtn = card.querySelector('.pipe-step-remove');
+    removeBtn?.addEventListener('click', () => {
+      card.remove();
+      updateStepNumbers();
+      refreshStepPicker();
+    });
+
+    const handle = card.querySelector('.pipe-drag-handle');
+    if(handle){
+      handle.addEventListener('dragstart', (e) => {
+        card.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', stepId);
+      });
+      handle.addEventListener('dragend', () => {
+        card.classList.remove('dragging');
+        updateStepNumbers();
+      });
+    }
+
+    return card;
+  }
+
+  function getDragAfterElement(container, y){
+    const cards = qsa('.pipe-step-card:not(.dragging)', container);
+    let closest = { offset: Number.NEGATIVE_INFINITY, element: null };
+    cards.forEach(card => {
+      const box = card.getBoundingClientRect();
+      const offset = y - box.top - box.height / 2;
+      if(offset < 0 && offset > closest.offset){
+        closest = { offset, element: card };
+      }
+    });
+    return closest.element;
+  }
+
+  function enableDrag(container){
+    container.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      const dragging = container.querySelector('.pipe-step-card.dragging');
+      if(!dragging) return;
+      const after = getDragAfterElement(container, e.clientY);
+      if(after == null){
+        container.appendChild(dragging);
+      }else{
+        container.insertBefore(dragging, after);
+      }
+    });
+  }
+
+  function addStep(stepId, config){
+    const container = q('pipe-step-builder');
+    const card = createStepCard(stepId, config);
+    if(!container || !card) return;
+    container.appendChild(card);
+    updateStepNumbers();
+    refreshStepPicker();
+  }
+
+  function resetDefaultSteps(){
+    const container = q('pipe-step-builder');
+    container.innerHTML = '';
+    DEFAULT_STEPS.forEach(stepId => addStep(stepId));
+  }
+
+  async function loadPresets(){
+    try{
+      const data = await fetchJson('/api/pipeline/presets');
+      presetData = data;
+      qsa('.pipe-step-card', q('pipe-step-builder'))
+        .filter(card => card.dataset.stepId === 'normalize')
+        .forEach(card => fillNormalizeCard(card));
+    }catch(err){
+      console.warn(err);
+    }
   }
 
   async function startPipeline(){
     try{
       const payload = collectPayload();
+      const validation = validateStepOrder(payload.steps);
+      if(!validation.ok){
+        alert(validation.message);
+        return;
+      }
       const data = await fetchJson('/api/pipeline/start', { method:'POST', body: JSON.stringify(payload) });
       currentJobId = data.job_id;
       setStatusBadge('running', 'primary');
@@ -341,7 +1188,7 @@
   async function pollStatus(immediate){
     if(pollTimer){ clearTimeout(pollTimer); }
     if(!currentJobId){
-      pollTimer = setTimeout(()=>pollStatus(), 4000);
+      pollTimer = setTimeout(() => pollStatus(), 4000);
       return;
     }
     try{
@@ -351,7 +1198,7 @@
       renderLogs(job.log);
       renderArtifacts(job.artifacts);
       q('pipe-step-text').textContent = `${job.current_step} (${job.status}) ${job.waiting_reason || ''}`;
-      setProgress(job.step_index || 0, (job.steps||[]).length);
+      setProgress(job.step_index || 0, (job.steps || []).length);
       const state = (job.status || 'idle').toLowerCase();
       const badgeType = state.startsWith('fail') ? 'danger' :
                         state.startsWith('wait') ? 'warning' :
@@ -359,14 +1206,13 @@
                         state.startsWith('stop') ? 'secondary' : 'primary';
       setStatusBadge(job.status, badgeType);
       if(job.status === 'COMPLETED' || job.status === 'FAILED' || job.status === 'STOPPED'){
-        // stop polling slowly
-        pollTimer = setTimeout(()=>pollStatus(), 6000);
+        pollTimer = setTimeout(() => pollStatus(), 6000);
       }else{
-        pollTimer = setTimeout(()=>pollStatus(), immediate ? 2000 : 4000);
+        pollTimer = setTimeout(() => pollStatus(), immediate ? 2000 : 4000);
       }
     }catch(err){
       setStatusBadge('idle','secondary');
-      pollTimer = setTimeout(()=>pollStatus(), 6000);
+      pollTimer = setTimeout(() => pollStatus(), 6000);
     }
   }
 
@@ -384,19 +1230,22 @@
     q('pipe-pause')?.addEventListener('click', pausePipeline);
     q('pipe-resume')?.addEventListener('click', resumePipeline);
     q('pipe-stop')?.addEventListener('click', stopPipeline);
-    q('pipe-open-civitai')?.addEventListener('click', ()=> window.open('https://civitai.com/images/ai-tool', '_blank'));
-    q('pipe-copy-zip')?.addEventListener('click', async ()=>{
-      const text = lastArtifacts.source_zip_path || '';
-      if(!text) { alert('No source zip yet.'); return; }
-      try{ await navigator.clipboard.writeText(text); }catch(e){}
+    q('pipe-open-work')?.addEventListener('click', () => openPath(lastArtifacts.working_copy || lastArtifacts.normalized_dir || q('pipe-workdir')?.value));
+
+    q('pipe-add-step-btn')?.addEventListener('click', () => {
+      const sel = q('pipe-add-step');
+      const stepId = sel?.value;
+      if(stepId){ addStep(stepId); }
     });
-    q('pipe-open-zip-folder')?.addEventListener('click', ()=> openPath(lastArtifacts.raw_zip_dir || lastArtifacts.civitai_dir || ''));
-    q('pipe-open-work')?.addEventListener('click', ()=> openPath(lastArtifacts.normalized_dir || q('pipe-workdir')?.value));
+    q('pipe-reset-steps')?.addEventListener('click', resetDefaultSteps);
   }
 
-  document.addEventListener('DOMContentLoaded', ()=>{
+  document.addEventListener('DOMContentLoaded', () => {
     loadPresets();
+    enableDrag(q('pipe-step-builder'));
+    resetDefaultSteps();
     wireButtons();
+    refreshStepPicker();
     pollStatus();
   });
 })();

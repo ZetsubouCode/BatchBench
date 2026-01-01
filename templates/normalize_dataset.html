@@ -4,11 +4,13 @@
   .norm-preview { border:1px solid var(--bb-border); border-radius:.5rem; padding:1rem; }
   .norm-taglist { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace; white-space:pre-wrap; }
   .norm-pill { background:var(--bb-code-bg); border:1px solid var(--bb-border); border-radius:999px; padding:.25rem .75rem; font-size:.85rem; }
+  .norm-pill-warning { background:#2a1b00; border-color:#f5b84c; color:#ffe2a8; }
   .norm-badge { background:#1f2937; border:1px solid var(--bb-border); color:var(--bb-text); }
   .norm-diff { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px,1fr)); gap:.75rem; }
   .norm-diff textarea { min-height:140px; }
   .norm-kv { display:flex; justify-content:space-between; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace; }
   .norm-kv span { color:var(--bb-muted); }
+  .norm-card .input-group-text { background:var(--bb-code-bg); color:var(--bb-text); border-color:var(--bb-border); }
 </style>
 
 <div class="card p-4 norm-card">
@@ -17,14 +19,14 @@
       <h4 class="mb-0">Dataset Normalization</h4>
       <div class="text-muted small">Clean up junk tags, keep identity tags safe, and preview before writing.</div>
     </div>
-    <div class="norm-pill text-warning-emphasis bg-dark border border-warning-subtle">Dry-run first, backups on.</div>
+    <div class="norm-pill norm-pill-warning">Dry-run first, backups on.</div>
   </div>
 
   <div class="row g-3 align-items-end">
     <div class="col-lg-5">
       <label class="form-label">Dataset folder</label>
       <div class="input-group">
-        <input id="norm-dataset" type="text" class="form-control" placeholder="D:\path\to\dataset">
+        <input id="norm-dataset" type="text" class="form-control" placeholder="D:\path\to\dataset" data-root-sync="1">
         <button class="btn btn-outline-light btn-browse" type="button" data-target="norm-dataset">Browse</button>
       </div>
     </div>

@@ -9,6 +9,24 @@
   .small-note { color: var(--bb-muted); }
   .code-chip { background:var(--bb-code-bg); border:1px solid var(--bb-border); padding:.15rem .35rem; border-radius:.35rem; }
   .monospace { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace; }
+  .tag-explorer { border:1px solid var(--bb-border); background:var(--bb-card); padding:1rem; border-radius:.5rem; }
+  .tag-cloud { display:flex; flex-wrap:wrap; gap:.35rem; max-height:240px; overflow:auto; padding:.5rem; border:1px solid var(--bb-border); border-radius:.5rem; background:var(--bb-input-bg); }
+  .tag-chip { display:inline-flex; align-items:center; gap:.4rem; border:1px solid var(--bb-border); background:var(--bb-card); color:var(--bb-text); padding:.15rem .5rem; border-radius:999px; font-size:.85rem; cursor:pointer; }
+  .tag-chip .tag-count { color:var(--bb-muted); font-size:.75rem; }
+  .tag-chip.is-selected { background:#1b2b4a; border-color:#2d4f86; color:#e6f0ff; }
+  .tag-chip.is-warning { background:#2a1a0a; border-color:#b56a1f; color:#ffe0b2; }
+  .tag-cloud-note { flex-basis:100%; margin-top:.25rem; }
+  .tag-sync-status { font-size:.75rem; color:var(--bb-muted); }
+  .path-preview { display:flex; flex-direction:column; gap:.4rem; }
+  .path-line { display:flex; align-items:center; gap:.45rem; font-size:.85rem; }
+  .path-text { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block; }
+  .path-sep { color:var(--bb-muted); }
+  .path-badge { font-size:.65rem; letter-spacing:.08em; padding:.2rem .45rem; border-radius:.4rem; border:1px solid var(--bb-border); background:var(--bb-code-bg); color:var(--bb-muted); }
+  .path-badge.badge-move { color:#d7c7ff; border-color:#3f2f7a; background:#17122a; }
+  .path-badge.badge-edit { color:#d6edff; border-color:#1f4f6f; background:#0c2238; }
+  .path-badge.badge-undo { color:#e6fff1; border-color:#1f6f4a; background:#0d2d1f; }
+  .path-flag { font-size:.6rem; padding:.05rem .3rem; border-radius:.3rem; border:1px solid var(--bb-border); color:var(--bb-muted); }
+  .path-flag.is-active { color:#e6f0ff; border-color:#2d4f86; background:#1b2b4a; }
 </style>
 
 <div class="card p-4">
@@ -25,7 +43,7 @@
       <div class="col-md-4">
         <label class="form-label">Folder</label>
         <div class="input-group">
-          <input id="folder_tags" name="folder" type="text" class="form-control"
+          <input id="folder_tags" name="folder" type="text" class="form-control" data-root-sync="1"
                  placeholder="D:\path\to\dataset" data-bs-toggle="tooltip"
                  data-bs-title="Base dataset folder (images + .txt)">
           <button class="btn btn-outline-light btn-browse" type="button" data-target="folder_tags"
@@ -51,6 +69,55 @@
                data-bs-toggle="tooltip" data-bs-title="Which image types to include">
       </div>
 
+      <div class="col-md-4">
+        <label class="form-label">Edit target</label>
+        <select class="form-select" id="edit-target" name="edit_target"
+                data-bs-toggle="tooltip" data-bs-title="Where edit modes apply. Recursive scans base and stages files into _temp.">
+          <option value="recursive">recursive (scan base, stage to _temp)</option>
+          <option value="temp">temp only (safe)</option>
+          <option value="base">base only</option>
+        </select>
+      </div>
+
+      <div class="col-md-12">
+        <div class="tag-explorer">
+          <div class="d-flex align-items-start justify-content-between flex-wrap gap-2">
+            <div>
+              <label class="form-label mb-1">Tag Explorer</label>
+              <div class="small text-muted" id="tagviz-hint">Select tags -> choose mode -> Run. Tags sync automatically to Tags / mapping.</div>
+              <div class="tag-sync-status" id="tagviz-sync-status">Auto-sync ON</div>
+            </div>
+            <div class="d-flex gap-2">
+              <button type="button" class="btn btn-outline-light btn-sm" id="tagviz-scan">Scan tags</button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" id="tagviz-sync"
+                      data-bs-toggle="tooltip" data-bs-title="Sync selection into Tags / mapping and re-enable auto-sync">Sync to Tags</button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" id="tagviz-clear">Clear selection</button>
+            </div>
+          </div>
+          <div class="row g-2 mt-2">
+            <div class="col-md-4">
+              <input id="tagviz-filter" class="form-control form-control-sm" placeholder="Filter tags">
+            </div>
+            <div class="col-md-3">
+              <select id="tagviz-sort" class="form-select form-select-sm">
+                <option value="count">Sort by count</option>
+                <option value="az">Sort A-Z</option>
+              </select>
+            </div>
+            <div class="col-md-3">
+              <input id="tagviz-min" type="number" min="1" class="form-control form-control-sm" placeholder="Min count">
+            </div>
+            <div class="col-md-2 d-flex align-items-center">
+              <div class="small text-muted" id="tagviz-stats">0 tags</div>
+            </div>
+          </div>
+          <div class="small text-muted mt-2">
+            Scan target (syncs with Edit target): <span class="code-chip" id="tagviz-path">...</span>
+            <span class="ms-2" id="tagviz-status"></span>
+          </div>
+          <div class="tag-cloud mt-2" id="tagviz-cloud"></div>
+        </div>
+      </div>
       <div class="col-md-9">
         <label class="form-label">Tags / mapping</label>
         <input class="form-control" id="tags" name="tags"
@@ -66,40 +133,27 @@
         </div>
       </div>
 
-      <!-- Temp section -->
+      <!-- Effective paths preview -->
       <div class="col-md-12">
-        <label class="form-label">Temp folder (used by move / undo / edit in temp)</label>
-        <div class="row g-2 align-items-stretch">
-          <div class="col-lg-8">
-            <div class="input-group">
-              <input id="temp_dir" name="temp_dir" type="text" class="form-control"
-                     placeholder="(default: &lt;folder&gt;\_temp)"
-                     data-bs-toggle="tooltip" data-bs-title="Leave empty to use &lt;folder&gt;\_temp">
-              <button class="btn btn-outline-light btn-browse" type="button" data-target="temp_dir"
-                      data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
-              <button class="btn btn-outline-secondary" type="button" id="btn-temp-default"
-                      data-bs-toggle="tooltip" data-bs-title="Fill with default path based on Folder">Use default</button>
+        <label class="form-label">Effective paths preview</label>
+        <div class="p-2" style="background:var(--bb-card); border:1px solid var(--bb-border); border-radius:.5rem;">
+          <div class="path-preview">
+            <div class="path-line">
+              <div class="path-badge badge-move">MOVE</div>
+              <span class="code-chip path-text" id="eff-move-from" title="...">...</span>
+              <span class="path-sep">-></span>
+              <span class="code-chip path-text" id="eff-move-to" title="...">...</span>
             </div>
-            <div class="small-note mt-1">
-              Default: <span class="code-chip" id="temp-default">—</span>
+            <div class="path-line">
+              <div class="path-badge badge-edit">EDIT</div>
+              <span class="path-flag" id="eff-edit-flag"></span>
+              <span class="code-chip path-text" id="eff-edit-path" title="...">...</span>
             </div>
-          </div>
-          <div class="col-lg-4">
-            <div class="p-2" style="background:var(--bb-card); border:1px solid var(--bb-border); border-radius:.5rem;">
-              <div class="small-note mb-1">Effective paths preview</div>
-              <div class="small">
-                <strong>Move →</strong>
-                <span class="code-chip" id="eff-move">—</span> to
-                <span class="code-chip" id="eff-move-dest">—</span>
-              </div>
-              <div class="small">
-                <strong>Edit modes (insert / delete / replace / dedup) →</strong>
-                <span class="code-chip" id="eff-edit">—</span>
-              </div>
-              <div class="small">
-                <strong>Undo →</strong>
-                <span class="code-chip" id="eff-undo">—</span>
-              </div>
+            <div class="path-line">
+              <div class="path-badge badge-undo">UNDO</div>
+              <span class="code-chip path-text" id="eff-undo-from" title="...">...</span>
+              <span class="path-sep">-></span>
+              <span class="code-chip path-text" id="eff-undo-to" title="...">...</span>
             </div>
           </div>
         </div>
@@ -108,10 +162,17 @@
 
     <div class="mt-3 d-flex gap-2 flex-wrap">
       <button class="btn btn-primary" id="btn-run">Run</button>
+      <button type="button" class="btn btn-outline-info" id="btn-stage"
+              data-bs-toggle="tooltip" data-bs-title="Stage matching files into _temp without editing (recursive only)">Stage to _temp</button>
       <button type="button" class="btn btn-outline-warning" id="btn-undo"
               data-bs-toggle="tooltip" data-bs-title="Restore files from Temp folder back to Folder">Undo Move</button>
       <button type="button" class="btn btn-outline-secondary" id="btn-clear"
               data-bs-toggle="tooltip" data-bs-title="Clear remembered inputs for this tool">Clear saved</button>
+    </div>
+
+    <div id="tags-warning" class="alert alert-warning d-none mt-3" role="alert">
+      <div id="tags-warning-msg"></div>
+      <div class="mt-2 d-flex gap-2 flex-wrap" id="tags-warning-actions"></div>
     </div>
 
     <!-- Inline status + log (no page reload) -->
@@ -123,26 +184,79 @@
   </form>
 </div>
 
+<div class="modal fade" id="tagsConfirmModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="background:var(--bb-card);color:var(--bb-text);border:1px solid var(--bb-border);">
+      <div class="modal-header">
+        <h5 class="modal-title">Confirm action</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="tags-confirm-msg"></div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-light" id="tags-confirm-cancel" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-warning" id="tags-confirm-ok">Continue</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 (() => {
   const get = id => document.getElementById(id);
 
   const IDS = {
     folder: 'folder_tags',
-    temp: 'temp_dir',
     mode: 'mode-select',
     tags: 'tags',
     exts: 'exts',
     backup: 'backup',
+    editTarget: 'edit-target',
     status: 'tags-status',
     logWrap: 'tags-log',
     logPre: 'tags-log-pre',
-    tempDefault: 'temp-default',
-    effMove: 'eff-move',
-    effMoveDest: 'eff-move-dest',
-    effEdit: 'eff-edit',
-    effUndo: 'eff-undo'
+    effMoveFrom: 'eff-move-from',
+    effMoveTo: 'eff-move-to',
+    effEditPath: 'eff-edit-path',
+    effEditFlag: 'eff-edit-flag',
+    effUndoFrom: 'eff-undo-from',
+    effUndoTo: 'eff-undo-to'
   };
+  const WARN = {
+    wrap: 'tags-warning',
+    msg: 'tags-warning-msg',
+    actions: 'tags-warning-actions'
+  };
+  const CONFIRM = {
+    modal: 'tagsConfirmModal',
+    msg: 'tags-confirm-msg',
+    ok: 'tags-confirm-ok',
+    cancel: 'tags-confirm-cancel'
+  };
+  const TAGVIZ = {
+    scan: 'tagviz-scan',
+    sync: 'tagviz-sync',
+    clear: 'tagviz-clear',
+    filter: 'tagviz-filter',
+    sort: 'tagviz-sort',
+    min: 'tagviz-min',
+    stats: 'tagviz-stats',
+    cloud: 'tagviz-cloud',
+    path: 'tagviz-path',
+    status: 'tagviz-status',
+    hint: 'tagviz-hint',
+    syncStatus: 'tagviz-sync-status'
+  };
+  const tagVizState = {
+    items: [],
+    selected: new Set(),
+    warnTags: new Set(),
+    meta: { tag_files: 0, total_images: 0 },
+    shown: 0,
+    total: 0
+  };
+  let tagsSyncEnabled = true;
+  let tagsSyncLocked = false;
+  let bypassDupesOnce = false;
 
   const MODE_HELP = {
     insert:"Insert: add missing tags to each .txt (comma-separated).",
@@ -161,33 +275,484 @@
   const sepFor = p => (p && p.includes('/')) ? '/' : '\\';
   const defaultTempFor = root => root ? (stripTemp(root) + sepFor(root) + '_temp') : '';
 
+  function getEffectiveFolders(){
+    const mode = get(IDS.mode)?.value || 'insert';
+    const root = stripTemp((get(IDS.folder)?.value||'').trim());
+    const def = defaultTempFor(root);
+    const temp = def;
+    const rawEditTarget = (get(IDS.editTarget)?.value || 'recursive').toLowerCase();
+    const editTarget = rawEditTarget === 'auto' ? 'recursive' : rawEditTarget;
+    const editPref = editTarget === 'base' ? root : temp;
+    let scan = temp;
+    const scanRecursive = editTarget === 'recursive';
+    if (editTarget === 'recursive') scan = root;
+    else if (mode === 'move') scan = root;
+    else if (mode === 'undo') scan = temp;
+    else scan = editPref;
+    return { mode, root, def, temp, scan, editTarget, editPref, scanRecursive };
+  }
+
+  function updateTagHint(){
+    const hint = get(TAGVIZ.hint);
+    if(!hint) return;
+    const mode = get(IDS.mode)?.value || 'insert';
+    const info = getEffectiveFolders();
+    let msg = '';
+    if (mode === 'replace') {
+      msg = 'Replace mode: selection formats as "tag->" entries.';
+    } else if (mode === 'move') {
+      msg = 'Move mode: tags are matched in the base folder.';
+    } else if (mode === 'undo') {
+      msg = 'Undo mode restores files from Temp; Tags input is ignored.';
+    } else if (mode === 'dedup') {
+      msg = 'Dedup mode removes duplicates; Tags input is ignored.';
+    } else {
+      msg = 'Select tags -> choose mode -> Run.';
+    }
+    if (info.editTarget === 'recursive'){
+      if (mode === 'delete' || mode === 'replace'){
+        msg += ' Recursive auto-stages matching files into _temp.';
+      } else if (mode === 'insert' || mode === 'dedup'){
+        msg += ' Recursive edits run on _temp; use Stage to _temp first.';
+      }
+    }
+    if (tagVizState.selected.size){
+      msg += tagsSyncEnabled
+        ? ' Selection auto-syncs to Tags / mapping.'
+        : ' Auto-sync paused; click Sync to Tags to resume.';
+    }
+    hint.textContent = msg;
+  }
+
   function updateModeHelp(){
     const key = get(IDS.mode)?.value || 'insert';
     const desc = get('mode-desc'), banner = get('mode-banner');
     if(desc) desc.textContent = MODE_HELP[key] || MODE_HELP.insert;
     if(banner) banner.className = 'mode-banner ' + (MODE_CLASS[key] || 'mode-insert');
+    updateTagHint();
+    updateTagSyncStatus();
+  }
+
+  function handleModeChange(){
+    updateModeHelp();
+    refreshTempHints();
+    const input = get(IDS.tags);
+    if(!input) return;
+    const mode = get(IDS.mode)?.value || 'insert';
+    const hasMapping = input.value.includes('->');
+
+    if (tagsSyncEnabled){
+      syncTagsFromSelection(true);
+      updateTagSyncStatus();
+      updateTagHint();
+      updateTagWarningsFromInput();
+      clearWarning();
+      return;
+    }
+
+    if (hasMapping && mode !== 'replace'){
+      tagsSyncEnabled = true;
+      tagsSyncLocked = true;
+      input.value = '';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      tagsSyncLocked = false;
+      syncTagsFromSelection(true);
+      updateTagSyncStatus();
+      updateTagHint();
+    }
+    updateTagWarningsFromInput();
+    clearWarning();
   }
 
   function refreshTempHints(){
-    const root = stripTemp((get(IDS.folder)?.value||'').trim());
-    const def  = defaultTempFor(root);
-    const temp = (get(IDS.temp)?.value||'').trim() || def;
+    const info = getEffectiveFolders();
+    const root = info.root;
+    const def = info.def;
+    const temp = info.temp;
+    const scan = info.scan;
+    const editTarget = info.editTarget;
+    const editPath = editTarget === 'base' ? root : temp;
 
-    if (get(IDS.tempDefault)) get(IDS.tempDefault).textContent = def || '—';
-    if (get(IDS.effMove))     get(IDS.effMove).textContent     = root || '—';
-    if (get(IDS.effMoveDest)) get(IDS.effMoveDest).textContent = temp || '—';
-    if (get(IDS.effEdit))     get(IDS.effEdit).textContent     = temp || '—';
-    if (get(IDS.effUndo))     get(IDS.effUndo).textContent     = (root || '—') + '  ←  from  ' + (temp || '—');
+    const setPath = (id, value) => {
+      const el = get(id);
+      if (!el) return;
+      const text = value || '...';
+      el.textContent = text;
+      el.title = value || '';
+    };
+
+    setPath(IDS.effMoveFrom, root);
+    setPath(IDS.effMoveTo, temp);
+    setPath(IDS.effEditPath, editPath);
+    setPath(IDS.effUndoFrom, temp);
+    setPath(IDS.effUndoTo, root);
+    if (get(TAGVIZ.path))     get(TAGVIZ.path).textContent     = scan || '...';
+
+    const flag = get(IDS.effEditFlag);
+    if (flag){
+      flag.textContent = editTarget || '';
+      flag.classList.toggle('is-active', editTarget === 'base' || editTarget === 'temp' || editTarget === 'recursive');
+    }
+  }
+
+
+
+  function updateTagSyncStatus(){
+    const el = get(TAGVIZ.syncStatus);
+    if(!el) return;
+    if (!tagVizState.selected.size){
+      el.textContent = 'Auto-sync ON';
+      return;
+    }
+    el.textContent = tagsSyncEnabled ? 'Auto-sync ON' : 'Auto-sync paused (manual edit)';
+  }
+
+  function clearWarning(){
+    const wrap = get(WARN.wrap);
+    const msg = get(WARN.msg);
+    const actions = get(WARN.actions);
+    if (wrap) wrap.classList.add('d-none');
+    if (msg) msg.textContent = '';
+    if (actions) actions.innerHTML = '';
+  }
+
+  function showWarning(message, opts = {}){
+    const wrap = get(WARN.wrap);
+    const msg = get(WARN.msg);
+    const actions = get(WARN.actions);
+    if (!wrap || !msg || !actions) return;
+    wrap.classList.remove('d-none', 'alert-danger', 'alert-warning');
+    wrap.classList.add(opts.level === 'error' ? 'alert-danger' : 'alert-warning');
+    msg.textContent = message || '';
+    actions.innerHTML = '';
+
+    if (opts.list && opts.list.length){
+      const ul = document.createElement('ul');
+      ul.className = 'mb-0 mt-2';
+      opts.list.forEach(item=>{
+        const li = document.createElement('li');
+        li.textContent = item;
+        ul.appendChild(li);
+      });
+      msg.appendChild(ul);
+    }
+
+    (opts.actions || []).forEach(action=>{
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = action.className || 'btn btn-outline-light btn-sm';
+      btn.textContent = action.label || 'OK';
+      btn.addEventListener('click', action.onClick || (()=>{}));
+      actions.appendChild(btn);
+    });
+  }
+
+  function showConfirm(message, okLabel = 'Continue'){
+    return new Promise(resolve=>{
+      const modalEl = get(CONFIRM.modal);
+      const msgEl = get(CONFIRM.msg);
+      const okBtn = get(CONFIRM.ok);
+      const cancelBtn = get(CONFIRM.cancel);
+      if (!modalEl || !msgEl || !okBtn || !cancelBtn){
+        resolve(false);
+        return;
+      }
+      msgEl.textContent = message || '';
+      okBtn.textContent = okLabel;
+      let done = false;
+      const modal = new bootstrap.Modal(modalEl);
+      const cleanup = (result)=>{
+        if (done) return;
+        done = true;
+        okBtn.onclick = null;
+        cancelBtn.onclick = null;
+        resolve(result);
+      };
+      okBtn.onclick = ()=>{ cleanup(true); modal.hide(); };
+      cancelBtn.onclick = ()=>{ cleanup(false); modal.hide(); };
+      modalEl.addEventListener('hidden.bs.modal', ()=> cleanup(false), { once: true });
+      modal.show();
+    });
+  }
+
+  function splitTagList(raw){
+    if (!raw) return [];
+    const parts = [];
+    raw.replace("\r", "\n").split("\n").forEach(line=>{
+      line.split(",").forEach(token=>{
+        const val = token.trim();
+        if (val) parts.push(val);
+      });
+    });
+    return parts;
+  }
+
+  function parseReplaceMappings(raw){
+    const parts = (raw || '').split(";").map(p=>p.trim()).filter(Boolean);
+    const newTags = [];
+    const invalid = [];
+    parts.forEach(p=>{
+      if (!p.includes("->")) return;
+      const pair = p.split("->", 2);
+      const right = (pair[1] || "").trim();
+      if (!right){
+        invalid.push(pair[0]?.trim() || "(empty)");
+        return;
+      }
+      right.split(",").forEach(tag=>{
+        const t = tag.trim();
+        if (t) newTags.push(t);
+      });
+    });
+    return { newTags, invalid };
+  }
+
+  function updateTagWarningsFromInput(){
+    const mode = get(IDS.mode)?.value || 'insert';
+    const input = get(IDS.tags);
+    const raw = input ? input.value : '';
+    const existing = new Set((tagVizState.items || []).map(it => it.tag));
+    const warnTags = new Set();
+
+    if (mode === 'replace'){
+      const parsed = parseReplaceMappings(raw);
+      parsed.newTags.forEach(tag=>{
+        if (existing.has(tag)) warnTags.add(tag);
+      });
+    } else if (mode === 'insert'){
+      splitTagList(raw).forEach(tag=>{
+        if (existing.has(tag)) warnTags.add(tag);
+      });
+    }
+
+    tagVizState.warnTags = warnTags;
+    renderTagViz();
+    clearWarning();
+  }
+
+  function buildTagsFromSelection(mode){
+    const selected = Array.from(tagVizState.selected);
+    if (!selected.length) return '';
+    if (mode === 'replace'){
+      return selected.map(tag => `${tag}->`).join('; ');
+    }
+    return selected.join(', ');
+  }
+
+  function syncTagsFromSelection(force=false){
+    if (!tagsSyncEnabled && !force) return;
+    const input = get(IDS.tags);
+    if(!input) return;
+    const text = buildTagsFromSelection(get(IDS.mode)?.value || 'insert');
+    if (!text){
+      clearTagsIfSynced();
+      updateTagSyncStatus();
+      return;
+    }
+    tagsSyncLocked = true;
+    input.value = text;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    tagsSyncLocked = false;
+    updateTagSyncStatus();
+    updateTagWarningsFromInput();
+    clearWarning();
+  }
+
+  function clearTagsIfSynced(){
+    if (!tagsSyncEnabled) return;
+    const input = get(IDS.tags);
+    if(!input) return;
+    tagsSyncLocked = true;
+    input.value = '';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    tagsSyncLocked = false;
+    updateTagWarningsFromInput();
+    clearWarning();
+  }
+
+  function setTagVizStatus(msg){
+    const el = get(TAGVIZ.status);
+    if(el) el.textContent = msg || '';
+  }
+
+  function updateTagVizStats(){
+    const el = get(TAGVIZ.stats);
+    if(!el) return;
+    const parts = [];
+    parts.push(`${tagVizState.shown}/${tagVizState.total} tags`);
+    if (tagVizState.selected.size) parts.push(`${tagVizState.selected.size} selected`);
+    if (tagVizState.meta.tag_files) parts.push(`${tagVizState.meta.tag_files} tag files`);
+    if (tagVizState.meta.total_images) parts.push(`${tagVizState.meta.total_images} images`);
+    el.textContent = parts.join(' | ');
+  }
+
+  function renderTagViz(){
+    const wrap = get(TAGVIZ.cloud);
+    if(!wrap) return;
+    wrap.innerHTML = '';
+
+    const filter = (get(TAGVIZ.filter)?.value||'').trim().toLowerCase();
+    const minRaw = (get(TAGVIZ.min)?.value||'').trim();
+    const min = minRaw ? parseInt(minRaw, 10) : 0;
+    const sort = get(TAGVIZ.sort)?.value || 'count';
+
+    let items = tagVizState.items || [];
+    if (filter) items = items.filter(it => it.tag.toLowerCase().includes(filter));
+    if (min && min > 0) items = items.filter(it => it.count >= min);
+    if (sort === 'az') {
+      items = [...items].sort((a,b)=> a.tag.localeCompare(b.tag));
+    } else {
+      items = [...items].sort((a,b)=> (b.count - a.count) || a.tag.localeCompare(b.tag));
+    }
+
+    tagVizState.total = items.length;
+    const maxRender = 400;
+    const shownItems = items.slice(0, maxRender);
+    tagVizState.shown = shownItems.length;
+
+    if (!shownItems.length){
+      const empty = document.createElement('div');
+      empty.className = 'small text-muted';
+      empty.textContent = tagVizState.items.length ? 'No tags match the filters.' : 'No tag data. Run "Scan tags".';
+      wrap.appendChild(empty);
+      updateTagVizStats();
+      updateTagSyncStatus();
+      return;
+    }
+
+    const frag = document.createDocumentFragment();
+    shownItems.forEach(item => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      const isSelected = tagVizState.selected.has(item.tag);
+      const isWarn = tagVizState.warnTags && tagVizState.warnTags.has(item.tag);
+      btn.className = 'tag-chip' + (isSelected ? ' is-selected' : '') + (isWarn ? ' is-warning' : '');
+      btn.dataset.tag = item.tag;
+      if (isWarn) btn.title = 'Already exists in dataset';
+
+      const name = document.createElement('span');
+      name.className = 'tag-name';
+      name.textContent = item.tag;
+
+      const count = document.createElement('span');
+      count.className = 'tag-count';
+      count.textContent = item.count;
+
+      btn.appendChild(name);
+      btn.appendChild(count);
+      btn.addEventListener('click', ()=>{
+        if (tagVizState.selected.has(item.tag)){
+          tagVizState.selected.delete(item.tag);
+          btn.classList.remove('is-selected');
+        } else {
+          tagVizState.selected.add(item.tag);
+          btn.classList.add('is-selected');
+        }
+        updateTagVizStats();
+        const tagsInput = get(IDS.tags);
+        if (!tagsSyncEnabled && tagsInput && !tagsInput.value.trim()){
+          tagsSyncEnabled = true;
+        }
+        syncTagsFromSelection();
+        updateTagSyncStatus();
+        updateTagHint();
+      });
+      frag.appendChild(btn);
+    });
+
+    if (items.length > maxRender){
+      const note = document.createElement('div');
+      note.className = 'small text-muted tag-cloud-note';
+      note.textContent = `Showing first ${maxRender} tags. Refine filters to see more.`;
+      frag.appendChild(note);
+    }
+
+    wrap.appendChild(frag);
+    updateTagVizStats();
+    updateTagSyncStatus();
+  }
+
+  
+  async function fetchTagScan(folder, recursive=false){
+    const payload = { folder, exts: get(IDS.exts)?.value || '', recursive };
+    const res = await fetch('/api/tags/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    let data = null;
+    try{ data = await res.json(); }catch(_){ }
+    if (!res.ok || !data || !data.ok){
+      const err = (data && data.error) ? data.error : `HTTP ${res.status}`;
+      return { ok: false, error: err };
+    }
+    return { ok: true, data };
+  }
+
+  async function scanTagViz(){
+    const info = getEffectiveFolders();
+    if (!info.scan){
+      setTagVizStatus('Folder not set.');
+      return;
+    }
+    setTagVizStatus('Scanning...');
+    let scanFolder = info.scan;
+    let result = await fetchTagScan(scanFolder, info.scanRecursive);
+
+    if (!result.ok){
+      setTagVizStatus(result.error || 'Scan failed.');
+      return;
+    }
+
+    const data = result.data;
+    tagVizState.items = data.tags || [];
+    tagVizState.meta = {
+      tag_files: data.tag_files || 0,
+      total_images: data.total_images || 0
+    };
+    tagVizState.selected.clear();
+    clearTagsIfSynced();
+    if (get(TAGVIZ.path)) get(TAGVIZ.path).textContent = scanFolder || '...';
+    updateTagWarningsFromInput();
+    updateTagHint();
+    clearWarning();
+    setTagVizStatus('Scan complete.');
+  }
+
+
+  function clearTagVizSelection(){
+    tagVizState.selected.clear();
+    clearTagsIfSynced();
+    renderTagViz();
+    updateTagHint();
+    setTagVizStatus('Selection cleared.');
+  }
+
+  function syncSelectionToTags(){
+    const input = get(IDS.tags);
+    if(!input) return;
+    const selected = Array.from(tagVizState.selected);
+    if (!selected.length){
+      setTagVizStatus('No tags selected.');
+      return;
+    }
+    tagsSyncEnabled = true;
+    syncTagsFromSelection(true);
+    updateTagHint();
+    setTagVizStatus(`Synced ${selected.length} tag(s) to Tags / mapping.`);
   }
 
   // ---- persistence ----
   const LSKEY = 'bb.tags.';
   const FIELDS = [
     ['folder', IDS.folder],
-    ['temp', IDS.temp],
     ['mode', IDS.mode],
     ['exts', IDS.exts],
     ['tags', IDS.tags],
+    ['edit_target', IDS.editTarget],
     ['backup', IDS.backup],
   ];
   function loadSaved(){
@@ -196,6 +761,7 @@
       const sv = localStorage.getItem(LSKEY+k);
       if (sv==null) return;
       if (el.type === 'checkbox') el.checked = (sv === '1');
+      else if (k === 'edit_target' && sv === 'auto') el.value = 'recursive';
       else el.value = sv;
     });
   }
@@ -215,7 +781,12 @@
     FIELDS.forEach(([k])=> localStorage.removeItem(LSKEY+k));
     get(IDS.tags).value = '';
     get(IDS.exts).value = '.jpg,.jpeg,.png,.webp';
+    if (get(IDS.editTarget)) get(IDS.editTarget).value = 'recursive';
     get(IDS.backup).checked = false;
+    tagsSyncEnabled = true;
+    updateTagSyncStatus();
+    updateTagHint();
+    updateTagWarningsFromInput();
     refreshTempHints();
   }
 
@@ -245,20 +816,54 @@
   }
 
   // Build proper params:
-  // - move → operate on BASE
-  // - ALL OTHER MODES (insert/delete/replace/dedup/undo) → operate on TEMP
+  // - always send base folder; server derives temp path from folder
   function finalizeFormDataForMode(fd){
-    const mode = get(IDS.mode)?.value || 'insert';
     const root = stripTemp((get(IDS.folder)?.value||'').trim());
-    const temp = (get(IDS.temp)?.value||'').trim() || defaultTempFor(root);
 
     fd.set('active_tab','tags');
     fd.set('tool','tags');
+    fd.set('folder', root);
+  }
 
-    if (mode === 'move') {
-      fd.set('folder', root);
+  async function stageToTemp(form){
+    const info = getEffectiveFolders();
+    if (info.editTarget !== 'recursive'){
+      showWarning('Staging is only available when Edit target is set to recursive.', { level: 'error' });
+      return;
+    }
+    if (info.mode === 'move' || info.mode === 'undo'){
+      showWarning('Staging is not available for Move/Undo modes.', { level: 'error' });
+      return;
+    }
+    const tagsInput = get(IDS.tags);
+    const raw = (tagsInput?.value || '').trim();
+    if ((info.mode === 'insert' || info.mode === 'delete') && !raw && !tagVizState.selected.size){
+      showWarning('Provide tags first (or select tags from Tag Explorer) before staging.', { level: 'error' });
+      return;
+    }
+    if (info.mode === 'replace' && !raw.includes('->') && !tagVizState.selected.size){
+      showWarning('Replace staging needs mappings like "old->new".', { level: 'error' });
+      return;
+    }
+
+    if (tagsInput && !tagsInput.value.trim() && tagVizState.selected.size) {
+      syncTagsFromSelection(true);
     } else {
-      fd.set('folder', temp);
+      syncTagsFromSelection();
+    }
+
+    showStatus('Staging to _temp...');
+    const fd = new FormData(form);
+    fd.set('stage_only', '1');
+    finalizeFormDataForMode(fd);
+    try{
+      const data = await postForm(fd);
+      showStatus(data.ok ? 'Staging done.' : 'Staging finished with issues.');
+      showLog(data.log || '');
+      if (data.ok) scanTagViz();
+    }catch(err){
+      console.error(err);
+      showStatus('Staging failed. See console / server log.');
     }
   }
 
@@ -269,23 +874,92 @@
     hookSavers();
     updateModeHelp();
     refreshTempHints();
+    renderTagViz();
+    setTagVizStatus('');
+    updateTagSyncStatus();
+    updateTagHint();
 
-    get('btn-temp-default')?.addEventListener('click', ()=>{
-      const root = stripTemp((get(IDS.folder)?.value||'').trim());
-      get(IDS.temp).value = defaultTempFor(root);
-      refreshTempHints();
+    get(TAGVIZ.scan)?.addEventListener('click', scanTagViz);
+    get(TAGVIZ.sync)?.addEventListener('click', syncSelectionToTags);
+    get(TAGVIZ.clear)?.addEventListener('click', clearTagVizSelection);
+    get(TAGVIZ.filter)?.addEventListener('input', renderTagViz);
+    get(TAGVIZ.sort)?.addEventListener('change', renderTagViz);
+    get(TAGVIZ.min)?.addEventListener('input', renderTagViz);
+    get(IDS.tags)?.addEventListener('input', ()=>{
+      if (tagsSyncLocked) return;
+      if (tagVizState.selected.size && tagsSyncEnabled){
+        tagsSyncEnabled = false;
+        updateTagSyncStatus();
+        updateTagHint();
+      }
+      updateTagWarningsFromInput();
     });
+    get('btn-stage')?.addEventListener('click', ()=>{ stageToTemp(form); });
 
     // Main Run → AJAX (no refresh)
     form.addEventListener('submit', async (e)=>{
       e.preventDefault();
-      showStatus('Running…');
+      const mode = get(IDS.mode)?.value || 'insert';
+      const raw = get(IDS.tags)?.value || '';
+      const parsedReplace = mode === 'replace' ? parseReplaceMappings(raw) : { newTags: [], invalid: [] };
+      if (mode === 'replace' && parsedReplace.invalid.length){
+        showWarning('Replace warning: some mappings have no value after "->". Fix these before running.', {
+          level: 'error',
+          list: parsedReplace.invalid
+        });
+        return;
+      }
+      if (mode === 'delete'){
+        const ok = await showConfirm('Delete mode will remove tags from files in the target folder. Continue?', 'Delete tags');
+        if (!ok) return;
+      }
+      if (mode === 'insert' || mode === 'replace'){
+        const existing = new Set((tagVizState.items || []).map(it => it.tag));
+        let dupes = [];
+        if (mode === 'insert'){
+          dupes = splitTagList(raw).filter(tag => existing.has(tag));
+        } else {
+          dupes = parsedReplace.newTags.filter(tag => existing.has(tag));
+        }
+        const uniqueDupes = Array.from(new Set(dupes));
+        if (uniqueDupes.length && !bypassDupesOnce){
+          showWarning('These tags already exist in the dataset. You can still continue if that is intended.', {
+            list: uniqueDupes,
+            actions: [
+              {
+                label: 'Run anyway',
+                className: 'btn btn-warning btn-sm',
+                onClick: () => {
+                  bypassDupesOnce = true;
+                  clearWarning();
+                  get('btn-run')?.click();
+                }
+              },
+              {
+                label: 'Cancel',
+                className: 'btn btn-outline-light btn-sm',
+                onClick: clearWarning
+              }
+            ]
+          });
+          return;
+        }
+      }
+      bypassDupesOnce = false;
+      showStatus('Running...');
+      const tagsInput = get(IDS.tags);
+      if (tagsInput && !tagsInput.value.trim() && tagVizState.selected.size) {
+        syncTagsFromSelection(true);
+      } else {
+        syncTagsFromSelection();
+      }
       const fd = new FormData(form);
       finalizeFormDataForMode(fd);
       try{
         const data = await postForm(fd);
         showStatus(data.ok ? 'Done.' : 'Finished with issues.');
         showLog(data.log || '');
+        if (data.ok) scanTagViz();
       }catch(err){
         console.error(err);
         showStatus('Failed. See console / server log.');
@@ -302,6 +976,7 @@
         const data = await postForm(fd);
         showStatus(data.ok ? 'Undo done.' : 'Undo finished with issues.');
         showLog(data.log || '');
+        if (data.ok) scanTagViz();
         // reflect current mode in UI/persistence
         get(IDS.mode).value = 'undo';
         localStorage.setItem(LSKEY+'mode','undo');
@@ -320,9 +995,12 @@
     });
 
     // Live previews
-    get(IDS.mode)?.addEventListener('change', ()=>{ updateModeHelp(); refreshTempHints(); });
-    get(IDS.folder)?.addEventListener('input', refreshTempHints);
-    get(IDS.temp)?.addEventListener('input',   refreshTempHints);
+    get(IDS.mode)?.addEventListener('change', handleModeChange);
+    const onFolderChange = ()=>{ refreshTempHints(); };
+    get(IDS.folder)?.addEventListener('input', onFolderChange);
+    get(IDS.folder)?.addEventListener('change', onFolderChange);
+    get(IDS.editTarget)?.addEventListener('change', ()=>{ refreshTempHints(); updateTagHint(); });
+    get(IDS.tags)?.addEventListener('focus', clearWarning);
   });
 })();
 </script>

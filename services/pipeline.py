@@ -6,29 +6,63 @@ import time
 import zipfile
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
+from functools import partial
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import uuid4
 
 from utils.io import readable_path
-from services import normalizer
+from services import (
+    batch_adjust,
+    combine_datasets,
+    group_renamer,
+    merge_groups_tool,
+    normalizer,
+    offline_tagger,
+    tag_editor,
+    webp_converter,
+    webtoon_splitter,
+)
 
 PIPELINE_STATUSES = {
     "QUEUED",
     "RUNNING",
     "WAITING_MANUAL",
-    "WAITING_DOWNLOAD",
     "COMPLETED",
     "FAILED",
     "STOPPED",
 }
+
+DEFAULT_STEP_ORDER = [
+    "offline_tagger",
+    "tag_editor",
+    "normalize",
+    "zip_final",
+]
+
+STEP_LABELS = {
+    "offline_tagger": "Offline tagger (WD v3)",
+    "tag_editor": "Dataset Tag Editor",
+    "normalize": "Dataset normalization",
+    "zip_final": "Zip result",
+    "dedup_tags": "Tag cleanup (dedup)",
+    "webp_to_png": "WebP -> PNG",
+    "batch_adjust": "Photo adjust (preset)",
+    "combine_datasets": "Combine dataset",
+    "flatten_renumber": "Flatten & renumber",
+    "merge_groups": "Stitch groups",
+    "webtoon_split": "Webtoon panel splitter",
+}
+
+TAG_STEPS = {"offline_tagger", "tag_editor", "normalize", "dedup_tags"}
+IMAGE_ONLY_STEPS = {"webp_to_png", "batch_adjust", "merge_groups", "webtoon_split"}
 
 
 @dataclass
 class StepResult:
     status: str  # SUCCESS | WAIT | FAIL | STOP
     message: str = ""
-    wait_status: Optional[str] = None  # WAITING_MANUAL / WAITING_DOWNLOAD
+    wait_status: Optional[str] = None  # WAITING_MANUAL
 
 
 @dataclass
@@ -97,6 +131,54 @@ def _find_images(folder: Path, recursive: bool, exts: List[str]) -> List[Path]:
     return sorted([p for p in folder.iterdir() if p.is_file() and p.suffix.lower() in exts_lower])
 
 
+def _coerce_exts(raw: Any) -> List[str]:
+    if isinstance(raw, list):
+        items = [str(x).strip().lower() for x in raw if str(x).strip()]
+    elif raw:
+        items = [token.strip().lower() for token in str(raw).split(",") if token.strip()]
+    else:
+        items = []
+    out = []
+    for item in items:
+        if not item:
+            continue
+        if not item.startswith("."):
+            item = "." + item
+        out.append(item)
+    return out or list(normalizer.DEFAULT_IMAGE_EXTS)
+
+
+def _parse_bool(val: Any) -> bool:
+    if isinstance(val, bool):
+        return val
+    if val is None:
+        return False
+    return str(val).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _parse_int(val: Any, default: int) -> int:
+    try:
+        return int(val)
+    except Exception:
+        return default
+
+
+def _parse_float(val: Any, default: float) -> float:
+    try:
+        return float(val)
+    except Exception:
+        return default
+
+
+def _optional_path(raw: Any) -> Optional[Path]:
+    if raw is None:
+        return None
+    val = str(raw).strip()
+    if not val:
+        return None
+    return readable_path(val)
+
+
 def _dedup_list(items: List[str]) -> List[str]:
     seen = set()
     out: List[str] = []
@@ -122,6 +204,19 @@ class PipelineManager:
         self.jobs: Dict[str, PipelineJob] = {}
         self.lock = threading.Lock()
         self.wake = threading.Event()
+        self.step_runners = {
+            "offline_tagger": self._step_autotag_offline,
+            "tag_editor": self._step_tag_editor,
+            "normalize": self._step_normalize,
+            "zip_final": self._step_zip_final,
+            "dedup_tags": self._step_final_cleanup,
+            "webp_to_png": self._step_webp_to_png,
+            "batch_adjust": self._step_batch_adjust,
+            "combine_datasets": self._step_combine_datasets,
+            "flatten_renumber": self._step_flatten_renumber,
+            "merge_groups": self._step_merge_groups,
+            "webtoon_split": self._step_webtoon_split,
+        }
         self.thread = threading.Thread(target=self._worker, daemon=True)
         self.thread.start()
 
@@ -145,6 +240,57 @@ class PipelineManager:
             self.jobs[job.id] = job
         self.wake.set()
 
+    def _normalize_steps(self, cfg: Dict[str, Any]) -> List[Dict[str, Any]]:
+        raw = cfg.get("steps") or []
+        if not raw:
+            raw = [{"id": step_id, "config": {}} for step_id in DEFAULT_STEP_ORDER]
+
+        steps: List[Dict[str, Any]] = []
+        for item in raw:
+            if isinstance(item, str):
+                step_id = item
+                step_cfg: Dict[str, Any] = {}
+            elif isinstance(item, dict):
+                step_id = (item.get("id") or item.get("step") or "").strip()
+                step_cfg = item.get("config") if isinstance(item.get("config"), dict) else {}
+            else:
+                continue
+            if step_id not in self.step_runners:
+                continue
+            steps.append({"id": step_id, "config": step_cfg})
+
+        if not steps:
+            steps = [{"id": step_id, "config": {}} for step_id in DEFAULT_STEP_ORDER if step_id in self.step_runners]
+
+        return steps
+
+    def _validate_step_order(self, steps: List[Dict[str, Any]]) -> Optional[str]:
+        ids = [item.get("id") for item in steps if item.get("id")]
+        if not ids:
+            return "At least one step is required."
+        if "zip_final" in ids and ids[-1] != "zip_final":
+            return "Zip result sebaiknya jadi step terakhir agar hasilnya selalu terbaru."
+        first_tag = None
+        last_image_step = None
+        for idx, step_id in enumerate(ids):
+            if step_id in TAG_STEPS and first_tag is None:
+                first_tag = idx
+            if step_id in IMAGE_ONLY_STEPS:
+                last_image_step = idx
+        if first_tag is not None and last_image_step is not None and last_image_step > first_tag:
+            offenders = [
+                step_id
+                for idx, step_id in enumerate(ids)
+                if step_id in IMAGE_ONLY_STEPS and idx > first_tag
+            ]
+            labels = ", ".join(STEP_LABELS.get(step_id, step_id) for step_id in offenders)
+            return (
+                "Step image-only harus ditaruh sebelum step tag "
+                f"(Offline Tagger / Tag Editor / Normalization / Tag Cleanup). "
+                f"Pindahkan: {labels}."
+            )
+        return None
+
     def start_job(self, cfg: Dict[str, Any]) -> Tuple[bool, str, Optional[str]]:
         dataset = readable_path(cfg.get("dataset_path", ""))
         working = readable_path(cfg.get("working_dir", ""))
@@ -159,6 +305,10 @@ class PipelineManager:
             return False, "", f"Dataset not found: {dataset}"
 
         job_id = str(uuid4())
+        cfg["steps"] = self._normalize_steps(cfg)
+        err = self._validate_step_order(cfg["steps"])
+        if err:
+            return False, "", err
         steps = self._build_step_names(cfg)
         job = PipelineJob(
             id=job_id,
@@ -202,6 +352,10 @@ class PipelineManager:
         with self.lock:
             if job.status in {"COMPLETED", "FAILED", "STOPPED"}:
                 return False, f"cannot resume from {job.status}"
+            if job.status == "WAITING_MANUAL":
+                pending = job.config.get("manual_pending_index")
+                if pending == job.step_index:
+                    job.config["manual_resume_index"] = pending
             job.status = "QUEUED"
             job.waiting_reason = ""
             self._add_log(job, "Resumed.")
@@ -220,21 +374,8 @@ class PipelineManager:
 
     # ---------- steps ----------
     def _build_step_names(self, cfg: Dict[str, Any]) -> List[str]:
-        names = ["Validate & Prepare"]
-        run_autotag = bool(cfg.get("run_autotag", True))
-        if run_autotag:
-            names += [
-                "Zip for CivitAI",
-                "Manual upload",
-                "Wait download",
-                "Extract result",
-            ]
-        names.append("Normalize tags")
-        names.append("Manual retag (pause)")
-        names.append("Final cleanup")
-        names.append("Build final zip")
-        names.append("Done")
-        return names
+        steps = self._normalize_steps(cfg)
+        return [STEP_LABELS.get(item["id"], item["id"]) for item in steps]
 
     def _worker(self):
         while True:
@@ -259,6 +400,39 @@ class PipelineManager:
         return None
 
     def _run_job(self, job: PipelineJob):
+        if not job.artifacts.get("prepared"):
+            with self.lock:
+                if job.status == "STOPPED":
+                    self._persist_job(job)
+                    return
+                job.status = "RUNNING"
+                job.current_step = "Prepare workspace"
+                self._persist_job(job)
+
+            result = self._step_validate(job)
+
+            with self.lock:
+                if result.status == "SUCCESS":
+                    job.artifacts["prepared"] = True
+                    job.current_step = ""
+                    self._persist_job(job)
+                elif result.status == "WAIT":
+                    job.status = result.wait_status or "WAITING_MANUAL"
+                    job.waiting_reason = result.message
+                    self._add_log(job, f"Waiting: {result.message}")
+                    self._persist_job(job)
+                    return
+                elif result.status == "FAIL":
+                    job.status = "FAILED"
+                    self._add_log(job, result.message, level="error")
+                    self._persist_job(job)
+                    return
+                elif result.status == "STOP":
+                    job.status = "STOPPED"
+                    self._add_log(job, "Stopped.")
+                    self._persist_job(job)
+                    return
+
         steps = self._build_steps(job)
         while job.step_index < len(steps):
             step_name, fn = steps[job.step_index]
@@ -304,30 +478,50 @@ class PipelineManager:
 
     # Step builders
     def _build_steps(self, job: PipelineJob) -> List[Tuple[str, Any]]:
-        cfg = job.config
-        run_autotag = bool(cfg.get("run_autotag", True))
-        steps: List[Tuple[str, Any]] = [
-            ("Validate & Prepare", lambda j: self._step_validate(j)),
-        ]
-        if run_autotag:
-            steps.extend(
-                [
-                    ("Zip for CivitAI", lambda j: self._step_zip_for_autotag(j)),
-                    ("Manual upload", lambda j: self._step_wait_manual_upload(j)),
-                    ("Wait download", lambda j: self._step_wait_download(j)),
-                    ("Extract result", lambda j: self._step_extract_result(j)),
-                ]
-            )
-        steps.extend(
-            [
-                ("Normalize tags", lambda j: self._step_normalize(j)),
-                ("Manual retag (pause)", lambda j: self._step_manual_pause(j)),
-                ("Final cleanup", lambda j: self._step_final_cleanup(j)),
-                ("Build final zip", lambda j: self._step_zip_final(j)),
-                ("Done", lambda j: StepResult(status="SUCCESS", message="Done")),
-            ]
-        )
+        steps: List[Tuple[str, Any]] = []
+        for item in self._normalize_steps(job.config):
+            step_id = item["id"]
+            label = STEP_LABELS.get(step_id, step_id)
+            runner = self.step_runners.get(step_id)
+            if not runner:
+                continue
+            step_cfg = item.get("config") or {}
+            steps.append((label, partial(runner, step_cfg=step_cfg)))
         return steps
+
+    def _resolve_input_dir(self, job: PipelineJob, step_cfg: Dict[str, Any]) -> Optional[Path]:
+        override = _optional_path(step_cfg.get("input_dir") if step_cfg else None)
+        if override:
+            return override
+        target = job.artifacts.get("working_copy") or job.config.get("dataset_path")
+        return readable_path(str(target)) if target else None
+
+    def _resolve_output_dir(
+        self, job: PipelineJob, step_cfg: Dict[str, Any], default_subdir: str
+    ) -> Optional[Path]:
+        override = _optional_path(step_cfg.get("output_dir") if step_cfg else None)
+        if override:
+            return override
+        workdir = _optional_path(job.config.get("working_dir"))
+        if not workdir:
+            return None
+        return workdir / default_subdir
+
+    def _log_tool_output(self, job: PipelineJob, log: str):
+        if not log:
+            return
+        with self.lock:
+            for line in log.splitlines():
+                if line.strip():
+                    self._add_log(job, line)
+
+    def _run_tool(self, job: PipelineJob, handler, form: Dict[str, Any], ctx: Optional[Dict[str, Any]] = None) -> StepResult:
+        try:
+            _, log = handler(form, ctx or {})
+        except Exception as exc:
+            return StepResult(status="FAIL", message=str(exc))
+        self._log_tool_output(job, log or "")
+        return StepResult(status="SUCCESS", message="done")
 
     # ----- individual steps -----
     def _step_validate(self, job: PipelineJob) -> StepResult:
@@ -335,7 +529,7 @@ class PipelineManager:
         dataset = readable_path(cfg.get("dataset_path", ""))
         working = readable_path(cfg.get("working_dir", ""))
         output = readable_path(cfg.get("output_dir", ""))
-        image_exts = cfg.get("image_exts") or [".jpg", ".jpeg", ".png", ".webp"]
+        image_exts = _coerce_exts(cfg.get("image_exts"))
         recursive = bool(cfg.get("recursive"))
 
         if not dataset.exists():
@@ -345,12 +539,8 @@ class PipelineManager:
         if not images:
             return StepResult(status="FAIL", message="No images found in dataset")
 
-        raw_zip_dir = working / "raw_zip"
-        civitai_dir = working / "civitai_result"
         normalized_dir = working / "normalized"
-        final_dir = working / "final"
-        extracted_dir = civitai_dir / "extracted"
-        for d in [raw_zip_dir, civitai_dir, normalized_dir, final_dir, extracted_dir, output]:
+        for d in [normalized_dir, output]:
             _ensure_dir(d)
 
         # copy dataset to normalized work area
@@ -360,124 +550,87 @@ class PipelineManager:
             job.artifacts.update(
                 {
                     "dataset_name": dataset.name,
-                    "raw_zip_dir": str(raw_zip_dir),
-                    "civitai_dir": str(civitai_dir),
                     "normalized_dir": str(normalized_dir),
-                    "final_dir": str(final_dir),
-                    "extracted_dir": str(extracted_dir),
                     "output_dir": str(output),
                     "working_copy": str(normalized_dir),
-                    "watch_started_at": _now_ts(),
                 }
             )
             self._add_log(job, f"Prepared working dirs. Images: {len(images)}")
         return StepResult(status="SUCCESS", message="Prepared")
 
-    def _step_zip_for_autotag(self, job: PipelineJob) -> StepResult:
-        image_exts = job.config.get("image_exts") or [".jpg", ".jpeg", ".png", ".webp"]
-        normalized_dir = Path(job.artifacts.get("working_copy"))
-        raw_zip_dir = Path(job.artifacts.get("raw_zip_dir"))
-        dataset_name = job.artifacts.get("dataset_name", "dataset")
-        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-        dest_zip = raw_zip_dir / f"{dataset_name}__for_autotag__{ts}.zip"
-        images = _find_images(normalized_dir, recursive=True, exts=image_exts)
-        if not images:
-            return StepResult(status="FAIL", message="No images to zip for autotag.")
-        _zipdir(normalized_dir, dest_zip, include_txt=False, include_images_only=True)
-        with self.lock:
-            job.artifacts["source_zip_path"] = str(dest_zip)
-            self._add_log(job, f"Zip created for CivitAI: {dest_zip}")
-        return StepResult(status="SUCCESS", message="Zipped for autotag")
-
-    def _step_wait_manual_upload(self, job: PipelineJob) -> StepResult:
-        msg = "Upload the source zip to CivitAI, then resume."
-        with self.lock:
-            self._add_log(job, msg)
-        return StepResult(status="WAIT", message=msg, wait_status="WAITING_MANUAL")
-
-    def _step_wait_download(self, job: PipelineJob) -> StepResult:
+    def _step_autotag_offline(self, job: PipelineJob, step_cfg: Dict[str, Any]) -> StepResult:
+        target = self._resolve_input_dir(job, step_cfg)
+        if not target or not target.exists():
+            return StepResult(status="FAIL", message="No working folder to tag.")
         cfg = job.config
-        auto_detect = bool(cfg.get("auto_detect_download", True))
-        if not auto_detect:
-            msg = "Place downloaded zip in watch folder then resume."
-            with self.lock:
-                self._add_log(job, msg)
-            return StepResult(status="WAIT", message=msg, wait_status="WAITING_DOWNLOAD")
-
-        watch_dir = readable_path(cfg.get("downloads_watch") or Path.home() / "Downloads")
-        pattern = (cfg.get("download_pattern") or "").strip()
-        timeout = int(cfg.get("download_timeout") or 300)
-        poll_interval = int(cfg.get("download_poll_interval") or 2)
-        started = float(job.artifacts.get("watch_started_at") or _now_ts())
-        now = _now_ts()
-
-        if now - started > timeout:
-            return StepResult(status="FAIL", message="Timeout waiting for downloaded zip.")
-
-        candidate = None
-        if watch_dir.exists():
-            for p in sorted(watch_dir.glob("*.zip"), key=lambda x: x.stat().st_mtime, reverse=True):
-                if p.stat().st_mtime < started:
-                    continue
-                if pattern:
-                    if pattern.lower() not in p.name.lower():
-                        continue
-                candidate = p
-                break
-
-        if not candidate:
-            with self.lock:
-                self._add_log(job, f"No download detected yet in {watch_dir}. Rechecking...")
-            time.sleep(poll_interval)
-            return StepResult(status="WAIT", message="Waiting download", wait_status="WAITING_DOWNLOAD")
-
-        civitai_dir = Path(job.artifacts.get("civitai_dir"))
-        dest = civitai_dir / candidate.name
-        shutil.copy2(candidate, dest)
+        image_exts = _coerce_exts(step_cfg.get("image_exts") or cfg.get("image_exts"))
+        recursive = (
+            _parse_bool(step_cfg.get("recursive"))
+            if "recursive" in (step_cfg or {})
+            else bool(cfg.get("recursive"))
+        )
+        opts = offline_tagger.TaggerOptions(
+            dataset_path=Path(target),
+            recursive=recursive,
+            image_exts=image_exts,
+            model_id=(step_cfg.get("model_id") or offline_tagger.DEFAULT_MODEL_ID).strip()
+            or offline_tagger.DEFAULT_MODEL_ID,
+            device=(step_cfg.get("device") or "auto").strip(),
+            batch_size=max(1, _parse_int(step_cfg.get("batch_size"), 4)),
+            general_threshold=_parse_float(
+                step_cfg.get("general_threshold"), offline_tagger.DEFAULT_GENERAL_THRESHOLD
+            ),
+            character_threshold=_parse_float(
+                step_cfg.get("character_threshold"), offline_tagger.DEFAULT_CHARACTER_THRESHOLD
+            ),
+            include_character=_parse_bool(step_cfg.get("include_character")),
+            include_rating=_parse_bool(step_cfg.get("include_rating", True)),
+            replace_underscore=_parse_bool(step_cfg.get("replace_underscore", True)),
+            write_mode=(step_cfg.get("write_mode") or "append").strip().lower(),
+            preview_only=_parse_bool(step_cfg.get("preview_only")),
+            preview_limit=max(0, _parse_int(step_cfg.get("preview_limit"), 5)),
+            limit=max(0, _parse_int(step_cfg.get("limit"), 0)),
+            max_tags=max(0, _parse_int(step_cfg.get("max_tags"), 0)),
+            skip_empty=_parse_bool(step_cfg.get("skip_empty", True)),
+            local_only=_parse_bool(step_cfg.get("local_only")),
+        )
         with self.lock:
-            job.artifacts["civitai_result_zip_path"] = str(dest)
-            self._add_log(job, f"Downloaded zip detected: {candidate}")
-        return StepResult(status="SUCCESS", message="Download detected")
-
-    def _step_extract_result(self, job: PipelineJob) -> StepResult:
-        zip_path = job.artifacts.get("civitai_result_zip_path")
-        extracted_dir = Path(job.artifacts.get("extracted_dir"))
-        if not zip_path or not Path(zip_path).exists():
-            return StepResult(status="FAIL", message="No downloaded zip to extract.")
-        _ensure_dir(extracted_dir)
-        try:
-            with zipfile.ZipFile(zip_path, "r") as zf:
-                zf.extractall(extracted_dir)
-        except Exception as exc:
-            return StepResult(status="FAIL", message=f"Extract failed: {exc}")
+            self._add_log(job, "Offline autotag started.")
+        ok, lines = offline_tagger.run_tagger(opts)
         with self.lock:
-            job.artifacts["extracted_folder"] = str(extracted_dir)
-            self._add_log(job, f"Extracted download to {extracted_dir}")
-        return StepResult(status="SUCCESS", message="Extracted")
+            for line in lines:
+                self._add_log(job, line)
+        if not ok:
+            return StepResult(status="FAIL", message="Offline autotag failed.")
+        return StepResult(status="SUCCESS", message="Offline autotag done")
 
-    def _step_normalize(self, job: PipelineJob) -> StepResult:
+    def _step_normalize(self, job: PipelineJob, step_cfg: Dict[str, Any]) -> StepResult:
         cfg = job.config
-        target = job.artifacts.get("extracted_folder") or job.artifacts.get("working_copy")
-        if not target or not Path(target).exists():
+        target = self._resolve_input_dir(job, step_cfg)
+        if not target or not target.exists():
             return StepResult(status="FAIL", message="Nothing to normalize.")
+        preset_type = (step_cfg.get("preset_type") or cfg.get("preset_type") or "anime").strip()
+        preset_file = (step_cfg.get("preset_file") or cfg.get("preset_file") or "").strip()
+        if not preset_file:
+            return StepResult(status="FAIL", message="preset_file is required for normalization.")
         opts = normalizer.NormalizeOptions(
             dataset_path=Path(target),
-            recursive=True,
-            include_missing_txt=True,
-            preset_type=cfg.get("preset_type") or "anime",
-            preset_file=cfg.get("preset_file") or "",
-            extra_remove=normalizer.clean_input_list(cfg.get("extra_remove") or ""),
-            extra_keep=normalizer.clean_input_list(cfg.get("extra_keep") or ""),
-            move_unknown_background_to_optional=bool(cfg.get("move_unknown_background_to_optional")),
+            recursive=bool(cfg.get("recursive")),
+            include_missing_txt=_parse_bool(step_cfg.get("include_missing_txt", True)),
+            preset_type=preset_type or "anime",
+            preset_file=preset_file,
+            extra_remove=normalizer.clean_input_list(step_cfg.get("extra_remove") or ""),
+            extra_keep=normalizer.clean_input_list(step_cfg.get("extra_keep") or ""),
+            move_unknown_background_to_optional=_parse_bool(
+                step_cfg.get("move_unknown_background_to_optional")
+            ),
             background_threshold=None,
-            normalize_order=True,
+            normalize_order=_parse_bool(step_cfg.get("normalize_order", True)),
             preview_limit=30,
-            backup_enabled=True,
-            image_exts=normalizer.DEFAULT_IMAGE_EXTS,
-            identity_tags=normalizer.clean_input_list(cfg.get("identity_tags") or ""),
+            backup_enabled=_parse_bool(step_cfg.get("backup_enabled", True)),
+            image_exts=_coerce_exts(cfg.get("image_exts")),
+            identity_tags=normalizer.clean_input_list(step_cfg.get("identity_tags") or ""),
         )
-        if not opts.preset_file:
-            return StepResult(status="FAIL", message="preset_file is required for normalization.")
         result = normalizer.apply_normalization(opts, Path(cfg.get("preset_root")))
         if not result.get("ok"):
             return StepResult(status="FAIL", message=result.get("error") or "normalize failed")
@@ -485,14 +638,24 @@ class PipelineManager:
             self._add_log(job, f"Normalized tags: {result}")
         return StepResult(status="SUCCESS", message="Normalized")
 
-    def _step_manual_pause(self, job: PipelineJob) -> StepResult:
-        msg = "Pause for manual retagging. Edit files in normalized folder, then resume."
+    def _step_manual_pause(self, job: PipelineJob, step_cfg: Dict[str, Any]) -> StepResult:
+        if job.config.get("manual_resume_index") == job.step_index:
+            job.config["manual_resume_index"] = None
+            job.config["manual_pending_index"] = None
+            with self.lock:
+                self._add_log(job, "Manual step complete. Resuming.")
+            return StepResult(status="SUCCESS", message="Manual step complete")
+        msg = (
+            (step_cfg.get("message") or "").strip()
+            or "Pause for manual edits. Update files in the working folder, then resume."
+        )
+        job.config["manual_pending_index"] = job.step_index
         with self.lock:
             self._add_log(job, msg)
         return StepResult(status="WAIT", message=msg, wait_status="WAITING_MANUAL")
 
-    def _step_final_cleanup(self, job: PipelineJob) -> StepResult:
-        target = job.artifacts.get("extracted_folder") or job.artifacts.get("working_copy")
+    def _step_final_cleanup(self, job: PipelineJob, step_cfg: Dict[str, Any]) -> StepResult:
+        target = self._resolve_input_dir(job, step_cfg)
         if not target or not Path(target).exists():
             return StepResult(status="FAIL", message="No folder to clean.")
         _dedup_txt_folder(Path(target))
@@ -500,20 +663,201 @@ class PipelineManager:
             self._add_log(job, "Final cleanup done (dedup tags).")
         return StepResult(status="SUCCESS", message="Cleanup done")
 
-    def _step_zip_final(self, job: PipelineJob) -> StepResult:
-        target = job.artifacts.get("extracted_folder") or job.artifacts.get("working_copy")
-        output = readable_path(job.config.get("output_dir"))
+    def _step_zip_final(self, job: PipelineJob, step_cfg: Dict[str, Any]) -> StepResult:
+        target = self._resolve_input_dir(job, step_cfg)
+        if not target or not Path(target).exists():
+            return StepResult(status="FAIL", message="No folder to zip.")
+        output = _optional_path(step_cfg.get("output_dir")) or readable_path(job.config.get("output_dir"))
         dataset_name = job.artifacts.get("dataset_name", "dataset")
         ts = datetime.now().strftime("%Y%m%d-%H%M%S")
         dest_zip = output / f"{dataset_name}__final__{ts}.zip"
+        include_txt = _parse_bool(step_cfg.get("include_txt", True))
         try:
-            _zipdir(Path(target), dest_zip, include_txt=True)
+            _zipdir(Path(target), dest_zip, include_txt=include_txt)
         except Exception as exc:
             return StepResult(status="FAIL", message=f"Final zip failed: {exc}")
         with self.lock:
             job.artifacts["final_zip_path"] = str(dest_zip)
             self._add_log(job, f"Final zip built: {dest_zip}")
         return StepResult(status="SUCCESS", message="Final zip ready")
+
+    def _step_tag_editor(self, job: PipelineJob, step_cfg: Dict[str, Any]) -> StepResult:
+        mode = (step_cfg.get("mode") or "manual").strip().lower()
+        if mode in {"manual", "pause"}:
+            return self._step_manual_pause(job, step_cfg)
+        target = self._resolve_input_dir(job, step_cfg)
+        if not target or not target.exists():
+            return StepResult(status="FAIL", message="No folder for tag editor.")
+        image_exts = step_cfg.get("exts") or ",".join(_coerce_exts(job.config.get("image_exts")))
+        form = {
+            "folder": str(target),
+            "mode": mode,
+            "edit_target": (step_cfg.get("edit_target") or "recursive").strip().lower(),
+            "tags": step_cfg.get("tags") or "",
+            "exts": image_exts,
+            "backup": _parse_bool(step_cfg.get("backup")),
+            "temp_dir": step_cfg.get("temp_dir") or "",
+        }
+        return self._run_tool(job, tag_editor.handle, form)
+
+    def _step_webp_to_png(self, job: PipelineJob, step_cfg: Dict[str, Any]) -> StepResult:
+        target = self._resolve_input_dir(job, step_cfg)
+        if not target or not target.exists():
+            return StepResult(status="FAIL", message="Source folder not found for WebP -> PNG.")
+        output = self._resolve_output_dir(job, step_cfg, "webp_to_png")
+        if not output:
+            return StepResult(status="FAIL", message="Output folder required for WebP -> PNG.")
+        form = {"src_webp": str(target), "dst_webp": str(output)}
+        result = self._run_tool(job, webp_converter.handle, form)
+        if result.status == "SUCCESS":
+            with self.lock:
+                job.artifacts["working_copy"] = str(output)
+                job.artifacts["webp_output"] = str(output)
+        return result
+
+    def _step_batch_adjust(self, job: PipelineJob, step_cfg: Dict[str, Any]) -> StepResult:
+        target = self._resolve_input_dir(job, step_cfg)
+        if not target or not target.exists():
+            return StepResult(status="FAIL", message="Source folder not found for batch adjust.")
+        output = self._resolve_output_dir(job, step_cfg, "adjusted")
+        if not output:
+            return StepResult(status="FAIL", message="Output folder required for batch adjust.")
+        preset_name = (step_cfg.get("preset_name") or step_cfg.get("preset") or "").strip()
+        presets = job.config.get("preset_library") or {}
+        if not preset_name:
+            return StepResult(status="FAIL", message="Preset name is required for batch adjust.")
+        if preset_name not in presets:
+            return StepResult(status="FAIL", message=f"Preset not found: {preset_name}")
+        form = {
+            "src_batch": str(target),
+            "dst_batch": str(output),
+            "preset": preset_name,
+            "suffix": step_cfg.get("suffix") or "_adj",
+            "limit": _parse_int(step_cfg.get("limit"), 0),
+        }
+        result = self._run_tool(job, batch_adjust.handle, form, ctx={"presets": presets})
+        if result.status == "SUCCESS":
+            with self.lock:
+                job.artifacts["working_copy"] = str(output)
+                job.artifacts["batch_adjust_output"] = str(output)
+        return result
+
+    def _step_combine_datasets(self, job: PipelineJob, step_cfg: Dict[str, Any]) -> StepResult:
+        folder_a = _optional_path(step_cfg.get("folder_a")) or self._resolve_input_dir(job, step_cfg)
+        folder_b = _optional_path(step_cfg.get("folder_b"))
+        extra = step_cfg.get("extra_folders") or ""
+        if isinstance(extra, list):
+            extra = "\n".join(str(x) for x in extra if str(x).strip())
+        output = self._resolve_output_dir(job, step_cfg, "combined")
+        if not output:
+            return StepResult(status="FAIL", message="Output folder required for combine dataset.")
+        if not folder_a:
+            return StepResult(status="FAIL", message="Folder A is required for combine dataset.")
+        if not folder_b and not str(extra).strip():
+            return StepResult(status="FAIL", message="Provide at least two folders to combine.")
+        form = {
+            "folder_a": str(folder_a),
+            "folder_b": str(folder_b) if folder_b else "",
+            "extra_folders": extra,
+            "out_dir": str(output),
+            "suffix_combine": step_cfg.get("suffix") or "_B",
+            "exts_combine": step_cfg.get("exts") or ".jpg,.jpeg,.png,.webp",
+            "move_instead": _parse_bool(step_cfg.get("move_instead")),
+        }
+        result = self._run_tool(job, combine_datasets.handle, form)
+        if result.status == "SUCCESS":
+            with self.lock:
+                job.artifacts["working_copy"] = str(output)
+                job.artifacts["combine_output"] = str(output)
+        return result
+
+    def _step_flatten_renumber(self, job: PipelineJob, step_cfg: Dict[str, Any]) -> StepResult:
+        target = self._resolve_input_dir(job, step_cfg)
+        if not target or not target.exists():
+            return StepResult(status="FAIL", message="Source folder not found for renamer.")
+        output = self._resolve_output_dir(job, step_cfg, "renamed")
+        if not output:
+            return StepResult(status="FAIL", message="Output folder required for renamer.")
+        image_exts = step_cfg.get("exts") or ",".join(_coerce_exts(job.config.get("image_exts")))
+        form = {
+            "rn_root": str(target),
+            "rn_out": str(output),
+            "rn_exts": image_exts,
+            "rn_start": _parse_int(step_cfg.get("start"), 1),
+            "rn_pad": _parse_int(step_cfg.get("pad"), 3),
+            "rn_suffix_pad": _parse_int(step_cfg.get("suffix_pad"), 0),
+            "rn_sep": step_cfg.get("sep") or "_",
+            "rn_top_order": step_cfg.get("top_order") or "name",
+            "rn_folder_order": step_cfg.get("folder_order") or "name",
+            "rn_inside_order": step_cfg.get("inside_order") or "name",
+            "rn_include_txt": _parse_bool(step_cfg.get("include_txt", True)),
+            "rn_move_instead": _parse_bool(step_cfg.get("move_instead")),
+            "rn_dry_run": _parse_bool(step_cfg.get("dry_run")),
+        }
+        result = self._run_tool(job, group_renamer.handle, form)
+        if result.status == "SUCCESS" and not _parse_bool(step_cfg.get("dry_run")):
+            with self.lock:
+                job.artifacts["working_copy"] = str(output)
+                job.artifacts["renamer_output"] = str(output)
+        return result
+
+    def _step_merge_groups(self, job: PipelineJob, step_cfg: Dict[str, Any]) -> StepResult:
+        target = self._resolve_input_dir(job, step_cfg)
+        if not target or not target.exists():
+            return StepResult(status="FAIL", message="Source folder not found for stitching.")
+        output = self._resolve_output_dir(job, step_cfg, "merged")
+        if not output:
+            return StepResult(status="FAIL", message="Output folder required for stitching.")
+        form = {
+            "merge_folder": str(target),
+            "merge_out_dir": str(output),
+            "merge_glob": step_cfg.get("glob") or "*_*.*",
+            "merge_exts": step_cfg.get("exts") or ".png,.jpg,.jpeg,.webp",
+            "merge_skip_single": _parse_bool(step_cfg.get("skip_single")),
+            "merge_reverse": _parse_bool(step_cfg.get("reverse")),
+            "merge_orientation": step_cfg.get("orientation") or "v",
+            "merge_resize": step_cfg.get("resize") or "auto",
+            "merge_align": step_cfg.get("align") or "center",
+            "merge_gap": _parse_int(step_cfg.get("gap"), 0),
+            "merge_bg": step_cfg.get("bg") or "#FFFFFF",
+            "merge_overwrite": _parse_bool(step_cfg.get("overwrite")),
+            "merge_dry_run": _parse_bool(step_cfg.get("dry_run")),
+        }
+        result = self._run_tool(job, merge_groups_tool.handle, form)
+        if result.status == "SUCCESS" and not _parse_bool(step_cfg.get("dry_run")):
+            with self.lock:
+                job.artifacts["working_copy"] = str(output)
+                job.artifacts["merge_output"] = str(output)
+        return result
+
+    def _step_webtoon_split(self, job: PipelineJob, step_cfg: Dict[str, Any]) -> StepResult:
+        target = self._resolve_input_dir(job, step_cfg)
+        if not target or not target.exists():
+            return StepResult(status="FAIL", message="Source folder not found for webtoon split.")
+        output = self._resolve_output_dir(job, step_cfg, "panels")
+        if not output:
+            return StepResult(status="FAIL", message="Output folder required for webtoon split.")
+        form = {
+            "wt_folder": str(target),
+            "wt_out_dir": str(output),
+            "wt_glob": step_cfg.get("glob") or "*.*",
+            "wt_exts": step_cfg.get("exts") or ".png,.jpg,.jpeg,.webp",
+            "wt_resize": step_cfg.get("resize") or "match-width",
+            "wt_white_threshold": _parse_int(step_cfg.get("white_threshold"), 245),
+            "wt_row_ratio": _parse_float(step_cfg.get("row_ratio"), 98),
+            "wt_min_stripe": _parse_int(step_cfg.get("min_stripe"), 12),
+            "wt_max_gap": _parse_int(step_cfg.get("max_gap"), 2),
+            "wt_min_panel": _parse_int(step_cfg.get("min_panel"), 128),
+            "wt_save_strip": _parse_bool(step_cfg.get("save_strip", True)),
+            "wt_overwrite": _parse_bool(step_cfg.get("overwrite")),
+            "wt_dry_run": _parse_bool(step_cfg.get("dry_run")),
+        }
+        result = self._run_tool(job, webtoon_splitter.handle, form)
+        if result.status == "SUCCESS" and not _parse_bool(step_cfg.get("dry_run")):
+            with self.lock:
+                job.artifacts["working_copy"] = str(output)
+                job.artifacts["webtoon_output"] = str(output)
+        return result
 
 
 # Global manager

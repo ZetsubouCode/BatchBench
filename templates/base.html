@@ -161,6 +161,12 @@
       document.getElementById("bb-up").onclick = ()=> bbOpen(data.parent || path);
     }
 
+    function bbNotifyInputChange(input){
+      if(!input) return;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+
     document.addEventListener("click", (e)=>{
       const btn = e.target.closest(".btn-browse");
       if(!btn) return;
@@ -170,7 +176,10 @@
       modal.show();
       bbShowDrives();
       document.getElementById("bb-select").onclick = ()=>{
-        if(bbTargetInput && bbPath){ bbTargetInput.value = bbPath; }
+        if(bbTargetInput && bbPath){
+          bbTargetInput.value = bbPath;
+          bbNotifyInputChange(bbTargetInput);
+        }
         modal.hide();
       };
     });
@@ -252,6 +261,62 @@
             });
           });
         }
+      });
+
+      // Shared root folder default across tabs
+      const rootKey = "bb-default-root";
+      const rootInputs = Array.from(document.querySelectorAll('input[data-root-sync="1"]'));
+      const trimPath = (val)=> (val || "").trim();
+      let sharedRoot = trimPath(localStorage.getItem(rootKey));
+      let rootSyncLocked = false;
+
+      const setSharedRoot = (value, origin)=>{
+        const next = trimPath(value);
+        if(!next || next === sharedRoot) return;
+        const prev = sharedRoot;
+        sharedRoot = next;
+        try { localStorage.setItem(rootKey, next); } catch(e){}
+        rootSyncLocked = true;
+        rootInputs.forEach(input=>{
+          if(input === origin) return;
+          const cur = trimPath(input.value);
+          if(!cur || cur === prev){
+            input.value = next;
+            bbNotifyInputChange(input);
+          }
+        });
+        rootSyncLocked = false;
+      };
+
+      const seedSharedRoot = ()=>{
+        if(sharedRoot) return;
+        const found = rootInputs.map(input=> trimPath(input.value)).find(val=> val);
+        if(found){
+          sharedRoot = found;
+          try { localStorage.setItem(rootKey, found); } catch(e){}
+        }
+      };
+
+      const applySharedRoot = ()=>{
+        if(!sharedRoot) return;
+        rootInputs.forEach(input=>{
+          if(!trimPath(input.value)){
+            input.value = sharedRoot;
+            bbNotifyInputChange(input);
+          }
+        });
+      };
+
+      seedSharedRoot();
+      applySharedRoot();
+
+      rootInputs.forEach(input=>{
+        const handler = ()=>{
+          if(rootSyncLocked) return;
+          setSharedRoot(input.value, input);
+        };
+        input.addEventListener("change", handler);
+        input.addEventListener("blur", handler);
       });
     });
   </script>

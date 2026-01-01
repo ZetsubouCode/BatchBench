@@ -1,0 +1,136 @@
+<div class="card p-4">
+  <div class="text-muted small mb-3">
+    Offline tagger using SmilingWolf/wd-swinv2-tagger-v3. Uses safetensors weights only; first run downloads required files into the Hugging Face cache.
+  </div>
+
+  <form method="post" data-tool-label="Offline tagger">
+    <input type="hidden" name="tool" value="offline_tagger">
+    <input type="hidden" name="active_tab" value="offline_tagger">
+
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label">Dataset folder</label>
+        <div class="input-group">
+          <input id="offline_folder" name="folder" type="text" class="form-control" data-root-sync="1"
+                 placeholder="D:\path\to\dataset" data-bs-toggle="tooltip"
+                 data-bs-title="Folder with images to tag">
+          <button class="btn btn-outline-light btn-browse" type="button" data-target="offline_folder"
+                  data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
+        </div>
+      </div>
+
+      <div class="col-md-3 d-flex align-items-end">
+        <div class="form-check" data-bs-toggle="tooltip" data-bs-title="Scan subfolders">
+          <input class="form-check-input" type="checkbox" id="offline_recursive" name="recursive">
+          <label class="form-check-label" for="offline_recursive">Recursive</label>
+        </div>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Image extensions (comma)</label>
+        <input class="form-control" name="exts" value=".jpg,.jpeg,.png,.webp"
+               data-bs-toggle="tooltip" data-bs-title="Image types to include">
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">Model ID or local path</label>
+        <input class="form-control" name="model_id" value="SmilingWolf/wd-swinv2-tagger-v3"
+               data-bs-toggle="tooltip" data-bs-title="Hugging Face repo ID or local folder path">
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Device</label>
+        <select class="form-select" name="device" data-bs-toggle="tooltip" data-bs-title="Auto uses CUDA if available">
+          <option value="auto">auto</option>
+          <option value="cpu">cpu</option>
+          <option value="cuda">cuda</option>
+        </select>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Batch size</label>
+        <input class="form-control" name="batch_size" value="4" data-bs-toggle="tooltip" data-bs-title="Lower this if you run out of memory">
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">General threshold</label>
+        <input class="form-control" name="general_threshold" value="0.35" data-bs-toggle="tooltip" data-bs-title="Lower (near 0) = more tags/noisier; higher (near 1) = fewer, higher-confidence tags.">
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Character threshold</label>
+        <input class="form-control" name="character_threshold" value="0.85" data-bs-toggle="tooltip" data-bs-title="Lower (near 0) = more character tags/noisier; higher (near 1) = stricter, fewer matches.">
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Max tags (0 = unlimited)</label>
+        <input class="form-control" name="max_tags" value="0" data-bs-toggle="tooltip" data-bs-title="Optional cap on total tags per image">
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Write mode</label>
+        <select class="form-select" name="write_mode" data-bs-toggle="tooltip" data-bs-title="Append keeps existing tags">
+          <option value="append">append</option>
+          <option value="overwrite">overwrite</option>
+          <option value="skip">skip if .txt has content</option>
+        </select>
+      </div>
+
+      <div class="col-md-3 d-flex align-items-end">
+        <div class="form-check" data-bs-toggle="tooltip" data-bs-title="Include character name tags">
+          <input class="form-check-input" type="checkbox" id="offline_include_character" name="include_character">
+          <label class="form-check-label" for="offline_include_character">Include character tags</label>
+        </div>
+      </div>
+
+      <div class="col-md-3 d-flex align-items-end">
+        <div class="form-check" data-bs-toggle="tooltip" data-bs-title="Include rating tag (rating:general, etc)">
+          <input class="form-check-input" type="checkbox" id="offline_include_rating" name="include_rating" checked>
+          <label class="form-check-label" for="offline_include_rating">Include rating</label>
+        </div>
+      </div>
+
+      <div class="col-md-3 d-flex align-items-end">
+        <div class="form-check" data-bs-toggle="tooltip" data-bs-title="Replace underscores with spaces">
+          <input class="form-check-input" type="checkbox" id="offline_replace_underscore" name="replace_underscore" checked>
+          <label class="form-check-label" for="offline_replace_underscore">Replace underscores</label>
+        </div>
+      </div>
+
+      <div class="col-md-3 d-flex align-items-end">
+        <div class="form-check" data-bs-toggle="tooltip" data-bs-title="Do not write empty tag files">
+          <input class="form-check-input" type="checkbox" id="offline_skip_empty" name="skip_empty" checked>
+          <label class="form-check-label" for="offline_skip_empty">Skip empty results</label>
+        </div>
+      </div>
+
+      <div class="col-md-3 d-flex align-items-end">
+        <div class="form-check" data-bs-toggle="tooltip" data-bs-title="Only use cached model files (no download)">
+          <input class="form-check-input" type="checkbox" id="offline_local_only" name="local_only">
+          <label class="form-check-label" for="offline_local_only">Local files only</label>
+        </div>
+      </div>
+
+      <div class="col-md-3 d-flex align-items-end">
+        <div class="form-check" data-bs-toggle="tooltip" data-bs-title="Preview tags without writing files">
+          <input class="form-check-input" type="checkbox" id="offline_preview_only" name="preview_only">
+          <label class="form-check-label" for="offline_preview_only">Preview only</label>
+        </div>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Preview limit</label>
+        <input class="form-control" name="preview_limit" value="5" data-bs-toggle="tooltip" data-bs-title="How many sample outputs to show in log">
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Image limit (0 = all)</label>
+        <input class="form-control" name="limit" value="0" data-bs-toggle="tooltip" data-bs-title="Process only the first N images">
+      </div>
+    </div>
+
+    <div class="mt-3">
+      <button class="btn btn-primary">Run tagger</button>
+    </div>
+  </form>
+</div>

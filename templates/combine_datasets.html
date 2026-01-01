@@ -1,18 +1,18 @@
 <div class="card p-4">
-    <form method="post" data-tool-label="Combine image+txt sets">
+    <form method="post" data-tool-label="Combine dataset">
       <input type="hidden" name="tool" value="combine">
       <div class="row g-3">
         <div class="col-md-4">
           <label class="form-label">Folder A</label>
           <div class="input-group">
-            <input id="folder_a" name="folder_a" type="text" class="form-control" placeholder="D:\path\to\datasetA" data-bs-toggle="tooltip" data-bs-title="First dataset (image + .txt pairs)">
+            <input id="folder_a" name="folder_a" type="text" class="form-control" placeholder="D:\path\to\datasetA" data-root-sync="1" data-bs-toggle="tooltip" data-bs-title="First dataset (image + .txt pairs)">
             <button class="btn btn-outline-light btn-browse" type="button" data-target="folder_a" data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
           </div>
         </div>
         <div class="col-md-4">
           <label class="form-label">Folder B</label>
           <div class="input-group">
-            <input id="folder_b" name="folder_b" type="text" class="form-control" placeholder="D:\path\to\datasetB" data-bs-toggle="tooltip" data-bs-title="Second dataset (image + .txt pairs)">
+            <input id="folder_b" name="folder_b" type="text" class="form-control" placeholder="D:\path\to\datasetB" data-root-sync="1" data-bs-toggle="tooltip" data-bs-title="Second dataset (image + .txt pairs)">
             <button class="btn btn-outline-light btn-browse" type="button" data-target="folder_b" data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
           </div>
         </div>
@@ -23,9 +23,13 @@
             <button class="btn btn-outline-light btn-browse" type="button" data-target="out_dir" data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
           </div>
         </div>
+        <div class="col-12">
+          <label class="form-label">Extra folders (one per line)</label>
+          <textarea id="extra_folders" name="extra_folders" class="form-control" rows="3" placeholder="D:\path\to\datasetC&#10;D:\path\to\datasetD" data-bs-toggle="tooltip" data-bs-title="Optional additional dataset folders"></textarea>
+        </div>
         <div class="col-md-3">
-          <label class="form-label">Suffix for smaller set</label>
-          <input class="form-control" name="suffix_combine" value="_B" data-bs-toggle="tooltip" data-bs-title="Appended to the smaller dataset's filenames to avoid collisions">
+          <label class="form-label">Suffix for extra sets</label>
+          <input class="form-control" name="suffix_combine" value="_B" data-bs-toggle="tooltip" data-bs-title="Applied to extra dataset filenames to avoid collisions. Auto increments for multiple sets (_B, _C, _D...)">
         </div>
         <div class="col-md-3">
           <label class="form-label">Image ext (comma)</label>
