@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from utils.io import readable_path, log_join
@@ -10,10 +11,143 @@ DEFAULT_MODEL_ID = "SmilingWolf/wd-swinv2-tagger-v3"
 DEFAULT_IMAGE_EXTS = [".jpg", ".jpeg", ".png", ".webp", ".bmp"]
 
 DEFAULT_GENERAL_THRESHOLD = 0.35
-DEFAULT_CHARACTER_THRESHOLD = 0.85
+DEFAULT_CHARACTER_THRESHOLD = 0.75
+DEFAULT_THRESHOLD_MODE = "mcut"
+DEFAULT_MIN_THRESHOLD_FLOOR = 0.2
 
-CATEGORY_CHARACTER = 3
-CATEGORY_RATING = 9
+DEFAULT_MAX_GENERAL_TAGS = 0
+DEFAULT_MAX_CHARACTER_TAGS = 0
+DEFAULT_MAX_META_TAGS = 0
+
+DEFAULT_BACKEND = "transformers"
+DEFAULT_ENABLE_COLOR_SANITY = True
+DEFAULT_COLOR_RATIO_THRESHOLD = 0.006
+DEFAULT_COLOR_MIN_SATURATION = 0.20
+DEFAULT_COLOR_MIN_VALUE = 0.15
+DEFAULT_COLOR_KEEP_IF_SCORE_GE = 0.92
+DEFAULT_COLOR_DOWNSCALE = 256
+DEFAULT_DEBUG_COLOR_SANITY = False
+
+TAGGER_POLICY = {
+    "force_wd_bgr_fix": True,
+    "model_id": DEFAULT_MODEL_ID,
+    "device": "auto",
+    "backend": DEFAULT_BACKEND,
+    "use_amp": False,
+    "batch_size": 4,
+    "image_exts": list(DEFAULT_IMAGE_EXTS),
+    "general_threshold": DEFAULT_GENERAL_THRESHOLD,
+    "character_threshold": DEFAULT_CHARACTER_THRESHOLD,
+    "threshold_mode": DEFAULT_THRESHOLD_MODE,
+    "min_threshold_floor": DEFAULT_MIN_THRESHOLD_FLOOR,
+    "include_general": True,
+    "include_character": True,
+    "include_rating": False,
+    "include_meta": False,
+    "include_copyright": False,
+    "include_artist": False,
+    "replace_underscore": False,
+    "write_mode": "append",
+    "preview_only": False,
+    "preview_limit": 20,
+    "limit": 0,
+    "max_tags": 0,
+    "max_general_tags": DEFAULT_MAX_GENERAL_TAGS,
+    "max_character_tags": DEFAULT_MAX_CHARACTER_TAGS,
+    "max_meta_tags": DEFAULT_MAX_META_TAGS,
+    "skip_empty": True,
+    "local_only": False,
+    "exclude_tags": "",
+    "exclude_regex": "",
+    "use_normalizer_remove_as_exclude": False,
+    "trigger_tag": "",
+    "general_category_id": None,
+    "character_category_id": None,
+    "rating_category_id": None,
+    "normalizer_preset_type": "",
+    "normalizer_preset_file": "",
+    "dedupe": True,
+    "sort_tags": True,
+    "keep_existing_tags": True,
+    "character_topk": 0,
+    "newline_end": True,
+    "strip_whitespace": True,
+    "enable_color_sanity": DEFAULT_ENABLE_COLOR_SANITY,
+    "color_ratio_threshold": DEFAULT_COLOR_RATIO_THRESHOLD,
+    "color_min_saturation": DEFAULT_COLOR_MIN_SATURATION,
+    "color_min_value": DEFAULT_COLOR_MIN_VALUE,
+    "color_keep_if_score_ge": DEFAULT_COLOR_KEEP_IF_SCORE_GE,
+    "color_downscale": DEFAULT_COLOR_DOWNSCALE,
+    "debug_color_sanity": DEFAULT_DEBUG_COLOR_SANITY,
+}
+
+DEPRECATED_KEYS = {
+    "device",
+    "backend",
+    "use_amp",
+    "exts",
+    "image_exts",
+    "input_color_order",
+    "enable_color_sanity",
+    "color_ratio_threshold",
+    "color_min_saturation",
+    "color_min_value",
+    "color_keep_if_score_ge",
+    "color_downscale",
+    "debug_color_sanity",
+    "min_threshold_floor",
+    "include_general",
+    "include_meta",
+    "include_copyright",
+    "include_artist",
+    "replace_underscore",
+    "max_tags",
+    "max_meta_tags",
+    "skip_empty",
+    "local_only",
+    "exclude_regex",
+    "use_normalizer_remove_as_exclude",
+    "general_category_id",
+    "character_category_id",
+    "rating_category_id",
+    "normalizer_preset_type",
+    "normalizer_preset_file",
+}
+
+DEFAULT_CATEGORY_IDS = {
+    "general": 0,
+    "artist": 1,
+    "copyright": 2,
+    "character": 3,
+    "meta": 4,
+    "rating": 9,
+}
+
+RATING_TAG_HINTS = {
+    "rating:safe",
+    "rating:questionable",
+    "rating:explicit",
+    "rating:sensitive",
+    "rating:general",
+}
+
+RATING_BARE_HINTS = {"safe", "questionable", "explicit", "sensitive"}
+
+_COLOR_HUE_RANGES = {
+    "red": [(0.0, 15.0), (350.0, 360.0)],
+    "orange": [(15.0, 40.0)],
+    "yellow": [(40.0, 70.0)],
+    "green": [(70.0, 160.0)],
+    "cyan": [(160.0, 200.0)],
+    "blue": [(200.0, 260.0)],
+    "purple": [(260.0, 290.0)],
+    "pink": [(290.0, 350.0)],
+}
+
+_COLOR_SPECIAL = ("brown", "white", "black", "gray")
+_COLOR_NAMES = tuple(list(_COLOR_HUE_RANGES.keys()) + list(_COLOR_SPECIAL))
+_COLOR_ALIASES = {"grey": "gray"}
+_COLOR_ATTR_SUFFIXES = ("hair", "eyes", "skin")
 
 _MODEL_CACHE: Dict[Tuple[str, str], Dict[str, Any]] = {}
 _DOWNLOAD_PATTERNS = ["*.safetensors", "*.json", "*.txt", "*.csv"]
@@ -29,16 +163,61 @@ class TaggerOptions:
     batch_size: int
     general_threshold: float
     character_threshold: float
+    threshold_mode: str
+    min_threshold_floor: float
+    include_general: bool
     include_character: bool
     include_rating: bool
+    include_meta: bool
+    include_copyright: bool
+    include_artist: bool
     replace_underscore: bool
     write_mode: str
     preview_only: bool
     preview_limit: int
     limit: int
     max_tags: int
+    max_general_tags: int
+    max_character_tags: int
+    max_meta_tags: int
+    character_topk: int
     skip_empty: bool
     local_only: bool
+    exclude_tags: List[str]
+    exclude_regex: List[str]
+    use_normalizer_remove_as_exclude: bool
+    backend: str
+    use_amp: bool
+    trigger_tag: str
+    dedupe: bool
+    sort_tags: bool
+    keep_existing_tags: bool
+    newline_end: bool
+    strip_whitespace: bool
+    force_wd_bgr_fix: bool
+    general_category_id: Optional[int]
+    character_category_id: Optional[int]
+    rating_category_id: Optional[int]
+    normalizer_preset_root: Optional[Path]
+    normalizer_preset_type: str
+    normalizer_preset_file: str
+    enable_color_sanity: bool
+    color_ratio_threshold: float
+    color_min_saturation: float
+    color_min_value: float
+    color_keep_if_score_ge: float
+    color_downscale: int
+    debug_color_sanity: bool
+
+
+@dataclass
+class CategoryIds:
+    general: Optional[int] = None
+    character: Optional[int] = None
+    rating: Optional[int] = None
+    meta: Optional[int] = None
+    copyright: Optional[int] = None
+    artist: Optional[int] = None
 
 
 def _parse_bool(val: Any) -> bool:
@@ -63,6 +242,51 @@ def _parse_float(val: Any, default: float) -> float:
         return default
 
 
+def _parse_optional_int(val: Any) -> Optional[int]:
+    if val is None:
+        return None
+    text = str(val).strip()
+    if not text:
+        return None
+    try:
+        return int(text)
+    except Exception:
+        return None
+
+
+def _parse_tag_list(raw: Any) -> List[str]:
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        chunks = [str(x) for x in raw]
+    else:
+        chunks = [str(raw)]
+    out: List[str] = []
+    for chunk in chunks:
+        for line in chunk.replace("\r", "\n").split("\n"):
+            for token in line.split(","):
+                val = token.strip()
+                if val:
+                    out.append(val)
+    return out
+
+
+def _parse_regex_list(raw: Any) -> List[str]:
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        chunks = [str(x) for x in raw]
+    else:
+        chunks = [str(raw)]
+    out: List[str] = []
+    for chunk in chunks:
+        for line in chunk.replace("\r", "\n").split("\n"):
+            val = line.strip()
+            if val:
+                out.append(val)
+    return out
+
+
 def _parse_exts(raw: Any) -> List[str]:
     if isinstance(raw, list):
         values = raw
@@ -77,6 +301,135 @@ def _parse_exts(raw: Any) -> List[str]:
             val = "." + val
         out.append(val)
     return out or list(DEFAULT_IMAGE_EXTS)
+
+
+def _is_wd_family(model_id: str) -> bool:
+    text = (model_id or "").strip().lower()
+    if not text:
+        return False
+    if "wd" in text and "tagger" in text:
+        return True
+    for token in ("wd14", "wd-swinv2", "wd-v3", "wd-v4", "smilingwolf/wd"):
+        if token in text:
+            return True
+    return False
+
+
+def _find_deprecated_keys(form_opts: Dict[str, Any]) -> List[str]:
+    return sorted({k for k in (form_opts or {}).keys() if k in DEPRECATED_KEYS})
+
+
+def _effective_opts(form_opts: Dict[str, Any], policy: Dict[str, Any]) -> TaggerOptions:
+    policy = policy or TAGGER_POLICY
+    raw_input = (form_opts.get("input_dir") or form_opts.get("folder") or "").strip()
+    dataset_path = readable_path(raw_input) if raw_input else Path(".")
+    write_mode = (form_opts.get("write_mode") or policy.get("write_mode") or "append").strip().lower()
+    if write_mode == "skip_if_exists":
+        write_mode = "skip"
+    if write_mode not in {"overwrite", "append", "skip"}:
+        write_mode = "append"
+
+    def _fallback(key: str, default_key: Optional[str] = None):
+        if key in form_opts and form_opts.get(key) not in (None, ""):
+            return form_opts.get(key)
+        if default_key and default_key in form_opts and form_opts.get(default_key) not in (None, ""):
+            return form_opts.get(default_key)
+        return policy.get(key)
+
+    general_threshold = _parse_float(
+        _fallback("min_general", "general_threshold"), policy.get("general_threshold", DEFAULT_GENERAL_THRESHOLD)
+    )
+    character_threshold = _parse_float(
+        _fallback("min_character", "character_threshold"),
+        policy.get("character_threshold", DEFAULT_CHARACTER_THRESHOLD),
+    )
+    threshold_mode = (form_opts.get("threshold_mode") or policy.get("threshold_mode") or DEFAULT_THRESHOLD_MODE).strip().lower()
+    if threshold_mode not in {"fixed", "mcut"}:
+        threshold_mode = DEFAULT_THRESHOLD_MODE
+
+    batch_size = max(1, _parse_int(_fallback("batch_size"), int(policy.get("batch_size", 4))))
+    preview_limit = max(0, _parse_int(_fallback("preview_limit"), int(policy.get("preview_limit", 20))))
+    limit = max(0, _parse_int(_fallback("limit"), int(policy.get("limit", 0))))
+
+    include_character = _parse_bool(_fallback("include_character")) if "include_character" in form_opts else bool(
+        policy.get("include_character", True)
+    )
+    include_rating = _parse_bool(_fallback("include_rating")) if "include_rating" in form_opts else bool(
+        policy.get("include_rating", False)
+    )
+
+    dedupe = _parse_bool(_fallback("dedupe")) if "dedupe" in form_opts else bool(policy.get("dedupe", True))
+    sort_tags = _parse_bool(_fallback("sort_tags")) if "sort_tags" in form_opts else bool(policy.get("sort_tags", True))
+    keep_existing_tags = (
+        _parse_bool(_fallback("keep_existing_tags"))
+        if "keep_existing_tags" in form_opts
+        else bool(policy.get("keep_existing_tags", True))
+    )
+    if write_mode != "append":
+        keep_existing_tags = False
+
+    return TaggerOptions(
+        dataset_path=dataset_path,
+        recursive=_parse_bool(_fallback("recursive")) if "recursive" in form_opts else bool(policy.get("recursive", False)),
+        image_exts=_parse_exts(policy.get("image_exts") or DEFAULT_IMAGE_EXTS),
+        model_id=(form_opts.get("model_id") or policy.get("model_id") or DEFAULT_MODEL_ID).strip()
+        or DEFAULT_MODEL_ID,
+        device=(policy.get("device") or "auto").strip(),
+        batch_size=batch_size,
+        general_threshold=general_threshold,
+        character_threshold=character_threshold,
+        threshold_mode=threshold_mode,
+        min_threshold_floor=float(policy.get("min_threshold_floor", DEFAULT_MIN_THRESHOLD_FLOOR)),
+        include_general=bool(policy.get("include_general", True)),
+        include_character=include_character,
+        include_rating=include_rating,
+        include_meta=bool(policy.get("include_meta", False)),
+        include_copyright=bool(policy.get("include_copyright", False)),
+        include_artist=bool(policy.get("include_artist", False)),
+        replace_underscore=bool(policy.get("replace_underscore", False)),
+        write_mode=write_mode,
+        preview_only=_parse_bool(_fallback("preview_only"))
+        if "preview_only" in form_opts
+        else bool(policy.get("preview_only", False)),
+        preview_limit=preview_limit,
+        limit=limit,
+        max_tags=max(0, _parse_int(policy.get("max_tags", 0), 0)),
+        max_general_tags=max(0, _parse_int(_fallback("max_general_tags"), int(policy.get("max_general_tags", 0)))),
+        max_character_tags=max(
+            0, _parse_int(_fallback("max_character_tags"), int(policy.get("max_character_tags", 0)))
+        ),
+        max_meta_tags=max(0, _parse_int(policy.get("max_meta_tags", 0), 0)),
+        character_topk=max(0, _parse_int(_fallback("character_topk"), int(policy.get("character_topk", 0)))),
+        skip_empty=bool(policy.get("skip_empty", True)),
+        local_only=bool(policy.get("local_only", False)),
+        exclude_tags=_parse_tag_list(_fallback("exclude_tags") or policy.get("exclude_tags") or ""),
+        exclude_regex=_parse_regex_list(policy.get("exclude_regex") or []),
+        use_normalizer_remove_as_exclude=bool(policy.get("use_normalizer_remove_as_exclude", False)),
+        backend=(policy.get("backend") or DEFAULT_BACKEND).strip().lower(),
+        use_amp=bool(policy.get("use_amp", False)),
+        trigger_tag=(form_opts.get("trigger_tag") or policy.get("trigger_tag") or "").strip(),
+        dedupe=dedupe,
+        sort_tags=sort_tags,
+        keep_existing_tags=keep_existing_tags,
+        newline_end=bool(policy.get("newline_end", True)),
+        strip_whitespace=bool(policy.get("strip_whitespace", True)),
+        force_wd_bgr_fix=bool(policy.get("force_wd_bgr_fix", True)),
+        general_category_id=None,
+        character_category_id=None,
+        rating_category_id=None,
+        normalizer_preset_root=readable_path(str(policy.get("normalizer_preset_root")))
+        if policy.get("normalizer_preset_root")
+        else None,
+        normalizer_preset_type=str(policy.get("normalizer_preset_type") or ""),
+        normalizer_preset_file=str(policy.get("normalizer_preset_file") or ""),
+        enable_color_sanity=bool(policy.get("enable_color_sanity", DEFAULT_ENABLE_COLOR_SANITY)),
+        color_ratio_threshold=float(policy.get("color_ratio_threshold", DEFAULT_COLOR_RATIO_THRESHOLD)),
+        color_min_saturation=float(policy.get("color_min_saturation", DEFAULT_COLOR_MIN_SATURATION)),
+        color_min_value=float(policy.get("color_min_value", DEFAULT_COLOR_MIN_VALUE)),
+        color_keep_if_score_ge=float(policy.get("color_keep_if_score_ge", DEFAULT_COLOR_KEEP_IF_SCORE_GE)),
+        color_downscale=max(16, int(policy.get("color_downscale", DEFAULT_COLOR_DOWNSCALE))),
+        debug_color_sanity=bool(policy.get("debug_color_sanity", DEFAULT_DEBUG_COLOR_SANITY)),
+    )
 
 
 def _iter_images(root: Path, recursive: bool, exts: List[str]) -> List[Path]:
@@ -189,36 +542,37 @@ def _resolve_device(requested: str, torch_module) -> Tuple[str, Optional[str]]:
     return requested, None
 
 
-def _load_model_bundle(model_id: str, device: str, local_only: bool):
-    cache_key = (model_id, device)
+def _find_onnx_model(model_path: Path) -> Optional[Path]:
+    candidates = sorted(model_path.rglob("*.onnx"))
+    if not candidates:
+        return None
+    for name in ["model.onnx", "model_fp16.onnx", "model_fp32.onnx"]:
+        for cand in candidates:
+            if cand.name.lower() == name:
+                return cand
+    return candidates[0]
+
+
+def _load_model_bundle(model_id: str, device: str, local_only: bool, backend: str):
+    backend = (backend or DEFAULT_BACKEND).strip().lower()
+    cache_key = (model_id, device, backend)
     if cache_key in _MODEL_CACHE:
         return _MODEL_CACHE[cache_key]
 
     try:
-        import torch
-        from transformers import AutoImageProcessor, AutoModelForImageClassification
+        from transformers import AutoConfig, AutoImageProcessor, AutoModelForImageClassification
     except Exception as exc:
         raise RuntimeError(
             "Missing deps for offline tagger. Install torch and transformers first."
         ) from exc
 
-    resolved_device, warn = _resolve_device(device, torch)
     model_path = _ensure_model_local(model_id, local_only)
     processor = AutoImageProcessor.from_pretrained(str(model_path), local_files_only=True)
-    model = AutoModelForImageClassification.from_pretrained(
-        str(model_path),
-        local_files_only=True,
-        use_safetensors=True,
-    )
-    model.eval()
-    model.to(resolved_device)
 
-    num_labels = int(getattr(model.config, "num_labels", 0)) or len(getattr(model.config, "id2label", {}))
-    id2label = getattr(model.config, "id2label", {}) or {}
-    labels = []
-    for i in range(num_labels):
-        label = id2label.get(i) or id2label.get(str(i)) or f"tag_{i}"
-        labels.append(str(label))
+    config = AutoConfig.from_pretrained(str(model_path), local_files_only=True)
+    num_labels = int(getattr(config, "num_labels", 0)) or len(getattr(config, "id2label", {}))
+    id2label = getattr(config, "id2label", {}) or {}
+    labels = [str(id2label.get(i) or id2label.get(str(i)) or f"tag_{i}") for i in range(num_labels)]
 
     categories: Optional[List[Optional[int]]] = None
     tag_rows = _load_tag_metadata(model_path)
@@ -227,32 +581,291 @@ def _load_model_bundle(model_id: str, device: str, local_only: bool):
         labels = [row[0] for row in tag_rows]
         categories = [row[1] for row in tag_rows]
 
+    warn: List[str] = []
+    torch = None
+    model = None
+    onnx_session = None
+    onnx_input = None
+    onnx_path = None
+    resolved_device = device
+    provider = None
+
+    if backend == "onnx":
+        try:
+            import onnxruntime as ort
+        except Exception:
+            warn.append("onnxruntime not available; falling back to transformers.")
+            backend = "transformers"
+        else:
+            onnx_path = _find_onnx_model(model_path)
+            if not onnx_path:
+                warn.append("ONNX model file not found; falling back to transformers.")
+                backend = "transformers"
+            else:
+                providers = ort.get_available_providers()
+                if str(device).lower().startswith("cuda") and "CUDAExecutionProvider" in providers:
+                    provider = "CUDAExecutionProvider"
+                    provider_list = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+                    resolved_device = "cuda"
+                else:
+                    provider = "CPUExecutionProvider"
+                    provider_list = ["CPUExecutionProvider"]
+                    if str(device).lower().startswith("cuda"):
+                        warn.append("CUDA provider not available for ONNX; using CPU.")
+                    resolved_device = "cpu"
+                onnx_session = ort.InferenceSession(str(onnx_path), providers=provider_list)
+                onnx_input = onnx_session.get_inputs()[0].name if onnx_session.get_inputs() else None
+
+    if backend != "onnx":
+        try:
+            import torch
+        except Exception as exc:
+            raise RuntimeError(
+                "Missing torch dependency; cannot run transformers backend."
+            ) from exc
+        resolved_device, device_warn = _resolve_device(device, torch)
+        if device_warn:
+            warn.append(device_warn)
+        model = AutoModelForImageClassification.from_pretrained(
+            str(model_path),
+            local_files_only=True,
+            use_safetensors=True,
+        )
+        model.eval()
+        model.to(resolved_device)
+        provider = None
+
+    actual_key = (model_id, resolved_device, backend)
+    if actual_key in _MODEL_CACHE:
+        return _MODEL_CACHE[actual_key]
+
     bundle = {
+        "backend": backend,
         "model": model,
+        "onnx_session": onnx_session,
+        "onnx_input": onnx_input,
+        "onnx_path": str(onnx_path) if onnx_path else None,
         "processor": processor,
         "labels": labels,
         "categories": categories,
         "device": resolved_device,
         "warn": warn,
         "torch": torch,
+        "provider": provider,
         "model_path": str(model_path),
         "tag_meta_loaded": bool(categories),
         "tag_meta_count": tag_meta_count,
     }
-    _MODEL_CACHE[cache_key] = bundle
+    _MODEL_CACHE[actual_key] = bundle
     return bundle
 
 
-def _is_rating_tag(tag: str, category: Optional[int]) -> bool:
+def _guess_rating_category_id(
+    labels: List[str], categories: Optional[List[Optional[int]]]
+) -> Optional[int]:
+    if not categories:
+        return None
+    scores: Dict[int, int] = {}
+    for label, cat in zip(labels, categories):
+        if cat is None:
+            continue
+        name = label.strip().lower()
+        if name in RATING_TAG_HINTS:
+            scores[cat] = scores.get(cat, 0) + 3
+        elif name.startswith("rating:"):
+            scores[cat] = scores.get(cat, 0) + 2
+        elif name in RATING_BARE_HINTS:
+            scores[cat] = scores.get(cat, 0) + 1
+    if not scores:
+        return None
+    return max(scores.items(), key=lambda kv: kv[1])[0]
+
+
+def resolve_category_ids(
+    labels: List[str],
+    categories: Optional[List[Optional[int]]],
+    overrides: TaggerOptions,
+) -> Tuple[CategoryIds, List[str]]:
+    warnings: List[str] = []
+    if not categories:
+        warnings.append("Tag categories missing; category filtering will be limited.")
+        return CategoryIds(), warnings
+
+    available = {c for c in categories if c is not None}
+
+    def _resolve(name: str, override: Optional[int], default_id: Optional[int]) -> Optional[int]:
+        if override is not None:
+            if override in available:
+                return override
+            warnings.append(f"{name} category override {override} not present in tag metadata.")
+            return None
+        if default_id is not None and default_id in available:
+            return default_id
+        warnings.append(f"{name} category id not resolved from metadata.")
+        return None
+
+    rating_guess = _guess_rating_category_id(labels, categories)
+    rating_override = overrides.rating_category_id
+    rating_id = None
+    if rating_override is not None:
+        if rating_override in available:
+            rating_id = rating_override
+        else:
+            warnings.append(f"Rating category override {rating_override} not present in tag metadata.")
+    elif rating_guess is not None:
+        rating_id = rating_guess
+    elif DEFAULT_CATEGORY_IDS["rating"] in available:
+        rating_id = DEFAULT_CATEGORY_IDS["rating"]
+        warnings.append("Rating category id not detected; using default 9.")
+    else:
+        warnings.append("Rating category id not detected; rating tags may be skipped.")
+
+    return CategoryIds(
+        general=_resolve("General", overrides.general_category_id, DEFAULT_CATEGORY_IDS.get("general")),
+        character=_resolve("Character", overrides.character_category_id, DEFAULT_CATEGORY_IDS.get("character")),
+        rating=rating_id,
+        meta=_resolve("Meta", None, DEFAULT_CATEGORY_IDS.get("meta")),
+        copyright=_resolve("Copyright", None, DEFAULT_CATEGORY_IDS.get("copyright")),
+        artist=_resolve("Artist", None, DEFAULT_CATEGORY_IDS.get("artist")),
+    ), warnings
+
+
+def _is_rating_tag(tag: str, category: Optional[int], rating_category_id: Optional[int]) -> bool:
     if tag.lower().startswith("rating:"):
         return True
-    if category is not None and category == CATEGORY_RATING:
+    if category is not None and rating_category_id is not None and category == rating_category_id:
         return True
     return False
 
 
+_WORD_TAG_RE = re.compile(r"^[A-Za-z0-9_]+$")
+
+
 def _format_tag(tag: str, replace_underscore: bool) -> str:
-    return tag.replace("_", " ") if replace_underscore else tag
+    if not replace_underscore:
+        return tag
+    if not _WORD_TAG_RE.match(tag):
+        return tag
+    return tag.replace("_", " ")
+
+
+def _swap_rgb_bgr(im):
+    import numpy as np
+    from PIL import Image
+
+    arr = np.array(im)
+    if arr.ndim == 3 and arr.shape[2] >= 3:
+        arr = arr[..., ::-1]
+    return Image.fromarray(arr, mode="RGB")
+
+
+def _normalize_tag_for_color(tag: str) -> str:
+    return " ".join(tag.strip().lower().replace("_", " ").split())
+
+
+def _is_color_attribute_tag(tag: str) -> Optional[str]:
+    text = _normalize_tag_for_color(tag)
+    for suffix in _COLOR_ATTR_SUFFIXES:
+        if not text.endswith(f" {suffix}"):
+            continue
+        color = text[: -len(suffix)].strip()
+        color = _COLOR_ALIASES.get(color, color)
+        if color in _COLOR_NAMES:
+            return color
+    return None
+
+
+def _estimate_color_presence(im, opts: TaggerOptions) -> Dict[str, float]:
+    import numpy as np
+    from PIL import Image
+
+    max_side = max(1, int(opts.color_downscale))
+    if max(im.size) > max_side:
+        im = im.copy()
+        im.thumbnail((max_side, max_side), Image.BILINEAR)
+    hsv = im.convert("HSV")
+    arr = np.asarray(hsv).astype(np.float32)
+    if arr.size == 0:
+        return {name: 0.0 for name in _COLOR_NAMES}
+
+    hue = arr[..., 0] * (360.0 / 255.0)
+    sat = arr[..., 1] / 255.0
+    val = arr[..., 2] / 255.0
+    total = float(hue.size) if hue.size else 1.0
+
+    min_sat = max(0.0, min(float(opts.color_min_saturation), 1.0))
+    min_val = max(0.0, min(float(opts.color_min_value), 1.0))
+    valid = (sat >= min_sat) & (val >= min_val)
+
+    counts: Dict[str, int] = {name: 0 for name in _COLOR_NAMES}
+
+    for color, ranges in _COLOR_HUE_RANGES.items():
+        mask = np.zeros(hue.shape, dtype=bool)
+        for lo, hi in ranges:
+            mask |= (hue >= lo) & (hue < hi)
+        counts[color] = int(np.count_nonzero(valid & mask))
+
+    white_mask = (sat <= 0.15) & (val >= 0.85)
+    black_mask = val <= 0.1
+    gray_mask = (sat <= 0.2) & (val > 0.1) & (val < 0.85)
+    brown_mask = valid & (val < 0.6) & (hue >= 15.0) & (hue < 50.0)
+
+    counts["white"] = int(np.count_nonzero(white_mask))
+    counts["black"] = int(np.count_nonzero(black_mask))
+    counts["gray"] = int(np.count_nonzero(gray_mask))
+    counts["brown"] = int(np.count_nonzero(brown_mask))
+
+    return {name: counts[name] / total for name in _COLOR_NAMES}
+
+
+def _compile_regex(patterns: List[str]) -> List[re.Pattern]:
+    out: List[re.Pattern] = []
+    for pat in patterns or []:
+        try:
+            out.append(re.compile(pat, flags=re.IGNORECASE))
+        except re.error:
+            continue
+    return out
+
+
+def _matches_any(tag: str, patterns: List[re.Pattern]) -> bool:
+    return any(pat.search(tag) for pat in patterns)
+
+
+def _mcut_threshold(scores: List[float], floor: float) -> float:
+    if not scores:
+        return 1.1
+    if len(scores) == 1:
+        return max(scores[0], floor)
+    sorted_scores = sorted(scores, reverse=True)
+    gaps = [sorted_scores[i] - sorted_scores[i + 1] for i in range(len(sorted_scores) - 1)]
+    max_idx = max(range(len(gaps)), key=lambda idx: gaps[idx])
+    threshold = (sorted_scores[max_idx] + sorted_scores[max_idx + 1]) / 2.0
+    return max(threshold, floor)
+
+
+def _apply_excludes(tags: List[str], exclude_tags: set, exclude_regex: List[re.Pattern]) -> List[str]:
+    if not exclude_tags and not exclude_regex:
+        return tags
+    out: List[str] = []
+    for tag in tags:
+        if tag in exclude_tags:
+            continue
+        if exclude_regex and _matches_any(tag, exclude_regex):
+            continue
+        out.append(tag)
+    return out
+
+
+def _apply_trigger_tag(tags: List[str], trigger_tag: str) -> List[str]:
+    trigger = (trigger_tag or "").strip()
+    if not trigger:
+        return tags
+    out = [trigger]
+    for tag in tags:
+        if tag != trigger:
+            out.append(tag)
+    return out
 
 
 def _build_tags(
@@ -260,29 +873,116 @@ def _build_tags(
     labels: List[str],
     categories: Optional[List[Optional[int]]],
     opts: TaggerOptions,
+    category_ids: CategoryIds,
+    exclude_tags: set,
+    exclude_regex: List[re.Pattern],
     stats: Optional[Dict[str, int]] = None,
+    color_presence: Optional[Dict[str, float]] = None,
+    color_debug: Optional[List[str]] = None,
 ) -> List[str]:
     general: List[Tuple[str, float]] = []
     characters: List[Tuple[str, float]] = []
+    meta: List[Tuple[str, float]] = []
+    artists: List[Tuple[str, float]] = []
+    copyrights: List[Tuple[str, float]] = []
     ratings: List[Tuple[str, float]] = []
+    unknown: List[Tuple[str, float]] = []
+
+    categories_present = bool(categories)
+
+    use_color_sanity = bool(opts.enable_color_sanity and color_presence)
+    ratio_threshold = max(0.0, min(float(opts.color_ratio_threshold), 1.0))
+    keep_threshold = max(0.0, min(float(opts.color_keep_if_score_ge), 1.0))
 
     for idx, score in enumerate(probs):
         tag = labels[idx]
         category = categories[idx] if categories is not None and idx < len(categories) else None
-        if _is_rating_tag(tag, category):
-            ratings.append((tag, float(score)))
+        score_f = float(score)
+        if use_color_sanity:
+            color = _is_color_attribute_tag(tag)
+            if color:
+                presence = float(color_presence.get(color, 0.0)) if color_presence else 0.0
+                if presence < ratio_threshold and score_f < keep_threshold:
+                    if color_debug is not None:
+                        color_debug.append(
+                            f"{tag} (score={score_f:.3f}, presence={presence:.4f})"
+                        )
+                    continue
+        if _is_rating_tag(tag, category, category_ids.rating):
+            ratings.append((tag, score_f))
             continue
-        if category == CATEGORY_CHARACTER:
-            if opts.include_character and score >= opts.character_threshold:
-                characters.append((tag, float(score)))
+        if not categories_present:
+            general.append((tag, score_f))
             continue
-        if score >= opts.general_threshold:
-            general.append((tag, float(score)))
+        if category is not None and category_ids.character is not None and category == category_ids.character:
+            characters.append((tag, score_f))
+        elif category is not None and category_ids.general is not None and category == category_ids.general:
+            general.append((tag, score_f))
+        elif category is not None and category_ids.meta is not None and category == category_ids.meta:
+            meta.append((tag, score_f))
+        elif category is not None and category_ids.artist is not None and category == category_ids.artist:
+            artists.append((tag, score_f))
+        elif category is not None and category_ids.copyright is not None and category == category_ids.copyright:
+            copyrights.append((tag, score_f))
+        else:
+            unknown.append((tag, score_f))
+
+    mode = (opts.threshold_mode or DEFAULT_THRESHOLD_MODE).strip().lower()
+    floor = max(0.0, min(opts.min_threshold_floor, 1.0))
+    use_mcut = mode == "mcut"
+
+    def _threshold(items: List[Tuple[str, float]], fallback: float) -> float:
+        if not use_mcut:
+            return fallback
+        scores = [score for _, score in items]
+        return _mcut_threshold(scores, floor)
+
+    general_thr = _threshold(general, opts.general_threshold)
+    character_thr = _threshold(characters, opts.character_threshold)
+    meta_thr = _threshold(meta + artists + copyrights, opts.general_threshold)
+
+    general = [item for item in general if item[1] >= general_thr]
+    characters = [item for item in characters if item[1] >= character_thr]
+    meta = [item for item in meta if item[1] >= meta_thr]
+    artists = [item for item in artists if item[1] >= meta_thr]
+    copyrights = [item for item in copyrights if item[1] >= meta_thr]
 
     general.sort(key=lambda x: x[1], reverse=True)
     characters.sort(key=lambda x: x[1], reverse=True)
+    meta.sort(key=lambda x: x[1], reverse=True)
+    artists.sort(key=lambda x: x[1], reverse=True)
+    copyrights.sort(key=lambda x: x[1], reverse=True)
 
-    tags = [t for t, _ in general] + [t for t, _ in characters]
+    if opts.character_topk > 0 and len(characters) > opts.character_topk:
+        characters = characters[: opts.character_topk]
+
+    if opts.max_general_tags > 0 and len(general) > opts.max_general_tags:
+        general = general[: opts.max_general_tags]
+    if opts.max_character_tags > 0 and len(characters) > opts.max_character_tags:
+        characters = characters[: opts.max_character_tags]
+
+    meta_bucket: List[Tuple[str, float]] = []
+    if opts.include_meta:
+        meta_bucket += meta
+    if opts.include_artist:
+        meta_bucket += artists
+    if opts.include_copyright:
+        meta_bucket += copyrights
+    meta_bucket.sort(key=lambda x: x[1], reverse=True)
+    if opts.max_meta_tags > 0 and len(meta_bucket) > opts.max_meta_tags:
+        meta_bucket = meta_bucket[: opts.max_meta_tags]
+
+    tags: List[str] = []
+    if opts.include_general:
+        tags.extend([t for t, _ in general])
+    if opts.include_character:
+        tags.extend([t for t, _ in characters])
+    tags.extend([t for t, _ in meta_bucket])
+
+    if not categories_present and opts.include_general:
+        unknown.sort(key=lambda x: x[1], reverse=True)
+        tags.extend([t for t, _ in unknown])
+
     if opts.max_tags > 0 and len(tags) > opts.max_tags:
         tags = tags[: opts.max_tags]
 
@@ -291,12 +991,13 @@ def _build_tags(
         tags = [rating_tag] + tags
 
     if stats is not None:
-        stats["general"] = stats.get("general", 0) + len(general)
-        stats["character"] = stats.get("character", 0) + len(characters)
+        stats["general"] = stats.get("general", 0) + (len(general) if opts.include_general else 0)
+        stats["character"] = stats.get("character", 0) + (len(characters) if opts.include_character else 0)
+        stats["meta"] = stats.get("meta", 0) + len(meta_bucket)
         stats["rating"] = stats.get("rating", 0) + (1 if (opts.include_rating and ratings) else 0)
-        if general:
+        if general and opts.include_general:
             stats["images_with_general"] = stats.get("images_with_general", 0) + 1
-        if characters:
+        if characters and opts.include_character:
             stats["images_with_character"] = stats.get("images_with_character", 0) + 1
 
     out: List[str] = []
@@ -306,6 +1007,8 @@ def _build_tags(
         if fmt not in seen:
             out.append(fmt)
             seen.add(fmt)
+
+    out = _apply_excludes(out, exclude_tags, exclude_regex)
     return out
 
 
@@ -333,23 +1036,82 @@ def _read_tag_file(path: Path) -> Tuple[List[str], List[str], Optional[str]]:
             return [], [], None
 
 
-def _format_tag_file(main: List[str], optional: List[str], warning: Optional[str]) -> str:
+def _apply_output_formatting(text: str, newline_end: bool, strip_whitespace: bool) -> str:
+    if strip_whitespace:
+        lines = []
+        for line in text.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+            lines.append(line.strip() if line else "")
+        text = "\n".join(lines)
+    if newline_end:
+        if not text.endswith("\n"):
+            text += "\n"
+    else:
+        text = text.rstrip("\n")
+    return text
+
+
+def _format_tag_file(
+    main: List[str],
+    optional: List[str],
+    warning: Optional[str],
+    newline_end: bool,
+    strip_whitespace: bool,
+) -> str:
     try:
         from services import normalizer
 
         tf = normalizer.TagFile(path=Path(""), main=main, optional=optional, warning=warning)
-        return normalizer.format_tag_file(tf)
+        text = normalizer.format_tag_file(tf)
     except Exception:
-        return join_tags(main)
+        text = join_tags(main)
+    return _apply_output_formatting(text, newline_end, strip_whitespace)
 
 
-def run_tagger(opts: TaggerOptions) -> Tuple[bool, List[str]]:
+def _load_normalizer_excludes(
+    preset_root: Optional[Path],
+    preset_type: str,
+    preset_file: str,
+) -> Tuple[set, List[str], Optional[str]]:
+    if not preset_root or not preset_file:
+        return set(), [], "Normalizer preset not provided."
+    try:
+        from services import normalizer
+
+        preset = normalizer.load_preset(preset_root, preset_type, preset_file)
+    except Exception as exc:
+        return set(), [], f"Failed to load normalizer preset: {exc}"
+    rules = preset.get("rules", {})
+    remove_tags = set(rules.get("remove_tags") or [])
+    remove_regex = list(rules.get("remove_regex") or [])
+    return remove_tags, remove_regex, None
+
+
+def run_tagger(
+    opts: TaggerOptions, deprecated_keys: Optional[List[str]] = None
+) -> Tuple[bool, List[str]]:
     lines: List[str] = []
+    if deprecated_keys:
+        lines.append(f"Ignored deprecated options: {', '.join(deprecated_keys)}")
 
     if not opts.image_exts:
         opts.image_exts = list(DEFAULT_IMAGE_EXTS)
+    if opts.write_mode == "skip_if_exists":
+        opts.write_mode = "skip"
     if opts.write_mode not in {"overwrite", "append", "skip"}:
         opts.write_mode = "append"
+    if opts.write_mode != "append":
+        opts.keep_existing_tags = False
+    if (opts.threshold_mode or "").strip().lower() not in {"fixed", "mcut"}:
+        opts.threshold_mode = DEFAULT_THRESHOLD_MODE
+    if (opts.backend or "").strip().lower() not in {"transformers", "onnx"}:
+        opts.backend = DEFAULT_BACKEND
+    opts.min_threshold_floor = max(0.0, min(float(opts.min_threshold_floor), 1.0))
+    opts.trigger_tag = (opts.trigger_tag or "").strip()
+    opts.color_ratio_threshold = max(0.0, min(float(opts.color_ratio_threshold), 1.0))
+    opts.color_min_saturation = max(0.0, min(float(opts.color_min_saturation), 1.0))
+    opts.color_min_value = max(0.0, min(float(opts.color_min_value), 1.0))
+    opts.color_keep_if_score_ge = max(0.0, min(float(opts.color_keep_if_score_ge), 1.0))
+    opts.color_downscale = max(16, int(opts.color_downscale or DEFAULT_COLOR_DOWNSCALE))
 
     if not opts.dataset_path.exists() or not opts.dataset_path.is_dir():
         lines.append(f"Dataset folder not found: {opts.dataset_path}")
@@ -357,14 +1119,33 @@ def run_tagger(opts: TaggerOptions) -> Tuple[bool, List[str]]:
 
     lines.append(f"Dataset: {opts.dataset_path}")
     lines.append(f"Model: {opts.model_id}")
+    wd_fix = bool(opts.force_wd_bgr_fix) and _is_wd_family(opts.model_id)
+    lines.append(f"WD color fix {'ON (RGB->BGR)' if wd_fix else 'OFF'}")
+    lines.append(
+        f"Threshold mode: {opts.threshold_mode} "
+        f"(general={opts.general_threshold}, character={opts.character_threshold})"
+    )
+    lines.append(
+        f"Output mode: {'skip_if_exists' if opts.write_mode == 'skip' else opts.write_mode}"
+    )
+    if opts.max_general_tags > 0 or opts.max_character_tags > 0:
+        lines.append(
+            f"Tag caps: general={opts.max_general_tags or 'unlimited'}, "
+            f"character={opts.max_character_tags or 'unlimited'}"
+        )
+    if opts.character_topk > 0:
+        lines.append(f"Character top-k: {opts.character_topk}")
 
     try:
-        bundle = _load_model_bundle(opts.model_id, opts.device, opts.local_only)
+        bundle = _load_model_bundle(opts.model_id, opts.device, opts.local_only, opts.backend)
     except Exception as exc:
         lines.append(f"Failed to load model: {exc}")
         return False, lines
 
     model = bundle["model"]
+    backend = bundle.get("backend")
+    onnx_session = bundle.get("onnx_session")
+    onnx_input = bundle.get("onnx_input")
     processor = bundle["processor"]
     labels = bundle["labels"]
     categories = bundle["categories"]
@@ -373,16 +1154,60 @@ def run_tagger(opts: TaggerOptions) -> Tuple[bool, List[str]]:
     if bundle.get("model_path"):
         lines.append(f"Model path: {bundle['model_path']}")
 
+    lines.append(f"Backend: {bundle.get('backend')}")
     lines.append(f"Device: {device}")
-    if bundle.get("warn"):
-        lines.append(str(bundle["warn"]))
+    if bundle.get("provider"):
+        lines.append(f"ONNX provider: {bundle.get('provider')}")
+    if bundle.get("backend") == "transformers":
+        lines.append(f"AMP: {'on' if opts.use_amp else 'off'}")
+    for warn in bundle.get("warn", []) or []:
+        if warn:
+            lines.append(str(warn))
     if bundle.get("tag_meta_loaded"):
         lines.append(f"Tag categories: loaded ({bundle.get('tag_meta_count', 0)} tags).")
     else:
         lines.append("Tag categories: not loaded (missing tag CSV or length mismatch).")
+    category_ids, category_warnings = resolve_category_ids(labels, categories, opts)
+    if category_warnings:
+        for warn in category_warnings:
+            lines.append(f"[WARN] {warn}")
+    lines.append(
+        "Category map: "
+        f"general={category_ids.general}, "
+        f"character={category_ids.character}, "
+        f"rating={category_ids.rating}, "
+        f"meta={category_ids.meta}, "
+        f"artist={category_ids.artist}, "
+        f"copyright={category_ids.copyright}"
+    )
+    lines.append(f"Include general tags: {'on' if opts.include_general else 'off'}")
     lines.append(f"Include character tags: {'on' if opts.include_character else 'off'}")
     lines.append(f"Include rating tags: {'on' if opts.include_rating else 'off'}")
-    lines.append(f"Thresholds: general={opts.general_threshold}, character={opts.character_threshold}")
+    lines.append(
+        "Include meta/artist/copyright: "
+        f"{'on' if opts.include_meta else 'off'} / "
+        f"{'on' if opts.include_artist else 'off'} / "
+        f"{'on' if opts.include_copyright else 'off'}"
+    )
+    lines.append(
+        f"Threshold floor: {opts.min_threshold_floor} (policy)"
+    )
+    lines.append(f"Trigger tag: {'on' if opts.trigger_tag else 'off'}")
+    lines.append(f"Color sanity: {'on' if opts.enable_color_sanity else 'off'} (policy)")
+
+    exclude_tags = set(_parse_tag_list(opts.exclude_tags))
+    exclude_regex_raw = _parse_regex_list(opts.exclude_regex)
+    if opts.use_normalizer_remove_as_exclude:
+        preset_root = opts.normalizer_preset_root
+        remove_tags, remove_regex, warn = _load_normalizer_excludes(
+            preset_root, opts.normalizer_preset_type, opts.normalizer_preset_file
+        )
+        if warn:
+            lines.append(f"[WARN] {warn}")
+        exclude_tags.update(remove_tags)
+        exclude_regex_raw.extend(remove_regex)
+    exclude_regex = _compile_regex(exclude_regex_raw)
+    lines.append(f"Exclude tags: {len(exclude_tags)} | Exclude regex: {len(exclude_regex)}")
 
     paths = _iter_images(opts.dataset_path, opts.recursive, opts.image_exts)
     if opts.limit > 0:
@@ -415,9 +1240,12 @@ def run_tagger(opts: TaggerOptions) -> Tuple[bool, List[str]]:
     written = 0
     errors = 0
     samples: List[str] = []
+    sample_count = 0
     total_images = len(paths)
     lines.append(f"Total images: {total_images}")
     tag_stats: Dict[str, int] = {}
+    color_drop_total = 0
+    color_drop_images = 0
 
     try:
         from PIL import Image
@@ -428,10 +1256,22 @@ def run_tagger(opts: TaggerOptions) -> Tuple[bool, List[str]]:
     for batch in _chunked(paths, opts.batch_size):
         images = []
         batch_paths = []
+        color_presence_list: List[Optional[Dict[str, float]]] = []
         for path in batch:
             try:
                 with Image.open(path) as im:
-                    images.append(im.convert("RGB"))
+                    im_rgb = im.convert("RGB")
+                    if opts.enable_color_sanity:
+                        try:
+                            presence = _estimate_color_presence(im_rgb, opts)
+                        except Exception:
+                            presence = None
+                    else:
+                        presence = None
+                    if wd_fix:
+                        im_rgb = _swap_rgb_bgr(im_rgb)
+                    images.append(im_rgb)
+                    color_presence_list.append(presence)
                 batch_paths.append(path)
             except Exception as exc:
                 errors += 1
@@ -441,25 +1281,61 @@ def run_tagger(opts: TaggerOptions) -> Tuple[bool, List[str]]:
             continue
 
         try:
-            inputs = processor(images=images, return_tensors="pt")
-            inputs = {k: v.to(device) for k, v in inputs.items()}
-            with torch.no_grad():
-                outputs = model(**inputs)
-                probs = torch.sigmoid(outputs.logits).cpu().numpy()
+            if backend == "onnx":
+                import numpy as np
+
+                inputs = processor(images=images, return_tensors="np")
+                pixel_values = inputs.get("pixel_values")
+                if onnx_session is None or onnx_input is None:
+                    raise RuntimeError("ONNX session not initialized.")
+                outputs = onnx_session.run(None, {onnx_input: pixel_values})
+                logits = outputs[0]
+                probs = 1.0 / (1.0 + np.exp(-logits))
+            else:
+                inputs = processor(images=images, return_tensors="pt")
+                inputs = {k: v.to(device) for k, v in inputs.items()}
+                with torch.no_grad():
+                    if opts.use_amp and str(device).startswith("cuda"):
+                        with torch.cuda.amp.autocast():
+                            outputs = model(**inputs)
+                    else:
+                        outputs = model(**inputs)
+                    probs = torch.sigmoid(outputs.logits).cpu().numpy()
         except Exception as exc:
             errors += len(batch_paths)
             lines.append(f"[ERROR] batch failed: {exc}")
             continue
 
-        for path, row in zip(batch_paths, probs):
-            tags = _build_tags(row, labels, categories, opts, tag_stats)
+        for idx, (path, row) in enumerate(zip(batch_paths, probs)):
+            color_presence = color_presence_list[idx] if idx < len(color_presence_list) else None
+            color_debug = [] if opts.debug_color_sanity else None
+            tags = _build_tags(
+                row,
+                labels,
+                categories,
+                opts,
+                category_ids,
+                exclude_tags,
+                exclude_regex,
+                tag_stats,
+                color_presence=color_presence,
+                color_debug=color_debug,
+            )
+            if opts.debug_color_sanity and color_debug:
+                color_drop_total += len(color_debug)
+                color_drop_images += 1
+            tags = _apply_trigger_tag(tags, opts.trigger_tag)
             if opts.skip_empty and not tags:
                 processed += 1
                 print(f"{processed} out of {total_images} images tagged.")
                 continue
 
-            if opts.preview_limit > 0 and len(samples) < opts.preview_limit:
+            if opts.preview_limit > 0 and sample_count < opts.preview_limit:
                 samples.append(f"{path.name}: {', '.join(tags)}")
+                if opts.debug_color_sanity and color_debug:
+                    for item in color_debug:
+                        samples.append(f"  [color_sanity] dropped {item}")
+                sample_count += 1
 
             if opts.preview_only:
                 processed += 1
@@ -476,10 +1352,25 @@ def run_tagger(opts: TaggerOptions) -> Tuple[bool, List[str]]:
             if opts.write_mode == "overwrite":
                 merged_main = tags
             else:
-                merged_main = _dedup_preserve(existing_main + tags)
+                if opts.keep_existing_tags:
+                    merged_main = list(existing_main) + tags
+                else:
+                    merged_main = tags
+
+            if opts.dedupe:
+                merged_main = _dedup_preserve(merged_main)
+            if opts.sort_tags:
+                merged_main = sorted(merged_main)
+            merged_main = _apply_trigger_tag(merged_main, opts.trigger_tag)
 
             if merged_main or not opts.skip_empty:
-                text = _format_tag_file(merged_main, existing_optional, existing_warning)
+                text = _format_tag_file(
+                    merged_main,
+                    existing_optional,
+                    existing_warning,
+                    opts.newline_end,
+                    opts.strip_whitespace,
+                )
                 txt_path.write_text(text, encoding="utf-8")
                 written += 1
 
@@ -495,9 +1386,14 @@ def run_tagger(opts: TaggerOptions) -> Tuple[bool, List[str]]:
             "Tag stats: "
             f"general={tag_stats.get('general', 0)}, "
             f"character={tag_stats.get('character', 0)}, "
+            f"meta={tag_stats.get('meta', 0)}, "
             f"rating={tag_stats.get('rating', 0)}, "
             f"images_with_general={tag_stats.get('images_with_general', 0)}, "
             f"images_with_character={tag_stats.get('images_with_character', 0)}"
+        )
+    if opts.debug_color_sanity:
+        lines.append(
+            f"Color sanity drops: {color_drop_total} tags across {color_drop_images} images."
         )
 
     if opts.preview_only:
@@ -521,26 +1417,43 @@ def handle(form, ctx) -> Tuple[str, str]:
     if not dataset_path.exists() or not dataset_path.is_dir():
         return active_tab, log_join([f"Dataset folder not found: {dataset_path}"])
 
-    opts = TaggerOptions(
-        dataset_path=dataset_path,
-        recursive=_parse_bool(form.get("recursive")),
-        image_exts=_parse_exts(form.get("exts") or ""),
-        model_id=(form.get("model_id") or DEFAULT_MODEL_ID).strip() or DEFAULT_MODEL_ID,
-        device=(form.get("device") or "auto").strip(),
-        batch_size=max(1, _parse_int(form.get("batch_size"), 4)),
-        general_threshold=_parse_float(form.get("general_threshold"), DEFAULT_GENERAL_THRESHOLD),
-        character_threshold=_parse_float(form.get("character_threshold"), DEFAULT_CHARACTER_THRESHOLD),
-        include_character=_parse_bool(form.get("include_character")),
-        include_rating=_parse_bool(form.get("include_rating")),
-        replace_underscore=_parse_bool(form.get("replace_underscore")),
-        write_mode=(form.get("write_mode") or "append").strip().lower(),
-        preview_only=_parse_bool(form.get("preview_only")),
-        preview_limit=max(0, _parse_int(form.get("preview_limit"), 5)),
-        limit=max(0, _parse_int(form.get("limit"), 0)),
-        max_tags=max(0, _parse_int(form.get("max_tags"), 0)),
-        skip_empty=_parse_bool(form.get("skip_empty")),
-        local_only=_parse_bool(form.get("local_only")),
-    )
-
-    ok, lines = run_tagger(opts)
+    form_opts = dict(form) if isinstance(form, dict) else {k: form.get(k) for k in form.keys()}
+    form_opts["input_dir"] = raw_folder
+    for key in (
+        "recursive",
+        "include_character",
+        "include_rating",
+        "preview_only",
+        "dedupe",
+        "sort_tags",
+        "keep_existing_tags",
+        "newline_end",
+        "strip_whitespace",
+    ):
+        if key not in form_opts:
+            form_opts[key] = None
+    deprecated = _find_deprecated_keys(form_opts)
+    opts = _effective_opts(form_opts, TAGGER_POLICY)
+    ok, lines = run_tagger(opts, deprecated_keys=deprecated)
     return active_tab, log_join(lines)
+
+
+def _cli():
+    import argparse
+    import sys
+
+    parser = argparse.ArgumentParser(
+        description="Offline tagger policy summary."
+    )
+    parser.add_argument("--dump", action="store_true", help="Print policy and exit")
+    args = parser.parse_args()
+
+    if args.dump:
+        print(TAGGER_POLICY)
+        sys.exit(0)
+    parser.print_help()
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    _cli()

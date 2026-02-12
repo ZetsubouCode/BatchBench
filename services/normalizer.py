@@ -45,6 +45,7 @@ class NormalizeOptions:
     backup_enabled: bool = True
     image_exts: List[str] = field(default_factory=lambda: list(DEFAULT_IMAGE_EXTS))
     identity_tags: Set[str] = field(default_factory=set)
+    pinned_tags: List[str] = field(default_factory=list)
 
 
 def clean_input_list(raw: str) -> Set[str]:
@@ -319,6 +320,13 @@ def normalize_record(
     before_text = format_tag_file(record)
     main = list(record.main)
     optional = list(record.optional)
+    pinned_raw = [t for t in (opts.pinned_tags or []) if t]
+    pinned_order = _dedup(pinned_raw)
+    pinned_present = [t for t in pinned_order if t in main or t in optional]
+    if pinned_present:
+        main = [t for t in main if t not in pinned_present]
+        optional = [t for t in optional if t not in pinned_present]
+        keep_tags.update(pinned_present)
 
     # 1) trim
     if rules.get("trim"):
@@ -400,6 +408,9 @@ def normalize_record(
     # Final dedup to catch duplicates introduced during moves
     main = _dedup(main)
     optional = _dedup(optional)
+
+    if pinned_present:
+        main = _dedup(pinned_present + main)
 
     after = TagFile(path=record.path, main=main, optional=optional, warning=record.warning)
     after_text = format_tag_file(after)

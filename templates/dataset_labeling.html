@@ -14,6 +14,7 @@
   .tag-chip { display:inline-flex; align-items:center; gap:.4rem; border:1px solid var(--bb-border); background:var(--bb-card); color:var(--bb-text); padding:.15rem .5rem; border-radius:999px; font-size:.85rem; cursor:pointer; }
   .tag-chip .tag-count { color:var(--bb-muted); font-size:.75rem; }
   .tag-chip.is-selected { background:#1b2b4a; border-color:#2d4f86; color:#e6f0ff; }
+  .tag-chip.is-temp { border-color:#1f6f4a; box-shadow:0 0 0 1px #1f6f4a, 0 0 10px rgba(31,111,74,.5); }
   .tag-chip.is-warning { background:#2a1a0a; border-color:#b56a1f; color:#ffe0b2; }
   .tag-cloud-note { flex-basis:100%; margin-top:.25rem; }
   .tag-sync-status { font-size:.75rem; color:var(--bb-muted); }
@@ -27,13 +28,107 @@
   .path-badge.badge-undo { color:#e6fff1; border-color:#1f6f4a; background:#0d2d1f; }
   .path-flag { font-size:.6rem; padding:.05rem .3rem; border-radius:.3rem; border:1px solid var(--bb-border); color:var(--bb-muted); }
   .path-flag.is-active { color:#e6f0ff; border-color:#2d4f86; background:#1b2b4a; }
+  .tag-editor-layout { display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:1rem; align-items:start; position:relative; }
+  .tag-editor-layout.is-expanded .tag-editor-sidebar { width:640px; transform:translateX(-320px); box-shadow:-20px 0 30px rgba(0,0,0,0.35); }
+  .tag-editor-main { min-width:0; }
+  .mode-layout { display:grid; grid-template-columns:110px minmax(0,1fr); gap:1rem; align-items:start; }
+  .mode-panel { position:sticky; top:1rem; align-self:start; display:flex; flex-direction:column; gap:.6rem; }
+  .mode-title { font-size:.85rem; letter-spacing:.08em; text-transform:uppercase; color:var(--bb-muted); }
+  .mode-buttons { display:flex; flex-direction:column; gap:.4rem; }
+  .mode-btn { border:1px solid var(--bb-border); background:var(--bb-card); color:var(--bb-text); border-radius:.5rem; padding:.45rem .5rem; font-size:.85rem; display:flex; align-items:center; gap:.45rem; cursor:pointer; }
+  .mode-btn .mode-icon { width:1.2rem; text-align:center; font-weight:600; }
+  .mode-btn.is-active { background:#1b2b4a; border-color:#2d4f86; color:#e6f0ff; box-shadow:0 0 0 1px rgba(45,79,134,.45); }
+  .mode-btn:focus-visible { outline:2px solid var(--bb-link); outline-offset:2px; }
+  .tag-editor-sidebar { display:flex; flex-direction:column; gap:.5rem; position:sticky; top:1rem; max-height:calc(100vh - 190px); width:320px; transition:transform .2s ease, width .2s ease; z-index:5; }
+  .tag-editor-sidebar .sidebar-head { display:flex; align-items:center; justify-content:space-between; gap:.5rem; }
+  .tag-editor-sidebar .sidebar-title { font-size:1rem; font-weight:600; }
+  .tag-editor-sidebar .sidebar-body { overflow:auto; display:block; }
+  .sidebar-split { display:grid; grid-template-columns:1fr; gap:.75rem; }
+  .tag-editor-layout.is-expanded .sidebar-split { grid-template-columns:1fr; }
+  .sidebar-col { display:flex; flex-direction:column; gap:.75rem; min-width:0; }
+  .tag-editor-sidebar .input-group-text { background:var(--bb-card); color:var(--bb-text); border-color:var(--bb-border); }
+  .tag-editor-sidebar .form-check-label { color:var(--bb-text); }
+  .gallery-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:.4rem; }
+  .gallery-status { font-size:.75rem; color:var(--bb-muted); min-height:1rem; }
+  .gallery-path { font-size:.75rem; color:var(--bb-muted); }
+  .gallery-drop { border:1px dashed var(--bb-border); border-radius:.5rem; padding:.6rem; text-align:center; color:var(--bb-muted); background:rgba(12,18,36,.7); cursor:pointer; }
+  .gallery-drop.is-dragging { border-color:var(--bb-link); color:var(--bb-link); background:rgba(18,30,56,.8); }
+  .gallery-grid { display:grid; grid-template-columns:1fr; gap:.75rem; }
+  .gallery-card { border:1px solid var(--bb-border); border-radius:.5rem; padding:.5rem; background:var(--bb-input-bg); display:flex; flex-direction:column; gap:.35rem; }
+  .gallery-card.is-match { outline:2px solid #2d4f86; box-shadow:0 0 0 1px rgba(45,79,134,.45); }
+  .gallery-thumb { border:0; padding:0; background:transparent; display:block; width:100%; cursor:zoom-in; }
+  .gallery-thumb img { width:100%; height:160px; object-fit:cover; border-radius:.4rem; border:1px solid var(--bb-border); background:#0b1220; }
+  .gallery-name { font-size:.85rem; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .gallery-subpath { font-size:.7rem; color:var(--bb-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .gallery-tags { display:flex; flex-wrap:wrap; gap:.25rem; }
+  .gallery-tag { font-size:.7rem; border:1px solid var(--bb-border); border-radius:.35rem; padding:.05rem .35rem; color:var(--bb-muted); background:var(--bb-code-bg); }
+  .gallery-tag.is-removable { position:relative; padding-right:1.1rem; cursor:default; }
+  .gallery-tag .tag-x { display:none; position:absolute; right:.2rem; top:50%; transform:translateY(-50%); border:0; background:transparent; color:inherit; opacity:.7; padding:0; }
+  .gallery-tag.is-removable:hover .tag-x { display:inline; opacity:1; }
+  .gallery-tag.is-missing { border-color:#6f1f26; color:#ffe8ea; background:#2b1416; }
+  .gallery-empty { font-size:.85rem; color:var(--bb-muted); border:1px dashed var(--bb-border); border-radius:.5rem; padding:.6rem; text-align:center; }
+  .gallery-modal-img { max-width:100%; max-height:70vh; transform-origin:center; transition:transform .15s ease; }
+  .gallery-zoom { display:flex; align-items:center; gap:.5rem; }
+  .gallery-zoom-label { font-size:.85rem; color:var(--bb-muted); min-width:4ch; text-align:right; }
+  .workdir-panel { border:1px solid var(--bb-border); border-radius:.5rem; padding:.6rem; background:var(--bb-input-bg); }
+  .workdir-head { display:flex; align-items:center; justify-content:space-between; gap:.5rem; }
+  .workdir-actions { display:flex; align-items:center; gap:.4rem; flex-wrap:wrap; }
+  .workdir-actions .form-control { flex:1 1 140px; min-width:110px; }
+  .workdir-status { font-size:.75rem; color:var(--bb-muted); min-height:1rem; }
+  .workdir-tree { display:flex; flex-direction:column; gap:.15rem; margin-top:.4rem; }
+  .workdir-row { display:flex; align-items:center; gap:.35rem; padding:.2rem .35rem; border-radius:.35rem; cursor:pointer; user-select:none; }
+  .workdir-row.is-selected { background:#1b2b4a; border:1px solid #2d4f86; }
+  .workdir-row.is-drop { outline:2px dashed var(--bb-link); }
+  .workdir-row.is-dragging { opacity:.6; }
+  .workdir-toggle { width:1.2rem; height:1.2rem; display:inline-flex; align-items:center; justify-content:center; border:1px solid var(--bb-border); background:var(--bb-card); color:var(--bb-muted); border-radius:.25rem; font-size:.7rem; padding:0; }
+  .workdir-toggle.is-placeholder { border-color:transparent; background:transparent; }
+  .workdir-name { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:.85rem; }
+  .workdir-children { margin-left:1.15rem; border-left:1px dashed var(--bb-border); padding-left:.5rem; display:none; }
+  .workdir-children.is-open { display:block; }
+  .workdir-empty { font-size:.75rem; color:var(--bb-muted); padding:.2rem .35rem; }
+  .workdir-root-drop { border:1px dashed var(--bb-border); border-radius:.35rem; padding:.25rem .45rem; font-size:.7rem; color:var(--bb-muted); }
+  .workdir-root-drop.is-active { border-color:var(--bb-link); color:var(--bb-link); }
+  @media (max-width: 991.98px) {
+    .tag-editor-layout { grid-template-columns:1fr; }
+    .tag-editor-layout.is-expanded .tag-editor-sidebar { width:100%; transform:none; }
+    .tag-editor-sidebar { position:static; max-height:none; width:100%; }
+    .mode-layout { grid-template-columns:1fr; }
+    .mode-panel { position:static; flex-direction:row; flex-wrap:wrap; }
+    .mode-buttons { flex-direction:row; flex-wrap:wrap; }
+    .sidebar-split { grid-template-columns:1fr; }
+  }
 </style>
 
-<div class="card p-4">
-  <div id="mode-banner" class="mode-banner mode-insert">
-    <strong>Mode help:</strong>
-    <span id="mode-desc">Insert: add missing tags to each .txt (comma-separated).</span>
-  </div>
+<div class="tag-editor-layout" id="tag-editor-layout">
+  <div class="tag-editor-main">
+    <div class="card p-4">
+  <div class="mode-layout">
+    <div class="mode-panel" id="mode-panel">
+      <div class="mode-title">Mode</div>
+      <div class="mode-buttons" id="mode-buttons">
+        <button type="button" class="mode-btn" data-mode="insert" data-bs-toggle="tooltip" data-bs-title="Insert: add missing tags into .txt in _temp.">
+          <span class="mode-icon">+</span><span>Insert</span>
+        </button>
+        <button type="button" class="mode-btn" data-mode="delete" data-bs-toggle="tooltip" data-bs-title="Delete: remove tags from .txt in _temp.">
+          <span class="mode-icon">-</span><span>Delete</span>
+        </button>
+        <button type="button" class="mode-btn" data-mode="replace" data-bs-toggle="tooltip" data-bs-title="Replace: mapping old->new in _temp.">
+          <span class="mode-icon">⇄</span><span>Replace</span>
+        </button>
+        <button type="button" class="mode-btn" data-mode="move" data-bs-toggle="tooltip" data-bs-title="Move: move matching files from root to _temp.">
+          <span class="mode-icon">→</span><span>Move</span>
+        </button>
+        <button type="button" class="mode-btn" data-mode="dedup" data-bs-toggle="tooltip" data-bs-title="Dedup: remove duplicate tags in _temp.">
+          <span class="mode-icon">≡</span><span>Dedup</span>
+        </button>
+      </div>
+    </div>
+    <div class="mode-body">
+      <div id="mode-banner" class="mode-banner">
+        <strong>Mode help:</strong>
+        <span id="mode-desc">Select a mode to continue.</span>
+      </div>
+      <div class="small text-muted mb-3">Workdir: edits run on <span class="code-chip">_temp</span>. Move fills <span class="code-chip">_temp</span>. Undo restores to root.</div>
 
   <form id="tags-form" method="post" data-no-busy="true" data-no-persist="true" data-tool-label="Dataset Tag Editor">
     <input type="hidden" name="tool" value="tags">
@@ -51,17 +146,7 @@
         </div>
       </div>
 
-      <div class="col-md-4">
-        <label class="form-label">Mode</label>
-        <select class="form-select" name="mode" id="mode-select" data-bs-toggle="tooltip" data-bs-title="Choose what to do with tags">
-          <option value="insert">insert</option>
-          <option value="delete">delete</option>
-          <option value="replace">replace (old→new; old2→new2)</option>
-          <option value="move">move (to temp if tags match)</option>
-          <option value="dedup">dedup</option>
-          <option value="undo">undo (restore from temp)</option>
-        </select>
-      </div>
+      <input type="hidden" name="mode" id="mode-select" value="">
 
       <div class="col-md-4">
         <label class="form-label">Image extensions (comma)</label>
@@ -70,13 +155,11 @@
       </div>
 
       <div class="col-md-4">
-        <label class="form-label">Edit target</label>
-        <select class="form-select" id="edit-target" name="edit_target"
-                data-bs-toggle="tooltip" data-bs-title="Where edit modes apply. Recursive scans base and stages files into _temp.">
-          <option value="recursive">recursive (scan base, stage to _temp)</option>
-          <option value="temp">temp only (safe)</option>
-          <option value="base">base only</option>
-        </select>
+        <label class="form-label">Workdir</label>
+        <div class="small text-muted">
+          Workdir is fixed: <span class="code-chip" id="fixed-workdir">...</span>
+        </div>
+        <input type="hidden" name="edit_target" value="recursive">
       </div>
 
       <div class="col-md-12">
@@ -86,6 +169,7 @@
               <label class="form-label mb-1">Tag Explorer</label>
               <div class="small text-muted" id="tagviz-hint">Select tags -> choose mode -> Run. Tags sync automatically to Tags / mapping.</div>
               <div class="tag-sync-status" id="tagviz-sync-status">Auto-sync ON</div>
+              <div class="small text-muted">Glow = tags present in _temp.</div>
             </div>
             <div class="d-flex gap-2">
               <button type="button" class="btn btn-outline-light btn-sm" id="tagviz-scan">Scan tags</button>
@@ -112,7 +196,7 @@
             </div>
           </div>
           <div class="small text-muted mt-2">
-            Scan target (syncs with Edit target): <span class="code-chip" id="tagviz-path">...</span>
+            Scan target: <span class="code-chip" id="tagviz-path">...</span>
             <span class="ms-2" id="tagviz-status"></span>
           </div>
           <div class="tag-cloud mt-2" id="tagviz-cloud"></div>
@@ -162,10 +246,8 @@
 
     <div class="mt-3 d-flex gap-2 flex-wrap">
       <button class="btn btn-primary" id="btn-run">Run</button>
-      <button type="button" class="btn btn-outline-info" id="btn-stage"
-              data-bs-toggle="tooltip" data-bs-title="Stage matching files into _temp without editing (recursive only)">Stage to _temp</button>
       <button type="button" class="btn btn-outline-warning" id="btn-undo"
-              data-bs-toggle="tooltip" data-bs-title="Restore files from Temp folder back to Folder">Undo Move</button>
+              data-bs-toggle="tooltip" data-bs-title="Restore files from Temp folder back to Folder">↶</button>
       <button type="button" class="btn btn-outline-secondary" id="btn-clear"
               data-bs-toggle="tooltip" data-bs-title="Clear remembered inputs for this tool">Clear saved</button>
     </div>
@@ -182,6 +264,46 @@
       <pre class="monospace mb-0" id="tags-log-pre"></pre>
     </div>
   </form>
+    </div>
+  </div>
+    </div>
+  </div>
+
+  <aside class="card tag-editor-sidebar" id="tag-editor-sidebar">
+    <div class="sidebar-head">
+      <div class="sidebar-title">Preview</div>
+      <div class="d-flex gap-1">
+        <button type="button" class="btn btn-sm btn-outline-light" id="gallery-refresh">Refresh</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="gallery-toggle">Minimize</button>
+      </div>
+    </div>
+    <div class="sidebar-body">
+      <div class="sidebar-split">
+        <div class="sidebar-col">
+          <div class="gallery-toolbar">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="gallery-recursive">
+              <label class="form-check-label" for="gallery-recursive">Recursive</label>
+            </div>
+            <div class="input-group input-group-sm" style="width:130px;">
+              <span class="input-group-text">Limit</span>
+              <input class="form-control" type="number" id="gallery-limit" min="10" max="500" value="80">
+            </div>
+            <span class="small text-muted" id="gallery-count">0 images</span>
+          </div>
+          <div class="gallery-path">
+            Root: <span class="code-chip" id="gallery-path">...</span>
+          </div>
+          <div class="gallery-drop" id="gallery-drop" data-bs-toggle="tooltip" data-bs-title="Drop files here to copy into the dataset folder">
+            Drop files here, or <span class="text-decoration-underline">click to select</span>
+            <input type="file" id="gallery-upload-input" multiple class="d-none">
+          </div>
+          <div class="gallery-status" id="gallery-status"></div>
+          <div class="gallery-grid" id="gallery-grid"></div>
+        </div>
+      </div>
+    </div>
+  </aside>
 </div>
 
 <div class="modal fade" id="tagsConfirmModal" tabindex="-1" aria-hidden="true">
@@ -200,6 +322,32 @@
   </div>
 </div>
 
+<div class="modal fade" id="galleryPreviewModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content" style="background:var(--bb-card);color:var(--bb-text);border:1px solid var(--bb-border);">
+      <div class="modal-header">
+        <h5 class="modal-title" id="gallery-preview-title">Image preview</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="d-flex justify-content-center">
+          <img id="gallery-preview-img" class="gallery-modal-img" src="" alt="">
+        </div>
+        <div class="d-flex align-items-center justify-content-between mt-3">
+          <div class="small text-muted" id="gallery-preview-name"></div>
+          <div class="gallery-zoom">
+            <span class="gallery-zoom-label" id="gallery-zoom-label">100%</span>
+            <button type="button" class="btn btn-sm btn-outline-light" id="gallery-zoom-out">-</button>
+            <button type="button" class="btn btn-sm btn-outline-light" id="gallery-zoom-in">+</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="gallery-zoom-reset">Reset</button>
+          </div>
+        </div>
+        <div class="gallery-tags mt-2" id="gallery-preview-tags"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 (() => {
   const get = id => document.getElementById(id);
@@ -210,7 +358,7 @@
     tags: 'tags',
     exts: 'exts',
     backup: 'backup',
-    editTarget: 'edit-target',
+    fixedWorkdir: 'fixed-workdir',
     status: 'tags-status',
     logWrap: 'tags-log',
     logPre: 'tags-log-pre',
@@ -246,75 +394,154 @@
     hint: 'tagviz-hint',
     syncStatus: 'tagviz-sync-status'
   };
+  const GALLERY = {
+    layout: 'tag-editor-layout',
+    sidebar: 'tag-editor-sidebar',
+    toggle: 'gallery-toggle',
+    refresh: 'gallery-refresh',
+    grid: 'gallery-grid',
+    status: 'gallery-status',
+    count: 'gallery-count',
+    path: 'gallery-path',
+    drop: 'gallery-drop',
+    input: 'gallery-upload-input',
+    recursive: 'gallery-recursive',
+    limit: 'gallery-limit',
+    modal: 'galleryPreviewModal',
+    modalImg: 'gallery-preview-img',
+    modalName: 'gallery-preview-name',
+    modalTags: 'gallery-preview-tags',
+    zoomIn: 'gallery-zoom-in',
+    zoomOut: 'gallery-zoom-out',
+    zoomReset: 'gallery-zoom-reset',
+    zoomLabel: 'gallery-zoom-label',
+    modalTitle: 'gallery-preview-title'
+  };
+  const WORKDIR = {
+    refresh: 'workdir-refresh',
+    path: 'workdir-path',
+    tree: 'workdir-tree',
+    status: 'workdir-status',
+    newName: 'workdir-new-name',
+    create: 'workdir-create',
+    del: 'workdir-delete',
+    rootDrop: 'workdir-root-drop'
+  };
   const tagVizState = {
     items: [],
     selected: new Set(),
+    tempTags: new Set(),
     warnTags: new Set(),
     meta: { tag_files: 0, total_images: 0 },
     shown: 0,
     total: 0
   };
+  const galleryState = {
+    items: [],
+    root: '',
+    zoom: 1
+  };
+  const uiState = {
+    sidebarExpanded: false
+  };
+  const workdirState = {
+    root: '',
+    selected: '',
+    expanded: new Set()
+  };
   let tagsSyncEnabled = true;
   let tagsSyncLocked = false;
   let bypassDupesOnce = false;
+  let galleryRefreshTimer = null;
+  let workdirRefreshTimer = null;
 
   const MODE_HELP = {
     insert:"Insert: add missing tags to each .txt (comma-separated).",
     delete:"Delete: remove specific tags if present (comma-separated).",
     replace:"Replace: map old->new; multiple mappings separated by semicolons (e.g., old->new; old2->new2).",
     move:"Move: if ANY listed tags exist in .txt, move image+.txt to Temp.",
-    dedup:"Dedup: remove duplicate tags, keep the first occurrence.",
-    undo:"Undo: restore files from Temp back to base Folder."
+    dedup:"Dedup: remove duplicate tags, keep the first occurrence."
   };
   const MODE_CLASS = {
     insert:"mode-insert", delete:"mode-delete", replace:"mode-replace",
-    move:"mode-move", dedup:"mode-dedup", undo:"mode-undo"
+    move:"mode-move", dedup:"mode-dedup"
   };
+  const MODE_STORAGE_KEY = 'bb.tags.mode';
 
-  const stripTemp = p => (p||'').replace(/[\\\/]_temp$/i,'');
-  const sepFor = p => (p && p.includes('/')) ? '/' : '\\';
+  function getModeValue(){
+    return (get(IDS.mode)?.value || '').trim();
+  }
+
+  function getModeOrDefault(){
+    return getModeValue() || 'insert';
+  }
+
+  function syncModeButtons(){
+    const current = getModeValue();
+    document.querySelectorAll('.mode-btn').forEach(btn=>{
+      btn.classList.toggle('is-active', btn.dataset.mode === current);
+    });
+  }
+
+  function setMode(mode, persist=true){
+    const input = get(IDS.mode);
+    if (!input) return;
+    const next = MODE_HELP[mode] ? mode : '';
+    input.value = next;
+    syncModeButtons();
+    if (persist){
+      try{ localStorage.setItem(MODE_STORAGE_KEY, next); }catch(_){}
+    }
+    handleModeChange();
+  }
+
+  const stripTemp = (p) => {
+    let val = (p || '').trim();
+    if (!val) return '';
+    val = val.replace(/[\\\/]+$/g, '');
+    return val.replace(/[\\\/]_temp$/i, '');
+  };
+  const sepFor = p => (p && p.includes('\\') && !p.includes('/')) ? '\\' : '/';
   const defaultTempFor = root => root ? (stripTemp(root) + sepFor(root) + '_temp') : '';
 
   function getEffectiveFolders(){
-    const mode = get(IDS.mode)?.value || 'insert';
+    const mode = getModeValue();
     const root = stripTemp((get(IDS.folder)?.value||'').trim());
     const def = defaultTempFor(root);
     const temp = def;
-    const rawEditTarget = (get(IDS.editTarget)?.value || 'recursive').toLowerCase();
-    const editTarget = rawEditTarget === 'auto' ? 'recursive' : rawEditTarget;
-    const editPref = editTarget === 'base' ? root : temp;
-    let scan = temp;
-    const scanRecursive = editTarget === 'recursive';
-    if (editTarget === 'recursive') scan = root;
-    else if (mode === 'move') scan = root;
-    else if (mode === 'undo') scan = temp;
-    else scan = editPref;
+    const editTarget = 'recursive';
+    const editPref = temp;
+    let scan = root;
+    const scanRecursive = true;
     return { mode, root, def, temp, scan, editTarget, editPref, scanRecursive };
   }
 
   function updateTagHint(){
     const hint = get(TAGVIZ.hint);
     if(!hint) return;
-    const mode = get(IDS.mode)?.value || 'insert';
-    const info = getEffectiveFolders();
+    const mode = getModeValue();
     let msg = '';
+    if (!mode){
+      msg = 'Select a mode -> choose tags -> Run.';
+      if (tagVizState.selected.size){
+        msg += tagsSyncEnabled
+          ? ' Selection auto-syncs to Tags / mapping.'
+          : ' Auto-sync paused; click Sync to Tags to resume.';
+      }
+      hint.textContent = msg;
+      return;
+    }
     if (mode === 'replace') {
       msg = 'Replace mode: selection formats as "tag->" entries.';
     } else if (mode === 'move') {
       msg = 'Move mode: tags are matched in the base folder.';
-    } else if (mode === 'undo') {
-      msg = 'Undo mode restores files from Temp; Tags input is ignored.';
     } else if (mode === 'dedup') {
       msg = 'Dedup mode removes duplicates; Tags input is ignored.';
     } else {
       msg = 'Select tags -> choose mode -> Run.';
     }
-    if (info.editTarget === 'recursive'){
-      if (mode === 'delete' || mode === 'replace'){
-        msg += ' Recursive auto-stages matching files into _temp.';
-      } else if (mode === 'insert' || mode === 'dedup'){
-        msg += ' Recursive edits run on _temp; use Stage to _temp first.';
-      }
+    if (mode === 'insert' || mode === 'delete' || mode === 'replace' || mode === 'dedup'){
+      msg += ' Edits run on _temp only; use Move mode to populate _temp first.';
     }
     if (tagVizState.selected.size){
       msg += tagsSyncEnabled
@@ -325,20 +552,25 @@
   }
 
   function updateModeHelp(){
-    const key = get(IDS.mode)?.value || 'insert';
+    const key = getModeValue();
     const desc = get('mode-desc'), banner = get('mode-banner');
-    if(desc) desc.textContent = MODE_HELP[key] || MODE_HELP.insert;
-    if(banner) banner.className = 'mode-banner ' + (MODE_CLASS[key] || 'mode-insert');
+    if(desc) desc.textContent = key ? (MODE_HELP[key] || 'Select a mode to continue.') : 'Select a mode to continue.';
+    if(banner) banner.className = key ? ('mode-banner ' + (MODE_CLASS[key] || 'mode-insert')) : 'mode-banner';
     updateTagHint();
     updateTagSyncStatus();
   }
 
   function handleModeChange(){
+    if (!getModeValue()){
+      updateModeHelp();
+      refreshTempHints();
+      return;
+    }
     updateModeHelp();
     refreshTempHints();
     const input = get(IDS.tags);
     if(!input) return;
-    const mode = get(IDS.mode)?.value || 'insert';
+    const mode = getModeOrDefault();
     const hasMapping = input.value.includes('->');
 
     if (tagsSyncEnabled){
@@ -370,9 +602,8 @@
     const root = info.root;
     const def = info.def;
     const temp = info.temp;
-    const scan = info.scan;
     const editTarget = info.editTarget;
-    const editPath = editTarget === 'base' ? root : temp;
+    const editPath = temp;
 
     const setPath = (id, value) => {
       const el = get(id);
@@ -387,16 +618,674 @@
     setPath(IDS.effEditPath, editPath);
     setPath(IDS.effUndoFrom, temp);
     setPath(IDS.effUndoTo, root);
-    if (get(TAGVIZ.path))     get(TAGVIZ.path).textContent     = scan || '...';
+    if (get(TAGVIZ.path))     get(TAGVIZ.path).textContent     = root || '...';
 
     const flag = get(IDS.effEditFlag);
     if (flag){
       flag.textContent = editTarget || '';
-      flag.classList.toggle('is-active', editTarget === 'base' || editTarget === 'temp' || editTarget === 'recursive');
+      flag.classList.toggle('is-active', true);
+    }
+
+    const fixed = get(IDS.fixedWorkdir);
+    if (fixed) fixed.textContent = def || '...';
+  }
+
+  function getGalleryRoot(){
+    const root = stripTemp((get(IDS.folder)?.value||'').trim());
+    return defaultTempFor(root);
+  }
+
+  function setGalleryPath(root){
+    const el = get(GALLERY.path);
+    if (el) el.textContent = root || '...';
+  }
+
+  function setGalleryStatus(msg){
+    const el = get(GALLERY.status);
+    if (el) el.textContent = msg || '';
+  }
+
+  function setGalleryCount(total, shown){
+    const el = get(GALLERY.count);
+    if (!el) return;
+    if (typeof total !== 'number'){
+      el.textContent = '';
+      return;
+    }
+    const shownText = (typeof shown === 'number' && shown !== total) ? `${shown}/${total}` : `${total}`;
+    el.textContent = `${shownText} images`;
+  }
+
+  function applySidebarExpanded(expanded){
+    const layout = get(GALLERY.layout);
+    if (layout) layout.classList.toggle('is-expanded', expanded);
+    const btn = get(GALLERY.toggle);
+    if (btn) btn.textContent = expanded ? 'Minimize' : 'Expand';
+  }
+
+  function toggleSidebarExpanded(){
+    uiState.sidebarExpanded = !uiState.sidebarExpanded;
+    try{ localStorage.setItem('bb.tags.sidebar.expanded', uiState.sidebarExpanded ? '1' : '0'); }catch(_){}
+    applySidebarExpanded(uiState.sidebarExpanded);
+  }
+
+  function computeMatchScore(itemTags, selectedSet){
+    if (!selectedSet || !selectedSet.size || !itemTags || !itemTags.length) return 0;
+    let score = 0;
+    itemTags.forEach(tag=>{
+      if (selectedSet.has(tag)) score += 1;
+    });
+    return score;
+  }
+
+  function getSortedGalleryItems(){
+    const items = galleryState.items || [];
+    if (!items.length || !tagVizState.selected.size) return items;
+    const selected = tagVizState.selected;
+    return [...items].sort((a,b)=>{
+      const sa = computeMatchScore(a.tags || [], selected);
+      const sb = computeMatchScore(b.tags || [], selected);
+      if (sa === sb) return (a._idx || 0) - (b._idx || 0);
+      return sb - sa;
+    });
+  }
+
+  function fillGalleryTags(container, tags, hasTxt, maxTags, ctx=null){
+    if (!container) return;
+    container.innerHTML = '';
+    if (!hasTxt){
+      const chip = document.createElement('span');
+      chip.className = 'gallery-tag is-missing';
+      chip.textContent = 'no .txt';
+      container.appendChild(chip);
+      return;
+    }
+    if (!tags || !tags.length){
+      const chip = document.createElement('span');
+      chip.className = 'gallery-tag';
+      chip.textContent = '(no tags)';
+      container.appendChild(chip);
+      return;
+    }
+    const shown = tags.slice(0, maxTags);
+    shown.forEach(tag=>{
+      const chip = document.createElement('span');
+      const removable = !!(ctx && ctx.removable);
+      chip.className = 'gallery-tag' + (removable ? ' is-removable' : '');
+      if (removable){
+        const label = document.createElement('span');
+        label.className = 'tag-label';
+        label.textContent = tag;
+        chip.appendChild(label);
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'tag-x';
+        btn.textContent = 'x';
+        btn.title = 'Remove tag';
+        btn.addEventListener('click', async (e)=>{
+          e.preventDefault();
+          e.stopPropagation();
+          const folder = ctx?.folder || '';
+          const rel = ctx?.rel || '';
+          if (!folder || !rel || !tag) return;
+          setGalleryStatus('Removing tag...');
+          const backup = !!get(IDS.backup)?.checked;
+          const result = await apiRemoveTag(folder, rel, tag, backup);
+          if (!result.ok){
+            setGalleryStatus(`Remove failed: ${result.error || 'Unknown error'}`);
+            return;
+          }
+          const data = result.data || {};
+          if (data.removed) setGalleryStatus(`Removed "${tag}".`);
+          else setGalleryStatus(`Tag "${tag}" not found.`);
+          if (ctx?.onRemoved) ctx.onRemoved(data.tags || [], data);
+        });
+        chip.appendChild(btn);
+      } else {
+        chip.textContent = tag;
+      }
+      container.appendChild(chip);
+    });
+    if (tags.length > maxTags){
+      const more = document.createElement('span');
+      more.className = 'gallery-tag';
+      more.textContent = `+${tags.length - maxTags}`;
+      container.appendChild(more);
     }
   }
 
+  function renderGalleryItems(){
+    const wrap = get(GALLERY.grid);
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    if (!galleryState.items || !galleryState.items.length){
+      const empty = document.createElement('div');
+      empty.className = 'gallery-empty';
+      empty.textContent = 'No images to preview.';
+      wrap.appendChild(empty);
+      return;
+    }
+    const root = galleryState.root || getGalleryRoot();
+    const frag = document.createDocumentFragment();
+    const items = getSortedGalleryItems();
+    items.forEach(item=>{
+      const matchScore = computeMatchScore(item.tags || [], tagVizState.selected);
+      const card = document.createElement('div');
+      card.className = 'gallery-card';
+      if (matchScore > 0) card.classList.add('is-match');
+      card.draggable = true;
+      card.addEventListener('dragstart', (e)=>{
+        const rel = item.rel || '';
+        e.dataTransfer.setData('application/x-bb-file', rel);
+        e.dataTransfer.setData('text/plain', `file:${rel}`);
+        e.dataTransfer.effectAllowed = 'move';
+      });
 
+      const thumbBtn = document.createElement('button');
+      thumbBtn.type = 'button';
+      thumbBtn.className = 'gallery-thumb';
+      const img = document.createElement('img');
+      img.loading = 'lazy';
+      img.alt = item.name || item.rel || 'image';
+      img.src = `/api/tags/image?folder=${encodeURIComponent(root)}&path=${encodeURIComponent(item.rel)}`;
+      thumbBtn.appendChild(img);
+      thumbBtn.addEventListener('click', ()=> openGalleryPreview(item));
+      card.appendChild(thumbBtn);
+
+      const name = document.createElement('div');
+      name.className = 'gallery-name';
+      name.textContent = item.name || item.rel || '';
+      card.appendChild(name);
+
+      if (item.rel && (item.rel.includes('/') || item.rel.includes('\\'))){
+        const sub = document.createElement('div');
+        sub.className = 'gallery-subpath';
+        sub.textContent = item.rel;
+        card.appendChild(sub);
+      }
+
+      const tagWrap = document.createElement('div');
+      tagWrap.className = 'gallery-tags';
+      fillGalleryTags(tagWrap, item.tags || [], item.has_txt, 10);
+      card.appendChild(tagWrap);
+
+      frag.appendChild(card);
+    });
+    wrap.appendChild(frag);
+  }
+
+  async function loadGallery(){
+    const root = getGalleryRoot();
+    galleryState.root = root;
+    setGalleryPath(root);
+    if (!root){
+      galleryState.items = [];
+      renderGalleryItems();
+      setGalleryCount(0, 0);
+      setGalleryStatus('Folder not set.');
+      return;
+    }
+    const limitInput = get(GALLERY.limit);
+    let limit = parseInt(limitInput?.value || '80', 10);
+    if (!limit || limit < 1) limit = 80;
+    limit = Math.max(1, Math.min(500, limit));
+    if (limitInput) limitInput.value = limit;
+
+    setGalleryStatus('Loading...');
+    const payload = {
+      folder: root,
+      exts: get(IDS.exts)?.value || '',
+      recursive: !!get(GALLERY.recursive)?.checked,
+      limit
+    };
+    const res = await fetch('/api/tags/images', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    let data = null;
+    try{ data = await res.json(); }catch(_){}
+    if (!res.ok || !data || !data.ok){
+      const err = (data && data.error) ? data.error : `HTTP ${res.status}`;
+      galleryState.items = [];
+      renderGalleryItems();
+      setGalleryCount(0, 0);
+      setGalleryStatus(err);
+      return;
+    }
+    galleryState.items = data.images || [];
+    galleryState.items.forEach((item, idx)=>{
+      if (item) item._idx = idx;
+    });
+    renderGalleryItems();
+    setGalleryCount(data.total || galleryState.items.length, galleryState.items.length);
+    setGalleryStatus(`Loaded ${galleryState.items.length} image(s).`);
+  }
+
+  function scheduleGalleryRefresh(){
+    if (galleryRefreshTimer) clearTimeout(galleryRefreshTimer);
+    galleryRefreshTimer = setTimeout(loadGallery, 300);
+  }
+
+  function scheduleWorkdirRefresh(){
+    if (workdirRefreshTimer) clearTimeout(workdirRefreshTimer);
+    workdirRefreshTimer = setTimeout(loadWorkdirRoot, 300);
+  }
+
+  async function uploadGalleryFiles(fileList){
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    const root = getGalleryRoot();
+    if (!root){
+      setGalleryStatus('Folder not set.');
+      return;
+    }
+    const fd = new FormData();
+    fd.set('folder', root);
+    fd.set('exts', get(IDS.exts)?.value || '');
+    files.forEach(file => fd.append('files', file, file.name));
+    setGalleryStatus(`Uploading ${files.length} file(s)...`);
+    const res = await fetch('/api/tags/upload', { method: 'POST', body: fd });
+    let data = null;
+    try{ data = await res.json(); }catch(_){}
+    if (!res.ok || !data || !data.ok){
+      const err = (data && data.error) ? data.error : `HTTP ${res.status}`;
+      setGalleryStatus(`Upload failed: ${err}`);
+      return;
+    }
+    const parts = [];
+    if (data.saved && data.saved.length) parts.push(`Saved ${data.saved.length}`);
+    if (data.skipped && data.skipped.length) parts.push(`Skipped ${data.skipped.length}`);
+    if (data.errors && data.errors.length) parts.push(`Errors ${data.errors.length}`);
+    setGalleryStatus(parts.length ? parts.join(' | ') : 'Upload complete.');
+    await loadGallery();
+  }
+
+  function setGalleryZoom(value){
+    const img = get(GALLERY.modalImg);
+    if (!img) return;
+    const next = Math.max(0.2, Math.min(5, value));
+    galleryState.zoom = next;
+    img.style.transform = `scale(${next})`;
+    const label = get(GALLERY.zoomLabel);
+    if (label) label.textContent = `${Math.round(next * 100)}%`;
+  }
+
+  function openGalleryPreview(item){
+    const modalEl = get(GALLERY.modal);
+    const img = get(GALLERY.modalImg);
+    if (!modalEl || !img) return;
+    const root = galleryState.root || getGalleryRoot();
+    img.src = `/api/tags/image?folder=${encodeURIComponent(root)}&path=${encodeURIComponent(item.rel)}`;
+    img.alt = item.name || item.rel || 'image';
+    const name = get(GALLERY.modalName);
+    if (name) name.textContent = item.rel || item.name || '';
+    const tags = get(GALLERY.modalTags);
+    const ctx = {
+      removable: true,
+      folder: root,
+      rel: item.rel || '',
+      onRemoved: (updatedTags, info) => {
+        item.tags = Array.isArray(updatedTags) ? updatedTags : [];
+        if (info && info.removed && info.tag) updateTagVizCount(info.tag, -1);
+        fillGalleryTags(tags, item.tags || [], item.has_txt, 30, ctx);
+        renderGalleryItems();
+      }
+    };
+    fillGalleryTags(tags, item.tags || [], item.has_txt, 30, ctx);
+    setGalleryZoom(1);
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
+  }
+
+  function getWorkdirRoot(){
+    return stripTemp((get(IDS.folder)?.value||'').trim());
+  }
+
+  function setWorkdirStatus(msg){
+    const el = get(WORKDIR.status);
+    if (el) el.textContent = msg || '';
+  }
+
+  function getDragPayload(e){
+    let fileRel = e.dataTransfer.getData('application/x-bb-file') || '';
+    let dirRel = e.dataTransfer.getData('application/x-bb-dir') || '';
+    if (!fileRel && !dirRel){
+      const raw = e.dataTransfer.getData('text/plain') || '';
+      if (raw.startsWith('file:')) fileRel = raw.slice(5);
+      else if (raw.startsWith('dir:')) dirRel = raw.slice(4);
+    }
+    return { fileRel, dirRel };
+  }
+
+  function setWorkdirPath(root){
+    const el = get(WORKDIR.path);
+    if (el) el.textContent = root || '...';
+  }
+
+  function clearWorkdirSelection(){
+    const tree = get(WORKDIR.tree);
+    if (!tree) return;
+    tree.querySelectorAll('.workdir-row.is-selected').forEach(row=> row.classList.remove('is-selected'));
+    workdirState.selected = '';
+  }
+
+  function selectWorkdirRow(rel, row){
+    clearWorkdirSelection();
+    workdirState.selected = rel || '';
+    if (row) row.classList.add('is-selected');
+  }
+
+  async function fetchWorkdirDirs(rel){
+    const root = getWorkdirRoot();
+    if (!root) return { ok: false, error: 'Folder not set.' };
+    const res = await fetch('/api/tags/dirs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ folder: root, rel: rel || '', hide_temp: true })
+    });
+    let data = null;
+    try{ data = await res.json(); }catch(_){}
+    if (!res.ok || !data || !data.ok){
+      const err = (data && data.error) ? data.error : `HTTP ${res.status}`;
+      return { ok: false, error: err };
+    }
+    return data;
+  }
+
+  function buildWorkdirNode(item){
+    const wrap = document.createElement('div');
+
+    const row = document.createElement('div');
+    row.className = 'workdir-row';
+    row.dataset.rel = item.rel || '';
+    row.draggable = true;
+
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'workdir-toggle';
+    if (item.has_children){
+      toggle.textContent = workdirState.expanded.has(item.rel) ? 'v' : '>';
+    } else {
+      toggle.textContent = '';
+      toggle.classList.add('is-placeholder');
+      toggle.disabled = true;
+    }
+    row.appendChild(toggle);
+
+    const name = document.createElement('div');
+    name.className = 'workdir-name';
+    name.textContent = item.name || item.rel || '(root)';
+    row.appendChild(name);
+
+    const children = document.createElement('div');
+    children.className = 'workdir-children';
+    children.dataset.parentRel = item.rel || '';
+
+    toggle.addEventListener('click', async (e)=>{
+      e.stopPropagation();
+      if (!item.has_children) return;
+      const isOpen = workdirState.expanded.has(item.rel);
+      if (isOpen){
+        workdirState.expanded.delete(item.rel);
+        children.classList.remove('is-open');
+        toggle.textContent = '>';
+        return;
+      }
+      workdirState.expanded.add(item.rel);
+      toggle.textContent = 'v';
+      children.classList.add('is-open');
+      if (!children.dataset.loaded){
+        await loadWorkdirChildren(item.rel, children);
+      }
+    });
+
+    row.addEventListener('click', ()=> selectWorkdirRow(item.rel, row));
+    row.addEventListener('dragstart', (e)=>{
+      const rel = item.rel || '';
+      e.dataTransfer.setData('application/x-bb-dir', rel);
+      e.dataTransfer.setData('text/plain', `dir:${rel}`);
+      row.classList.add('is-dragging');
+    });
+    row.addEventListener('dragend', ()=>{
+      row.classList.remove('is-dragging');
+      document.querySelectorAll('.workdir-row.is-drop').forEach(el=> el.classList.remove('is-drop'));
+    });
+    row.addEventListener('dragover', (e)=>{
+      e.preventDefault();
+      row.classList.add('is-drop');
+      e.dataTransfer.dropEffect = 'move';
+    });
+    row.addEventListener('dragleave', ()=> row.classList.remove('is-drop'));
+    row.addEventListener('drop', (e)=>{
+      e.preventDefault();
+      row.classList.remove('is-drop');
+      const payload = getDragPayload(e);
+      if (payload.fileRel){
+        moveFileToFolder(payload.fileRel, item.rel || '');
+        return;
+      }
+      const srcRel = payload.dirRel;
+      if (!srcRel || srcRel === item.rel) return;
+      if (item.rel && srcRel.startsWith(item.rel + '/')) return;
+      moveWorkdirFolder(srcRel, item.rel || '');
+    });
+
+    wrap.appendChild(row);
+    wrap.appendChild(children);
+    return { wrap, row, children };
+  }
+
+  async function loadWorkdirChildren(rel, container){
+    const data = await fetchWorkdirDirs(rel || '');
+    if (!data.ok){
+      setWorkdirStatus(data.error || 'Load failed.');
+      return;
+    }
+    const dirs = data.dirs || [];
+    container.innerHTML = '';
+    if (!dirs.length){
+      const empty = document.createElement('div');
+      empty.className = 'workdir-empty';
+      empty.textContent = 'No subfolders.';
+      container.appendChild(empty);
+      container.dataset.loaded = '1';
+      return;
+    }
+    const frag = document.createDocumentFragment();
+    dirs.forEach(item=>{
+      const node = buildWorkdirNode(item);
+      frag.appendChild(node.wrap);
+      if (workdirState.expanded.has(item.rel) && item.has_children){
+        node.children.classList.add('is-open');
+        loadWorkdirChildren(item.rel, node.children);
+      }
+    });
+    container.appendChild(frag);
+    container.dataset.loaded = '1';
+  }
+
+  async function loadWorkdirRoot(){
+    const tree = get(WORKDIR.tree);
+    const root = getWorkdirRoot();
+    const prevRoot = workdirState.root;
+    workdirState.root = root;
+    if (prevRoot && prevRoot !== root){
+      workdirState.expanded.clear();
+      workdirState.selected = '';
+    }
+    setWorkdirPath(root);
+    if (!tree) return;
+    tree.innerHTML = '';
+    clearWorkdirSelection();
+    if (!root){
+      setWorkdirStatus('Folder not set.');
+      return;
+    }
+    setWorkdirStatus('Loading...');
+    const data = await fetchWorkdirDirs('');
+    if (!data.ok){
+      setWorkdirStatus(data.error || 'Load failed.');
+      return;
+    }
+    const dirs = data.dirs || [];
+    if (!dirs.length){
+      const empty = document.createElement('div');
+      empty.className = 'workdir-empty';
+      empty.textContent = 'No subfolders.';
+      tree.appendChild(empty);
+      setWorkdirStatus('');
+      return;
+    }
+    const frag = document.createDocumentFragment();
+    dirs.forEach(item=>{
+      const node = buildWorkdirNode(item);
+      frag.appendChild(node.wrap);
+      if (workdirState.expanded.has(item.rel) && item.has_children){
+        node.children.classList.add('is-open');
+        loadWorkdirChildren(item.rel, node.children);
+      }
+    });
+    tree.appendChild(frag);
+    setWorkdirStatus('');
+  }
+
+  async function createWorkdirFolder(){
+    const root = getWorkdirRoot();
+    const input = get(WORKDIR.newName);
+    const raw = (input?.value || '').trim();
+    if (!root){
+      setWorkdirStatus('Folder not set.');
+      return;
+    }
+    if (!raw){
+      setWorkdirStatus('Folder name is required.');
+      return;
+    }
+    if (raw.includes('/') || raw.includes('\\')){
+      setWorkdirStatus('Folder name cannot contain slashes.');
+      return;
+    }
+    const parent = workdirState.selected || '';
+    const rel = parent ? `${parent}/${raw}` : raw;
+    setWorkdirStatus('Creating folder...');
+    const res = await fetch('/api/tags/mkdir', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ folder: root, rel })
+    });
+    let data = null;
+    try{ data = await res.json(); }catch(_){}
+    if (!res.ok || !data || !data.ok){
+      const err = (data && data.error) ? data.error : `HTTP ${res.status}`;
+      setWorkdirStatus(`Create failed: ${err}`);
+      return;
+    }
+    if (input) input.value = '';
+    setWorkdirStatus('Folder created.');
+    await loadWorkdirRoot();
+  }
+
+  async function deleteWorkdirFolder(){
+    const root = getWorkdirRoot();
+    const rel = workdirState.selected;
+    if (!root){
+      setWorkdirStatus('Folder not set.');
+      return;
+    }
+    if (!rel){
+      setWorkdirStatus('Select a folder to delete.');
+      return;
+    }
+    const confirmMsg = `Delete folder "${rel}"?`;
+    if (!confirm(confirmMsg)) return;
+    setWorkdirStatus('Deleting folder...');
+    const res = await fetch('/api/tags/rmdir', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ folder: root, rel, force: false })
+    });
+    let data = null;
+    try{ data = await res.json(); }catch(_){}
+    if (!res.ok || !data || !data.ok){
+      if (data && data.needs_force){
+        const ok = confirm('Folder not empty. Delete recursively?');
+        if (!ok) return;
+        const forceRes = await fetch('/api/tags/rmdir', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ folder: root, rel, force: true })
+        });
+        let forceData = null;
+        try{ forceData = await forceRes.json(); }catch(_){}
+        if (!forceRes.ok || !forceData || !forceData.ok){
+          const err = (forceData && forceData.error) ? forceData.error : `HTTP ${forceRes.status}`;
+          setWorkdirStatus(`Delete failed: ${err}`);
+          return;
+        }
+      } else {
+        const err = (data && data.error) ? data.error : `HTTP ${res.status}`;
+        setWorkdirStatus(`Delete failed: ${err}`);
+        return;
+      }
+    }
+    setWorkdirStatus('Folder deleted.');
+    clearWorkdirSelection();
+    await loadWorkdirRoot();
+  }
+
+  async function moveFileToFolder(fileRel, dstRel){
+    const root = getWorkdirRoot();
+    if (!root || !fileRel) return;
+    const cleaned = (fileRel || '').replace(/^_temp[\\/]/i, '');
+    const srcRel = `_temp/${cleaned}`.replace(/\\/g, '/');
+    setWorkdirStatus('Moving file...');
+    const res = await fetch('/api/tags/move-file', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ folder: root, src: srcRel, dst: dstRel || '' })
+    });
+    let data = null;
+    try{ data = await res.json(); }catch(_){}
+    if (!res.ok || !data || !data.ok){
+      const err = (data && data.error) ? data.error : `HTTP ${res.status}`;
+      setWorkdirStatus(`Move failed: ${err}`);
+      return;
+    }
+    const destRel = data.rel || (dstRel ? `${dstRel}/${cleaned}` : cleaned);
+    appendTagsLog(`Moved ${srcRel} -> ${destRel}`);
+    if (data.warnings && data.warnings.length){
+      data.warnings.forEach(warn => appendTagsLog(`[WARN] ${warn}`));
+    }
+    setWorkdirStatus(data.moved === false ? 'No move needed.' : 'File moved.');
+    await loadGallery();
+    await loadWorkdirRoot();
+  }
+
+  async function moveWorkdirFolder(srcRel, dstRel){
+    const root = getWorkdirRoot();
+    if (!root || !srcRel) return;
+    if (dstRel && (dstRel === srcRel || dstRel.startsWith(srcRel + '/'))){
+      setWorkdirStatus('Cannot move into itself.');
+      return;
+    }
+    setWorkdirStatus('Moving folder...');
+    const res = await fetch('/api/tags/move', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ folder: root, src: srcRel, dst: dstRel || '' })
+    });
+    let data = null;
+    try{ data = await res.json(); }catch(_){}
+    if (!res.ok || !data || !data.ok){
+      const err = (data && data.error) ? data.error : `HTTP ${res.status}`;
+      setWorkdirStatus(`Move failed: ${err}`);
+      return;
+    }
+    setWorkdirStatus(data.moved === false ? 'No move needed.' : 'Folder moved.');
+    await loadWorkdirRoot();
+  }
 
   function updateTagSyncStatus(){
     const el = get(TAGVIZ.syncStatus);
@@ -509,7 +1398,7 @@
   }
 
   function updateTagWarningsFromInput(){
-    const mode = get(IDS.mode)?.value || 'insert';
+    const mode = getModeOrDefault();
     const input = get(IDS.tags);
     const raw = input ? input.value : '';
     const existing = new Set((tagVizState.items || []).map(it => it.tag));
@@ -544,7 +1433,7 @@
     if (!tagsSyncEnabled && !force) return;
     const input = get(IDS.tags);
     if(!input) return;
-    const text = buildTagsFromSelection(get(IDS.mode)?.value || 'insert');
+    const text = buildTagsFromSelection(getModeOrDefault());
     if (!text){
       clearTagsIfSynced();
       updateTagSyncStatus();
@@ -586,7 +1475,27 @@
     if (tagVizState.selected.size) parts.push(`${tagVizState.selected.size} selected`);
     if (tagVizState.meta.tag_files) parts.push(`${tagVizState.meta.tag_files} tag files`);
     if (tagVizState.meta.total_images) parts.push(`${tagVizState.meta.total_images} images`);
+    if (tagVizState.tempTags && tagVizState.tempTags.size) parts.push(`${tagVizState.tempTags.size} in _temp`);
     el.textContent = parts.join(' | ');
+  }
+
+  function updateTagVizCount(tag, delta){
+    if (!tag || !tagVizState.items || !tagVizState.items.length) return;
+    const idx = tagVizState.items.findIndex(it => it.tag === tag);
+    if (idx < 0) return;
+    const next = (tagVizState.items[idx].count || 0) + delta;
+    let didSync = false;
+    if (next <= 0){
+      tagVizState.items.splice(idx, 1);
+      if (tagVizState.selected.delete(tag) && tagsSyncEnabled){
+        syncTagsFromSelection(true);
+        didSync = true;
+      }
+    } else {
+      tagVizState.items[idx].count = next;
+    }
+    if (!didSync) renderTagViz();
+    updateTagHint();
   }
 
   function renderTagViz(){
@@ -629,7 +1538,8 @@
       btn.type = 'button';
       const isSelected = tagVizState.selected.has(item.tag);
       const isWarn = tagVizState.warnTags && tagVizState.warnTags.has(item.tag);
-      btn.className = 'tag-chip' + (isSelected ? ' is-selected' : '') + (isWarn ? ' is-warning' : '');
+      const isTemp = tagVizState.tempTags && tagVizState.tempTags.has(item.tag);
+      btn.className = 'tag-chip' + (isSelected ? ' is-selected' : '') + (isWarn ? ' is-warning' : '') + (isTemp ? ' is-temp' : '');
       btn.dataset.tag = item.tag;
       if (isWarn) btn.title = 'Already exists in dataset';
 
@@ -652,13 +1562,11 @@
           btn.classList.add('is-selected');
         }
         updateTagVizStats();
-        const tagsInput = get(IDS.tags);
-        if (!tagsSyncEnabled && tagsInput && !tagsInput.value.trim()){
-          tagsSyncEnabled = true;
-        }
-        syncTagsFromSelection();
+        tagsSyncEnabled = true;
+        syncTagsFromSelection(true);
         updateTagSyncStatus();
         updateTagHint();
+        renderGalleryItems();
       });
       frag.appendChild(btn);
     });
@@ -693,14 +1601,14 @@
   }
 
   async function scanTagViz(){
-    const info = getEffectiveFolders();
-    if (!info.scan){
+    const root = stripTemp((get(IDS.folder)?.value||'').trim());
+    if (!root){
       setTagVizStatus('Folder not set.');
       return;
     }
     setTagVizStatus('Scanning...');
-    let scanFolder = info.scan;
-    let result = await fetchTagScan(scanFolder, info.scanRecursive);
+    let scanFolder = root;
+    let result = await fetchTagScan(scanFolder, true);
 
     if (!result.ok){
       setTagVizStatus(result.error || 'Scan failed.');
@@ -713,6 +1621,15 @@
       tag_files: data.tag_files || 0,
       total_images: data.total_images || 0
     };
+    const tempFolder = defaultTempFor(root);
+    tagVizState.tempTags = new Set();
+    if (tempFolder){
+      const tempResult = await fetchTagScan(tempFolder, true);
+      if (tempResult.ok && tempResult.data){
+        const tempItems = tempResult.data.tags || [];
+        tagVizState.tempTags = new Set(tempItems.map(it => it.tag));
+      }
+    }
     tagVizState.selected.clear();
     clearTagsIfSynced();
     if (get(TAGVIZ.path)) get(TAGVIZ.path).textContent = scanFolder || '...';
@@ -720,6 +1637,7 @@
     updateTagHint();
     clearWarning();
     setTagVizStatus('Scan complete.');
+    renderGalleryItems();
   }
 
 
@@ -729,6 +1647,7 @@
     renderTagViz();
     updateTagHint();
     setTagVizStatus('Selection cleared.');
+    renderGalleryItems();
   }
 
   function syncSelectionToTags(){
@@ -749,10 +1668,8 @@
   const LSKEY = 'bb.tags.';
   const FIELDS = [
     ['folder', IDS.folder],
-    ['mode', IDS.mode],
     ['exts', IDS.exts],
     ['tags', IDS.tags],
-    ['edit_target', IDS.editTarget],
     ['backup', IDS.backup],
   ];
   function loadSaved(){
@@ -761,9 +1678,11 @@
       const sv = localStorage.getItem(LSKEY+k);
       if (sv==null) return;
       if (el.type === 'checkbox') el.checked = (sv === '1');
-      else if (k === 'edit_target' && sv === 'auto') el.value = 'recursive';
       else el.value = sv;
     });
+    const savedMode = localStorage.getItem(MODE_STORAGE_KEY) || localStorage.getItem(LSKEY + 'mode') || '';
+    if (savedMode) setMode(savedMode, false);
+    else setMode('', false);
   }
   function hookSavers(){
     FIELDS.forEach(([k,id])=>{
@@ -779,10 +1698,12 @@
   }
   function clearSaved(){
     FIELDS.forEach(([k])=> localStorage.removeItem(LSKEY+k));
+    localStorage.removeItem(MODE_STORAGE_KEY);
+    localStorage.removeItem(LSKEY + 'mode');
     get(IDS.tags).value = '';
     get(IDS.exts).value = '.jpg,.jpeg,.png,.webp';
-    if (get(IDS.editTarget)) get(IDS.editTarget).value = 'recursive';
     get(IDS.backup).checked = false;
+    setMode('', false);
     tagsSyncEnabled = true;
     updateTagSyncStatus();
     updateTagHint();
@@ -803,6 +1724,14 @@
       pre.textContent = '';
     }
   }
+
+  function appendTagsLog(line){
+    const wrap = get(IDS.logWrap), pre = get(IDS.logPre);
+    if (!wrap || !pre || !line) return;
+    const current = pre.textContent ? pre.textContent.replace(/\s+$/,'') + '\n' : '';
+    wrap.classList.remove('d-none');
+    pre.textContent = current + line;
+  }
   async function postForm(fd){
     const res = await fetch(window.location.href, {
       method: 'POST',
@@ -815,6 +1744,22 @@
     return data || { ok:true, log:'' };
   }
 
+  async function apiRemoveTag(folder, rel, tag, backup=true){
+    const payload = { folder, rel, tag, backup: !!backup };
+    const res = await fetch('/api/tags/tag-remove', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    let data = null;
+    try{ data = await res.json(); }catch(_){}
+    if (!res.ok || !data || !data.ok){
+      const err = (data && data.error) ? data.error : `HTTP ${res.status}`;
+      return { ok: false, error: err };
+    }
+    return { ok: true, data };
+  }
+
   // Build proper params:
   // - always send base folder; server derives temp path from folder
   function finalizeFormDataForMode(fd){
@@ -825,59 +1770,31 @@
     fd.set('folder', root);
   }
 
-  async function stageToTemp(form){
-    const info = getEffectiveFolders();
-    if (info.editTarget !== 'recursive'){
-      showWarning('Staging is only available when Edit target is set to recursive.', { level: 'error' });
-      return;
-    }
-    if (info.mode === 'move' || info.mode === 'undo'){
-      showWarning('Staging is not available for Move/Undo modes.', { level: 'error' });
-      return;
-    }
-    const tagsInput = get(IDS.tags);
-    const raw = (tagsInput?.value || '').trim();
-    if ((info.mode === 'insert' || info.mode === 'delete') && !raw && !tagVizState.selected.size){
-      showWarning('Provide tags first (or select tags from Tag Explorer) before staging.', { level: 'error' });
-      return;
-    }
-    if (info.mode === 'replace' && !raw.includes('->') && !tagVizState.selected.size){
-      showWarning('Replace staging needs mappings like "old->new".', { level: 'error' });
-      return;
-    }
-
-    if (tagsInput && !tagsInput.value.trim() && tagVizState.selected.size) {
-      syncTagsFromSelection(true);
-    } else {
-      syncTagsFromSelection();
-    }
-
-    showStatus('Staging to _temp...');
-    const fd = new FormData(form);
-    fd.set('stage_only', '1');
-    finalizeFormDataForMode(fd);
-    try{
-      const data = await postForm(fd);
-      showStatus(data.ok ? 'Staging done.' : 'Staging finished with issues.');
-      showLog(data.log || '');
-      if (data.ok) scanTagViz();
-    }catch(err){
-      console.error(err);
-      showStatus('Staging failed. See console / server log.');
-    }
-  }
-
   document.addEventListener('DOMContentLoaded', ()=>{
     const form = get('tags-form');
 
     loadSaved();
     hookSavers();
+    document.querySelectorAll('.mode-btn').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const mode = btn.dataset.mode || '';
+        setMode(mode, true);
+      });
+    });
     updateModeHelp();
     refreshTempHints();
     renderTagViz();
     setTagVizStatus('');
     updateTagSyncStatus();
     updateTagHint();
+    try{
+      uiState.sidebarExpanded = localStorage.getItem('bb.tags.sidebar.expanded') === '1';
+    }catch(_){}
+    applySidebarExpanded(uiState.sidebarExpanded);
+    setGalleryPath(getGalleryRoot());
+    loadGallery();
+    setWorkdirPath(getWorkdirRoot());
+    loadWorkdirRoot();
 
     get(TAGVIZ.scan)?.addEventListener('click', scanTagViz);
     get(TAGVIZ.sync)?.addEventListener('click', syncSelectionToTags);
@@ -885,21 +1802,84 @@
     get(TAGVIZ.filter)?.addEventListener('input', renderTagViz);
     get(TAGVIZ.sort)?.addEventListener('change', renderTagViz);
     get(TAGVIZ.min)?.addEventListener('input', renderTagViz);
+    get(GALLERY.toggle)?.addEventListener('click', toggleSidebarExpanded);
+    get(GALLERY.refresh)?.addEventListener('click', loadGallery);
+    get(GALLERY.recursive)?.addEventListener('change', loadGallery);
+    get(GALLERY.limit)?.addEventListener('change', loadGallery);
+    get(IDS.exts)?.addEventListener('change', scheduleGalleryRefresh);
+    get(GALLERY.drop)?.addEventListener('click', ()=> get(GALLERY.input)?.click());
+    get(GALLERY.input)?.addEventListener('change', (e)=>{
+      uploadGalleryFiles(e.target.files);
+      e.target.value = '';
+    });
+    get(GALLERY.drop)?.addEventListener('dragover', (e)=>{
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      get(GALLERY.drop)?.classList.add('is-dragging');
+    });
+    get(GALLERY.drop)?.addEventListener('dragleave', ()=>{
+      get(GALLERY.drop)?.classList.remove('is-dragging');
+    });
+    get(GALLERY.drop)?.addEventListener('drop', (e)=>{
+      e.preventDefault();
+      get(GALLERY.drop)?.classList.remove('is-dragging');
+      uploadGalleryFiles(e.dataTransfer.files);
+    });
+    get(GALLERY.zoomIn)?.addEventListener('click', ()=> setGalleryZoom(galleryState.zoom + 0.2));
+    get(GALLERY.zoomOut)?.addEventListener('click', ()=> setGalleryZoom(galleryState.zoom - 0.2));
+    get(GALLERY.zoomReset)?.addEventListener('click', ()=> setGalleryZoom(1));
+    get(GALLERY.modalImg)?.addEventListener('wheel', (e)=>{
+      e.preventDefault();
+      const delta = e.deltaY < 0 ? 0.15 : -0.15;
+      setGalleryZoom(galleryState.zoom + delta);
+    }, { passive: false });
+    get(WORKDIR.refresh)?.addEventListener('click', loadWorkdirRoot);
+    get(WORKDIR.create)?.addEventListener('click', createWorkdirFolder);
+    get(WORKDIR.del)?.addEventListener('click', deleteWorkdirFolder);
+    get(WORKDIR.newName)?.addEventListener('keydown', (e)=>{
+      if (e.key === 'Enter'){
+        e.preventDefault();
+        createWorkdirFolder();
+      }
+    });
+    get(WORKDIR.rootDrop)?.addEventListener('dragover', (e)=>{
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      get(WORKDIR.rootDrop)?.classList.add('is-active');
+    });
+    get(WORKDIR.rootDrop)?.addEventListener('dragleave', ()=>{
+      get(WORKDIR.rootDrop)?.classList.remove('is-active');
+    });
+    get(WORKDIR.rootDrop)?.addEventListener('drop', (e)=>{
+      e.preventDefault();
+      get(WORKDIR.rootDrop)?.classList.remove('is-active');
+      const payload = getDragPayload(e);
+      if (payload.fileRel){
+        moveFileToFolder(payload.fileRel, '');
+        return;
+      }
+      const srcRel = payload.dirRel;
+      if (!srcRel) return;
+      moveWorkdirFolder(srcRel, '');
+    });
     get(IDS.tags)?.addEventListener('input', ()=>{
       if (tagsSyncLocked) return;
-      if (tagVizState.selected.size && tagsSyncEnabled){
+      const raw = (get(IDS.tags)?.value || '').trim();
+      if (raw && tagsSyncEnabled){
         tagsSyncEnabled = false;
         updateTagSyncStatus();
         updateTagHint();
       }
       updateTagWarningsFromInput();
     });
-    get('btn-stage')?.addEventListener('click', ()=>{ stageToTemp(form); });
-
     // Main Run → AJAX (no refresh)
     form.addEventListener('submit', async (e)=>{
       e.preventDefault();
-      const mode = get(IDS.mode)?.value || 'insert';
+      const mode = getModeValue();
+      if (!mode){
+        showWarning('Select a mode before running.', { level: 'error' });
+        return;
+      }
       const raw = get(IDS.tags)?.value || '';
       const parsedReplace = mode === 'replace' ? parseReplaceMappings(raw) : { newTags: [], invalid: [] };
       if (mode === 'replace' && parsedReplace.invalid.length){
@@ -959,14 +1939,17 @@
         const data = await postForm(fd);
         showStatus(data.ok ? 'Done.' : 'Finished with issues.');
         showLog(data.log || '');
-        if (data.ok) scanTagViz();
+        if (data.ok){
+          scanTagViz();
+          loadGallery();
+        }
       }catch(err){
         console.error(err);
         showStatus('Failed. See console / server log.');
       }
     });
 
-    // Undo button → force mode=undo and AJAX
+    // Undo button → restore from _temp to root
     get('btn-undo')?.addEventListener('click', async ()=>{
       const fd = new FormData(form);
       fd.set('mode','undo');
@@ -976,11 +1959,10 @@
         const data = await postForm(fd);
         showStatus(data.ok ? 'Undo done.' : 'Undo finished with issues.');
         showLog(data.log || '');
-        if (data.ok) scanTagViz();
-        // reflect current mode in UI/persistence
-        get(IDS.mode).value = 'undo';
-        localStorage.setItem(LSKEY+'mode','undo');
-        updateModeHelp();
+        if (data.ok){
+          scanTagViz();
+          loadGallery();
+        }
       }catch(err){
         console.error(err);
         showStatus('Undo failed.');
@@ -996,10 +1978,21 @@
 
     // Live previews
     get(IDS.mode)?.addEventListener('change', handleModeChange);
-    const onFolderChange = ()=>{ refreshTempHints(); };
+    const onFolderChange = ()=>{
+      const input = get(IDS.folder);
+      if (input){
+        const raw = (input.value || '').trim();
+        const cleaned = stripTemp(raw);
+        if (cleaned && cleaned !== raw){
+          input.value = cleaned;
+        }
+      }
+      refreshTempHints();
+      scheduleGalleryRefresh();
+      scheduleWorkdirRefresh();
+    };
     get(IDS.folder)?.addEventListener('input', onFolderChange);
     get(IDS.folder)?.addEventListener('change', onFolderChange);
-    get(IDS.editTarget)?.addEventListener('change', ()=>{ refreshTempHints(); updateTagHint(); });
     get(IDS.tags)?.addEventListener('focus', clearWarning);
   });
 })();

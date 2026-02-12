@@ -75,6 +75,66 @@ def scan_tags(folder: Path, exts: List[str], recursive: bool = False) -> dict:
         "tags": items,
     }
 
+def list_images_with_tags(folder: Path, exts: List[str], recursive: bool = False, limit: int = 80) -> dict:
+    if not folder or not folder.exists() or not folder.is_dir():
+        return {"ok": False, "error": f"Folder not found: {folder}"}
+
+    exclude_dir = None
+    if recursive and folder.name.lower() != "_temp":
+        temp = folder / "_temp"
+        if temp.exists():
+            exclude_dir = temp
+    images = _list_images(folder, exts, recursive=recursive, exclude_dir=exclude_dir)
+    total = len(images)
+    if limit and limit > 0:
+        images = images[:limit]
+
+    items = []
+    for img in images:
+        txt = img.with_suffix(".txt")
+        tags: List[str] = []
+        has_txt = False
+        if txt.exists():
+            has_txt = True
+            try:
+                tags = split_tags(txt.read_text(encoding="utf-8"))
+            except Exception:
+                tags = []
+        rel = img.relative_to(folder).as_posix()
+        items.append(
+            {
+                "name": img.name,
+                "rel": rel,
+                "tags": tags,
+                "has_txt": has_txt,
+            }
+        )
+
+    return {"ok": True, "folder": str(folder), "total": total, "images": items}
+
+def remove_tag(txt_path: Path, tag: str, backup: bool = True) -> dict:
+    if not txt_path or not txt_path.exists() or not txt_path.is_file():
+        return {"ok": False, "error": "Missing .txt"}
+    try:
+        src = txt_path.read_text(encoding="utf-8")
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+    taglist = split_tags(src)
+    newtags = [t for t in taglist if t != tag]
+    removed = len(newtags) != len(taglist)
+    if not removed:
+        return {"ok": True, "removed": False, "tags": taglist}
+    if backup:
+        try:
+            txt_path.with_suffix(txt_path.suffix + ".bak").write_text(src, encoding="utf-8")
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+    try:
+        txt_path.write_text(join_tags(newtags), encoding="utf-8")
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+    return {"ok": True, "removed": True, "tags": newtags}
+
 def handle(form, ctx) -> Tuple[str, str]:
     active_tab = "tags"
 
@@ -86,7 +146,6 @@ def handle(form, ctx) -> Tuple[str, str]:
     exts = [e.strip().lower() for e in form.get("exts",".jpg,.jpeg,.png,.webp").split(",") if e.strip()]
     backup = bool(form.get("backup"))
     stage_only = str(form.get("stage_only", "")).strip().lower() in {"1", "true", "yes", "on"}
-    temp_dir_input = (form.get("temp_dir","") or "").strip()
 
     lines: List[str] = []
 
@@ -97,12 +156,8 @@ def handle(form, ctx) -> Tuple[str, str]:
         return active_tab, log_join(lines)
 
     base_folder = raw_folder.parent if raw_folder.name.lower() == "_temp" else raw_folder
-    temp_folder = readable_path(temp_dir_input) if temp_dir_input else (base_folder / "_temp")
-
-    if edit_target == "auto":
-        edit_target = "recursive"
-    if edit_target not in {"temp", "base", "recursive"}:
-        edit_target = "recursive"
+    temp_folder = base_folder / "_temp"
+    edit_target = "recursive"
 
     def _parse_tag_list(raw: str) -> List[str]:
         return [t.strip() for t in (raw or "").split(",") if t.strip()]
@@ -143,80 +198,16 @@ def handle(form, ctx) -> Tuple[str, str]:
             return active_tab, log_join(lines)
         scan_folder = temp_folder
     elif mode in EDIT_MODES:
-        if edit_target == "base":
-            if not base_folder.exists() or not base_folder.is_dir():
-                lines.append(f"Base folder not found: {base_folder}")
-                return active_tab, log_join(lines)
-            scan_folder = base_folder
-        elif edit_target == "recursive":
-            if not base_folder.exists() or not base_folder.is_dir():
-                lines.append(f"Base folder not found: {base_folder}")
-                return active_tab, log_join(lines)
-            do_stage = stage_only or mode in {"delete", "replace"}
-            if do_stage:
-                temp_folder.mkdir(parents=True, exist_ok=True)
-
-                if mode == "insert" and not add:
-                    lines.append("Recursive staging skipped: no tags provided for insert.")
-                    return active_tab, log_join(lines)
-                if mode == "delete" and not deltags:
-                    lines.append("Recursive staging skipped: no tags provided for delete.")
-                    return active_tab, log_join(lines)
-                if mode == "replace" and not mapping:
-                    lines.append("Recursive staging skipped: no mappings provided for replace.")
-                    return active_tab, log_join(lines)
-
-                staged_images: List[Path] = []
-                candidates = _list_images(base_folder, exts, recursive=True, exclude_dir=temp_folder)
-                if not candidates:
-                    lines.append(f"No image files with {exts} found in: {base_folder}")
-                    return active_tab, log_join(lines)
-
-                for img in candidates:
-                    txt = img.with_suffix(".txt")
-                    if not txt.exists():
-                        continue
-                    src = txt.read_text(encoding="utf-8")
-                    taglist = split_tags(src)
-
-                    should_move = False
-                    if mode == "insert":
-                        should_move = any(t not in taglist for t in add)
-                    elif mode == "delete":
-                        should_move = any(t in taglist for t in deltags)
-                    elif mode == "replace":
-                        should_move = any(t in taglist for t in mapping.keys())
-                    elif mode == "dedup":
-                        should_move = len(taglist) != len(set(taglist))
-
-                    if should_move:
-                        stem, ext = img.stem, img.suffix
-                        dest_img = temp_folder / img.name
-                        dest_txt = temp_folder / txt.name
-                        bump = 1
-                        while dest_img.exists() or dest_txt.exists():
-                            new_stem = f"{stem}_{bump}"
-                            dest_img = temp_folder / f"{new_stem}{ext}"
-                            dest_txt = temp_folder / f"{new_stem}.txt"
-                            bump += 1
-                        shutil.move(str(img), str(dest_img))
-                        shutil.move(str(txt), str(dest_txt))
-                        staged_images.append(dest_img)
-                        rel = img.relative_to(base_folder)
-                        lines.append(f"{rel}: staged to {temp_folder}")
-
-                lines.append(f"Recursive staging: moved {len(staged_images)} file(s) to {temp_folder}.")
-                if stage_only:
-                    return active_tab, log_join(lines)
-
-            if not temp_folder.exists() or not temp_folder.is_dir():
-                lines.append(f"Temp folder not found: {temp_folder}")
-                return active_tab, log_join(lines)
-            scan_folder = temp_folder
-        else:
-            # Edit inside temp; create it if missing so we don't hard fail
-            temp_folder.mkdir(parents=True, exist_ok=True)
-            scan_folder = temp_folder
+        if not base_folder.exists() or not base_folder.is_dir():
+            lines.append(f"Base folder not found: {base_folder}")
+            return active_tab, log_join(lines)
+        if stage_only:
+            lines.append("Stage-only is not supported for edit modes. Use Move mode to populate _temp.")
+            return active_tab, log_join(lines)
+        if not temp_folder.exists() or not temp_folder.is_dir():
+            lines.append(f"Temp folder not found: {temp_folder}")
+            return active_tab, log_join(lines)
+        scan_folder = temp_folder
     else:
         lines.append(f"Unknown mode: {mode}")
         return active_tab, log_join(lines)
@@ -291,6 +282,15 @@ def handle(form, ctx) -> Tuple[str, str]:
 
     # ---------- EDIT MODES (insert/delete/replace/dedup) ----------
     if mode in EDIT_MODES:
+        if mode == "insert" and not add:
+            lines.append("Insert skipped: no tags provided.")
+            return active_tab, log_join(lines)
+        if mode == "delete" and not deltags:
+            lines.append("Delete skipped: no tags provided.")
+            return active_tab, log_join(lines)
+        if mode == "replace" and not mapping:
+            lines.append("Replace skipped: no mappings provided.")
+            return active_tab, log_join(lines)
         images = _list_images(scan_folder, exts)
     if not images:
         lines.append(f"No image files with {exts} found in: {scan_folder}")

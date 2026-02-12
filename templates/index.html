@@ -19,10 +19,22 @@
   <div class="tab-content">
     <div class="tab-pane fade {{ 'show active' if tab=='webp' }}" id="tab-webp">
       {% include "webp_to_png.html" %}
+      {% if log and tab=='webp' %}
+        <div class="card p-3 mt-3">
+          <h5>Log</h5>
+          <pre class="monospace">{{ log }}</pre>
+        </div>
+      {% endif %}
     </div>
 
     <div class="tab-pane fade {{ 'show active' if tab=='batch' }}" id="tab-batch">
       {% include "batch_adjust.html" %}
+      {% if log and tab=='batch' %}
+        <div class="card p-3 mt-3">
+          <h5>Log</h5>
+          <pre class="monospace">{{ log }}</pre>
+        </div>
+      {% endif %}
     </div>
 
     <div class="tab-pane fade {{ 'show active' if tab=='tags' }}" id="tab-tags">
@@ -31,37 +43,73 @@
 
     <div class="tab-pane fade {{ 'show active' if tab=='offline_tagger' }}" id="tab-offline-tagger">
       {% include "offline_tagger.html" %}
+      {% if log and tab=='offline_tagger' %}
+        <div class="card p-3 mt-3">
+          <h5>Log</h5>
+          <pre class="monospace">{{ log }}</pre>
+        </div>
+      {% endif %}
     </div>
 
     <div class="tab-pane fade {{ 'show active' if tab=='normalize' }}" id="tab-normalize">
       {% include "normalize_dataset.html" %}
+      {% if log and tab=='normalize' %}
+        <div class="card p-3 mt-3">
+          <h5>Log</h5>
+          <pre class="monospace">{{ log }}</pre>
+        </div>
+      {% endif %}
     </div>
 
     <div class="tab-pane fade {{ 'show active' if tab=='combine' }}" id="tab-combine">
       {% include "combine_datasets.html" %}
+      {% if log and tab=='combine' %}
+        <div class="card p-3 mt-3">
+          <h5>Log</h5>
+          <pre class="monospace">{{ log }}</pre>
+        </div>
+      {% endif %}
     </div>
     
     <div class="tab-pane fade {{ 'show active' if tab=='rename' }}" id="tab-rename">
       {% include "group_renamer.html" %}
+      {% if log and tab=='rename' %}
+        <div class="card p-3 mt-3">
+          <h5>Log</h5>
+          <pre class="monospace">{{ log }}</pre>
+        </div>
+      {% endif %}
     </div>
 
     <div class="tab-pane fade {{ 'show active' if tab=='merge' }}" id="tab-merge">
       {% include "merge_groups.html" %}
+      {% if log and tab=='merge' %}
+        <div class="card p-3 mt-3">
+          <h5>Log</h5>
+          <pre class="monospace">{{ log }}</pre>
+        </div>
+      {% endif %}
     </div>
 
     <div class="tab-pane fade {{ 'show active' if tab=='webtoon' }}" id="tab-webtoon">
       {% include "webtoon_splitter.html" %}
+      {% if log and tab=='webtoon' %}
+        <div class="card p-3 mt-3">
+          <h5>Log</h5>
+          <pre class="monospace">{{ log }}</pre>
+        </div>
+      {% endif %}
     </div>
 
     <div class="tab-pane fade {{ 'show active' if tab=='pipeline' }}" id="tab-pipeline">
       {% include "pipeline.html" %}
+      {% if log and tab=='pipeline' %}
+        <div class="card p-3 mt-3">
+          <h5>Log</h5>
+          <pre class="monospace">{{ log }}</pre>
+        </div>
+      {% endif %}
     </div>
   </div>
 
-  {% if log %}
-    <div class="card p-3 mt-3">
-      <h5>Log</h5>
-      <pre class="monospace">{{ log }}</pre>
-    </div>
-  {% endif %}
 {% endblock %}

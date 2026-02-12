@@ -165,20 +165,26 @@
       summary: 'Auto-tag images with the offline model.',
       defaults: {
         model_id: 'SmilingWolf/wd-swinv2-tagger-v3',
-        device: 'auto',
         batch_size: 4,
+        threshold_mode: 'mcut',
         general_threshold: 0.35,
-        character_threshold: 0.85,
-        max_tags: 0,
+        character_threshold: 0.75,
         write_mode: 'append',
-        include_character: false,
-        include_rating: true,
-        replace_underscore: true,
-        skip_empty: true,
-        local_only: false,
+        include_character: true,
+        include_rating: false,
         preview_only: false,
-        preview_limit: 5,
-        limit: 0
+        preview_limit: 20,
+        limit: 0,
+        trigger_tag: '',
+        exclude_tags: '',
+        max_general_tags: 0,
+        max_character_tags: 0,
+        character_topk: 0,
+        dedupe: true,
+        sort_tags: true,
+        keep_existing_tags: true,
+        newline_end: true,
+        strip_whitespace: true
       },
       body: `
         <div class="row g-3">
@@ -189,40 +195,31 @@
               <button class="btn btn-outline-light btn-browse" type="button" data-browse-target="input_dir">Browse</button>
             </div>
           </div>
-          <div class="col-lg-6">
-            <label class="form-label">Model ID or local path</label>
-            <input class="form-control" data-field="model_id">
-          </div>
-          <div class="col-md-3">
-            <label class="form-label">Device</label>
-            <select class="form-select" data-field="device">
-              <option value="auto">auto</option>
-              <option value="cpu">cpu</option>
-              <option value="cuda">cuda</option>
-            </select>
-          </div>
           <div class="col-md-3">
             <label class="form-label">Batch size</label>
             <input class="form-control" type="number" min="1" data-field="batch_size">
           </div>
           <div class="col-md-3">
-            <label class="form-label">General threshold</label>
+            <label class="form-label">Min general</label>
             <input class="form-control" type="number" step="0.01" data-field="general_threshold">
           </div>
           <div class="col-md-3">
-            <label class="form-label">Character threshold</label>
+            <label class="form-label">Min character</label>
             <input class="form-control" type="number" step="0.01" data-field="character_threshold">
           </div>
           <div class="col-md-3">
-            <label class="form-label">Max tags (0 = unlimited)</label>
-            <input class="form-control" type="number" min="0" data-field="max_tags">
+            <label class="form-label">Threshold mode</label>
+            <select class="form-select" data-field="threshold_mode">
+              <option value="fixed">fixed</option>
+              <option value="mcut">mcut</option>
+            </select>
           </div>
           <div class="col-md-3">
             <label class="form-label">Write mode</label>
             <select class="form-select" data-field="write_mode">
-              <option value="append">append</option>
               <option value="overwrite">overwrite</option>
-              <option value="skip">skip if .txt has content</option>
+              <option value="append">append</option>
+              <option value="skip_if_exists">skip if exists</option>
             </select>
           </div>
           <div class="col-md-3">
@@ -232,6 +229,14 @@
           <div class="col-md-3">
             <label class="form-label">Image limit (0 = all)</label>
             <input class="form-control" type="number" min="0" data-field="limit">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Trigger tag (pinned first)</label>
+            <input class="form-control" data-field="trigger_tag" placeholder="lora_trigger">
+          </div>
+          <div class="col-lg-6">
+            <label class="form-label">Exclude tags (comma/newline)</label>
+            <textarea class="form-control" rows="2" data-field="exclude_tags" placeholder="lowres, blurry"></textarea>
           </div>
           <div class="col-12 d-flex flex-wrap gap-4">
             <label class="form-check">
@@ -243,21 +248,54 @@
               <span class="form-check-label">Include rating tags</span>
             </label>
             <label class="form-check">
-              <input class="form-check-input" type="checkbox" data-field="replace_underscore">
-              <span class="form-check-label">Replace underscores</span>
-            </label>
-            <label class="form-check">
-              <input class="form-check-input" type="checkbox" data-field="skip_empty">
-              <span class="form-check-label">Skip empty results</span>
-            </label>
-            <label class="form-check">
-              <input class="form-check-input" type="checkbox" data-field="local_only">
-              <span class="form-check-label">Local files only</span>
-            </label>
-            <label class="form-check">
               <input class="form-check-input" type="checkbox" data-field="preview_only">
               <span class="form-check-label">Preview only</span>
             </label>
+          </div>
+          <div class="col-12">
+            <details class="mt-2">
+              <summary class="fw-semibold">Advanced</summary>
+              <div class="row g-3 mt-1">
+                <div class="col-md-3">
+                  <label class="form-label">Max general tags (0 = unlimited)</label>
+                  <input class="form-control" type="number" min="0" data-field="max_general_tags">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">Max character tags (0 = unlimited)</label>
+                  <input class="form-control" type="number" min="0" data-field="max_character_tags">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">Character top-k (0 = off)</label>
+                  <input class="form-control" type="number" min="0" data-field="character_topk">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">Model ID (optional)</label>
+                  <input class="form-control" data-field="model_id">
+                </div>
+                <div class="col-12 d-flex flex-wrap gap-4">
+                  <label class="form-check">
+                    <input class="form-check-input" type="checkbox" data-field="dedupe">
+                    <span class="form-check-label">Dedupe tags</span>
+                  </label>
+                  <label class="form-check">
+                    <input class="form-check-input" type="checkbox" data-field="sort_tags">
+                    <span class="form-check-label">Sort tags</span>
+                  </label>
+                  <label class="form-check">
+                    <input class="form-check-input" type="checkbox" data-field="keep_existing_tags">
+                    <span class="form-check-label">Keep existing tags (append)</span>
+                  </label>
+                  <label class="form-check">
+                    <input class="form-check-input" type="checkbox" data-field="newline_end">
+                    <span class="form-check-label">Ensure newline at end</span>
+                  </label>
+                  <label class="form-check">
+                    <input class="form-check-input" type="checkbox" data-field="strip_whitespace">
+                    <span class="form-check-label">Strip whitespace</span>
+                  </label>
+                </div>
+              </div>
+            </details>
           </div>
         </div>
       `
@@ -315,7 +353,7 @@
           <div class="col-lg-6">
             <label class="form-label">Temp folder (optional override)</label>
             <div class="input-group">
-              <input class="form-control" data-field="temp_dir" data-browse="1" placeholder="Default: <folder>\\_temp">
+              <input class="form-control" data-field="temp_dir" data-browse="1" placeholder="Default: <folder>/_temp">
               <button class="btn btn-outline-light btn-browse" type="button" data-browse-target="temp_dir">Browse</button>
             </div>
           </div>
@@ -435,7 +473,7 @@
           <div class="col-lg-6">
             <label class="form-label">Output folder</label>
             <div class="input-group">
-              <input class="form-control" data-field="output_dir" data-browse="1" placeholder="Default: working_dir\\webp_to_png">
+              <input class="form-control" data-field="output_dir" data-browse="1" placeholder="Default: working_dir/webp_to_png">
               <button class="btn btn-outline-light btn-browse" type="button" data-browse-target="output_dir">Browse</button>
             </div>
           </div>
@@ -458,7 +496,7 @@
           <div class="col-lg-6">
             <label class="form-label">Output folder</label>
             <div class="input-group">
-              <input class="form-control" data-field="output_dir" data-browse="1" placeholder="Default: working_dir\\adjusted">
+              <input class="form-control" data-field="output_dir" data-browse="1" placeholder="Default: working_dir/adjusted">
               <button class="btn btn-outline-light btn-browse" type="button" data-browse-target="output_dir">Browse</button>
             </div>
           </div>
@@ -504,7 +542,7 @@
           <div class="col-lg-6">
             <label class="form-label">Output folder</label>
             <div class="input-group">
-              <input class="form-control" data-field="output_dir" data-browse="1" placeholder="Default: working_dir\\combined">
+              <input class="form-control" data-field="output_dir" data-browse="1" placeholder="Default: working_dir/combined">
               <button class="btn btn-outline-light btn-browse" type="button" data-browse-target="output_dir">Browse</button>
             </div>
           </div>
@@ -553,7 +591,7 @@
           <div class="col-lg-6">
             <label class="form-label">Output folder</label>
             <div class="input-group">
-              <input class="form-control" data-field="output_dir" data-browse="1" placeholder="Default: working_dir\\renamed">
+              <input class="form-control" data-field="output_dir" data-browse="1" placeholder="Default: working_dir/renamed">
               <button class="btn btn-outline-light btn-browse" type="button" data-browse-target="output_dir">Browse</button>
             </div>
           </div>
@@ -646,7 +684,7 @@
           <div class="col-lg-6">
             <label class="form-label">Output folder</label>
             <div class="input-group">
-              <input class="form-control" data-field="output_dir" data-browse="1" placeholder="Default: working_dir\\merged">
+              <input class="form-control" data-field="output_dir" data-browse="1" placeholder="Default: working_dir/merged">
               <button class="btn btn-outline-light btn-browse" type="button" data-browse-target="output_dir">Browse</button>
             </div>
           </div>
@@ -731,7 +769,7 @@
           <div class="col-lg-6">
             <label class="form-label">Output folder</label>
             <div class="input-group">
-              <input class="form-control" data-field="output_dir" data-browse="1" placeholder="Default: working_dir\\panels">
+              <input class="form-control" data-field="output_dir" data-browse="1" placeholder="Default: working_dir/panels">
               <button class="btn btn-outline-light btn-browse" type="button" data-browse-target="output_dir">Browse</button>
             </div>
           </div>
@@ -796,11 +834,11 @@
   function validateStepOrder(steps){
     const ids = (steps || []).map(step => step.id).filter(Boolean);
     if(!ids.length){
-      return { ok: false, message: 'Minimal 1 step harus dipilih.' };
+      return { ok: false, message: 'Select at least 1 step.' };
     }
     const zipIndex = ids.indexOf('zip_final');
     if(zipIndex !== -1 && zipIndex !== ids.length - 1){
-      return { ok: false, message: 'Zip result sebaiknya jadi step terakhir agar hasilnya selalu terbaru.' };
+      return { ok: false, message: 'Zip result should be the last step so the output is always up to date.' };
     }
     const firstTag = ids.findIndex(id => TAG_STEPS.has(id));
     let lastImageStep = -1;
@@ -814,7 +852,7 @@
       const labels = offenders.map(id => STEP_DEFS[id]?.label || id).join(', ');
       return {
         ok: false,
-        message: `Step image-only (${labels}) harus ditaruh sebelum step tag (Offline Tagger / Tag Editor / Normalization / Tag Cleanup).`
+        message: `Image-only steps (${labels}) must be placed before tag steps (Offline Tagger / Tag Editor / Normalization / Tag Cleanup).`
       };
     }
     return { ok: true };

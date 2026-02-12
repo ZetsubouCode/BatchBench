@@ -170,6 +170,18 @@ def _parse_float(val: Any, default: float) -> float:
         return default
 
 
+def _parse_optional_int(val: Any) -> Optional[int]:
+    if val is None:
+        return None
+    text = str(val).strip()
+    if not text:
+        return None
+    try:
+        return int(text)
+    except Exception:
+        return None
+
+
 def _optional_path(raw: Any) -> Optional[Path]:
     if raw is None:
         return None
@@ -269,7 +281,7 @@ class PipelineManager:
         if not ids:
             return "At least one step is required."
         if "zip_final" in ids and ids[-1] != "zip_final":
-            return "Zip result sebaiknya jadi step terakhir agar hasilnya selalu terbaru."
+            return "Zip result should be the last step so the output is always up to date."
         first_tag = None
         last_image_step = None
         for idx, step_id in enumerate(ids):
@@ -285,9 +297,9 @@ class PipelineManager:
             ]
             labels = ", ".join(STEP_LABELS.get(step_id, step_id) for step_id in offenders)
             return (
-                "Step image-only harus ditaruh sebelum step tag "
+                "Image-only steps must be placed before tag steps "
                 f"(Offline Tagger / Tag Editor / Normalization / Tag Cleanup). "
-                f"Pindahkan: {labels}."
+                f"Move: {labels}."
             )
         return None
 
@@ -507,6 +519,22 @@ class PipelineManager:
             return None
         return workdir / default_subdir
 
+    def _resolve_trigger_tag(self, job: PipelineJob, step_cfg: Optional[Dict[str, Any]] = None) -> str:
+        if step_cfg:
+            raw = (step_cfg.get("trigger_tag") or "").strip()
+            if raw:
+                return raw
+        cfg = job.config
+        raw = (cfg.get("trigger_tag") or "").strip()
+        if raw:
+            return raw
+        for item in cfg.get("steps") or []:
+            if item.get("id") == "offline_tagger":
+                val = (item.get("config") or {}).get("trigger_tag")
+                if val:
+                    return str(val).strip()
+        return ""
+
     def _log_tool_output(self, job: PipelineJob, log: str):
         if not log:
             return
@@ -563,40 +591,17 @@ class PipelineManager:
         if not target or not target.exists():
             return StepResult(status="FAIL", message="No working folder to tag.")
         cfg = job.config
-        image_exts = _coerce_exts(step_cfg.get("image_exts") or cfg.get("image_exts"))
-        recursive = (
-            _parse_bool(step_cfg.get("recursive"))
-            if "recursive" in (step_cfg or {})
-            else bool(cfg.get("recursive"))
-        )
-        opts = offline_tagger.TaggerOptions(
-            dataset_path=Path(target),
-            recursive=recursive,
-            image_exts=image_exts,
-            model_id=(step_cfg.get("model_id") or offline_tagger.DEFAULT_MODEL_ID).strip()
-            or offline_tagger.DEFAULT_MODEL_ID,
-            device=(step_cfg.get("device") or "auto").strip(),
-            batch_size=max(1, _parse_int(step_cfg.get("batch_size"), 4)),
-            general_threshold=_parse_float(
-                step_cfg.get("general_threshold"), offline_tagger.DEFAULT_GENERAL_THRESHOLD
-            ),
-            character_threshold=_parse_float(
-                step_cfg.get("character_threshold"), offline_tagger.DEFAULT_CHARACTER_THRESHOLD
-            ),
-            include_character=_parse_bool(step_cfg.get("include_character")),
-            include_rating=_parse_bool(step_cfg.get("include_rating", True)),
-            replace_underscore=_parse_bool(step_cfg.get("replace_underscore", True)),
-            write_mode=(step_cfg.get("write_mode") or "append").strip().lower(),
-            preview_only=_parse_bool(step_cfg.get("preview_only")),
-            preview_limit=max(0, _parse_int(step_cfg.get("preview_limit"), 5)),
-            limit=max(0, _parse_int(step_cfg.get("limit"), 0)),
-            max_tags=max(0, _parse_int(step_cfg.get("max_tags"), 0)),
-            skip_empty=_parse_bool(step_cfg.get("skip_empty", True)),
-            local_only=_parse_bool(step_cfg.get("local_only")),
-        )
+        policy = dict(offline_tagger.TAGGER_POLICY)
+        policy["image_exts"] = _coerce_exts(cfg.get("image_exts"))
+
+        form_opts = dict(step_cfg or {})
+        form_opts["input_dir"] = str(target)
+        form_opts.setdefault("recursive", cfg.get("recursive"))
+        deprecated = offline_tagger._find_deprecated_keys(form_opts)
+        opts = offline_tagger._effective_opts(form_opts, policy)
         with self.lock:
             self._add_log(job, "Offline autotag started.")
-        ok, lines = offline_tagger.run_tagger(opts)
+        ok, lines = offline_tagger.run_tagger(opts, deprecated_keys=deprecated)
         with self.lock:
             for line in lines:
                 self._add_log(job, line)
@@ -613,6 +618,7 @@ class PipelineManager:
         preset_file = (step_cfg.get("preset_file") or cfg.get("preset_file") or "").strip()
         if not preset_file:
             return StepResult(status="FAIL", message="preset_file is required for normalization.")
+        trigger_tag = self._resolve_trigger_tag(job, step_cfg)
         opts = normalizer.NormalizeOptions(
             dataset_path=Path(target),
             recursive=bool(cfg.get("recursive")),
@@ -630,6 +636,7 @@ class PipelineManager:
             backup_enabled=_parse_bool(step_cfg.get("backup_enabled", True)),
             image_exts=_coerce_exts(cfg.get("image_exts")),
             identity_tags=normalizer.clean_input_list(step_cfg.get("identity_tags") or ""),
+            pinned_tags=[trigger_tag] if trigger_tag else [],
         )
         result = normalizer.apply_normalization(opts, Path(cfg.get("preset_root")))
         if not result.get("ok"):
@@ -735,6 +742,16 @@ class PipelineManager:
             "suffix": step_cfg.get("suffix") or "_adj",
             "limit": _parse_int(step_cfg.get("limit"), 0),
         }
+        # Optional overrides (so preset can be tweaked per pipeline step)
+        for k in (
+            "exposure_ev","brightness","contrast","highlights","shadows",
+            "saturation","warmth","tint","sharpness","vignette","output_format",
+        ):
+            if k in step_cfg and step_cfg.get(k) is not None:
+                form[k] = step_cfg.get(k)
+        if "recursive" in step_cfg:
+            form["recursive"] = _parse_bool(step_cfg.get("recursive"))
+
         result = self._run_tool(job, batch_adjust.handle, form, ctx={"presets": presets})
         if result.status == "SUCCESS":
             with self.lock:

@@ -1,36 +1,197 @@
 <div class="card p-4">
-  <form method="post" data-tool-label="Photo Adjust (preset)">
+  <form method="post" data-tool-label="Photo Adjust (preset + tweak)">
     <input type="hidden" name="tool" value="batch">
+
+    {# Preset library for JS: preset_name -> params #}
+    <script id="bb-batch-presets" type="application/json">{{ presets|tojson }}</script>
+
     <div class="row g-3">
       <div class="col-md-4">
         <label class="form-label">Source Folder</label>
         <div class="input-group">
-          <input id="src_batch" name="src_batch" type="text" class="form-control" placeholder="D:\path\to\images" data-root-sync="1" data-bs-toggle="tooltip" data-bs-title="Images to process (.jpg/.png/.webp)">
-          <button class="btn btn-outline-light btn-browse" type="button" data-target="src_batch" data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
+          <input id="src_batch" name="src_batch" type="text" class="form-control"
+                 placeholder="{{ work_dir }}" data-root-sync="1"
+                 data-bs-toggle="tooltip" data-bs-title="Images to process (.jpg/.png/.webp)">
+          <button class="btn btn-outline-light" type="button" id="btn-src-workdir"
+                  data-bs-toggle="tooltip" data-bs-title="Use WORK_DIR">WORK_DIR</button>
+          <button class="btn btn-outline-light btn-browse" type="button" data-target="src_batch"
+                  data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
         </div>
+        <div class="form-text">Tip: leave Source empty to use WORK_DIR automatically.</div>
       </div>
+
       <div class="col-md-4">
         <label class="form-label">Output Folder</label>
         <div class="input-group">
-          <input id="dst_batch" name="dst_batch" type="text" class="form-control" placeholder="D:\path\to\output" data-bs-toggle="tooltip" data-bs-title="Processed images saved here">
-          <button class="btn btn-outline-light btn-browse" type="button" data-target="dst_batch" data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
+          <input id="dst_batch" name="dst_batch" type="text" class="form-control"
+                 placeholder="(auto: _batch_adjust_out)"
+                 data-bs-toggle="tooltip" data-bs-title="Processed images saved here. If empty, will auto-create under Source.">
+          <button class="btn btn-outline-light btn-browse" type="button" data-target="dst_batch"
+                  data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
         </div>
       </div>
+
       <div class="col-md-4">
-        <label class="form-label">Preset</label>
-        <select class="form-select" name="preset" data-bs-toggle="tooltip" data-bs-title="Choose an adjustment preset">
+        <label class="form-label d-flex justify-content-between align-items-center">
+          <span>Preset</span>
+          <button class="btn btn-sm btn-outline-light" type="button" id="btn-load-preset">Load preset -> sliders</button>
+        </label>
+        <select class="form-select" id="preset_batch" name="preset"
+                data-bs-toggle="tooltip" data-bs-title="Choose an adjustment preset">
           {% for name in preset_names %}<option value="{{ name }}">{{ name }}</option>{% endfor %}
         </select>
       </div>
+
       <div class="col-md-3">
         <label class="form-label">Suffix</label>
-        <input class="form-control" name="suffix" value="_adj" data-bs-toggle="tooltip" data-bs-title="Added to output filenames">
+        <input class="form-control" name="suffix" value="_adj"
+               data-bs-toggle="tooltip" data-bs-title="Added to output filenames">
       </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Output format</label>
+        <select class="form-select" name="output_format"
+                data-bs-toggle="tooltip" data-bs-title="same = keep original extension">
+          <option value="same" selected>same (keep)</option>
+          <option value="jpg">jpg</option>
+          <option value="png">png</option>
+          <option value="webp">webp</option>
+        </select>
+      </div>
+
       <div class="col-md-3">
         <label class="form-label">Max files (0 = all)</label>
-        <input class="form-control" type="number" name="limit" value="0" min="0" data-bs-toggle="tooltip" data-bs-title="Limit number of processed files">
+        <input class="form-control" type="number" name="limit" value="0" min="0"
+               data-bs-toggle="tooltip" data-bs-title="Limit number of processed files">
+      </div>
+
+      <div class="col-md-3 d-flex align-items-end">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="recursive_batch" name="recursive" checked>
+          <label class="form-check-label" for="recursive_batch">Recursive</label>
+        </div>
       </div>
     </div>
-    <div class="mt-3"><button class="btn btn-primary">Process</button></div>
+
+    <hr class="my-4">
+
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h6 class="m-0">Adjustments</h6>
+      <small class="text-muted">Range: -1..1. Exposure: -4..4. Vignette: 0..1.</small>
+    </div>
+
+    <div class="row g-3">
+      {% set sliders = [
+        ("exposure_ev", "Exposure (EV)", -4, 4, 0.01),
+        ("brightness", "Brightness", -1, 1, 0.01),
+        ("contrast", "Contrast", -1, 1, 0.01),
+        ("highlights", "Highlights", -1, 1, 0.01),
+        ("shadows", "Shadows", -1, 1, 0.01),
+        ("saturation", "Saturation", -1, 1, 0.01),
+        ("warmth", "Warmth", -1, 1, 0.01),
+        ("tint", "Tint", -1, 1, 0.01),
+        ("sharpness", "Sharpness", -1, 1, 0.01),
+        ("vignette", "Vignette", 0, 1, 0.01)
+      ] %}
+
+      {% for key, label, lo, hi, step in sliders %}
+      <div class="col-md-6">
+        <label class="form-label">{{ label }}</label>
+        <div class="d-flex gap-2 align-items-center">
+          <input type="range" class="form-range" id="rng_{{ key }}"
+                 min="{{ lo }}" max="{{ hi }}" step="{{ step }}" value="0">
+          <input type="number" class="form-control" style="max-width: 140px"
+                 id="num_{{ key }}" name="{{ key }}" value="" step="{{ step }}" placeholder="auto">
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="mt-3 d-flex gap-2">
+      <button class="btn btn-primary">Process</button>
+      <button class="btn btn-outline-light" type="button" id="btn-reset-zero"
+              data-bs-toggle="tooltip" data-bs-title="Set all sliders to 0">Reset to 0</button>
+    </div>
   </form>
 </div>
+
+<script>
+(() => {
+  const presetEl = document.getElementById('preset_batch');
+  const srcEl = document.getElementById('src_batch');
+  const btnWorkdir = document.getElementById('btn-src-workdir');
+  const btnLoad = document.getElementById('btn-load-preset');
+  const btnReset = document.getElementById('btn-reset-zero');
+  const presetDataEl = document.getElementById('bb-batch-presets');
+
+  let presets = {};
+  try { presets = JSON.parse(presetDataEl?.textContent || '{}') || {}; } catch(e) { presets = {}; }
+
+  const keys = [
+    'exposure_ev','brightness','contrast','highlights','shadows',
+    'saturation','warmth','tint','sharpness','vignette'
+  ];
+
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const ranges = { exposure_ev: [-4, 4], vignette: [0, 1] };
+
+  function setPair(key, val){
+    const rng = document.getElementById('rng_' + key);
+    const num = document.getElementById('num_' + key);
+    if(!rng || !num) return;
+
+    const lohi = ranges[key] || [-1, 1];
+    const v = clamp(Number(val || 0), lohi[0], lohi[1]);
+    rng.value = String(v);
+    num.value = String(v);
+  }
+
+  function loadPreset(name){
+    const cfg = presets?.[name] || {};
+    keys.forEach(k => setPair(k, (k in cfg) ? cfg[k] : 0));
+  }
+
+  function resetZero(){ keys.forEach(k => setPair(k, 0)); }
+
+  // Bind range -> number
+  keys.forEach((k) => {
+    const rng = document.getElementById('rng_' + k);
+    const num = document.getElementById('num_' + k);
+    if(!rng || !num) return;
+
+    rng.addEventListener('input', () => { num.value = rng.value; });
+    num.addEventListener('input', () => {
+      const lohi = ranges[k] || [-1, 1];
+      const raw = Number(num.value || 0);
+      rng.value = String(clamp(raw, lohi[0], lohi[1]));
+    });
+  });
+
+  btnWorkdir?.addEventListener('click', () => {
+    srcEl.value = '{{ work_dir }}';
+    srcEl.dispatchEvent(new Event('input', { bubbles: true }));
+    srcEl.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+
+  btnLoad?.addEventListener('click', () => loadPreset(presetEl.value));
+  btnReset?.addEventListener('click', resetZero);
+  presetEl?.addEventListener('change', () => loadPreset(presetEl.value));
+
+  // Auto-load once if numeric fields are empty
+  window.setTimeout(() => {
+    const anyHasValue = keys.some(k => {
+      const num = document.getElementById('num_' + k);
+      return num && String(num.value || '').trim() !== '';
+    });
+
+    if(!anyHasValue){
+      loadPreset(presetEl.value);
+    }else{
+      keys.forEach(k => {
+        const num = document.getElementById('num_' + k);
+        if(num && String(num.value || '').trim() !== '') setPair(k, num.value);
+      });
+    }
+  }, 0);
+})();
+</script>
