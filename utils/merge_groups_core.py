@@ -32,39 +32,86 @@ def scale_to_width(img: Image.Image, width: int) -> Image.Image:
     return img.resize((width, int(img.height * ratio)), Image.Resampling.LANCZOS)
 
 def merge_many(images: List[Path], orientation: str, align: str, gap: int, bg: str, resize: str) -> Image.Image:
-    ims = [Image.open(p).convert("RGB") for p in images]
-    try:
-        if resize == "auto":
-            resize = "match-height" if orientation == "h" else "match-width"
+    if not images:
+        raise ValueError("No input images provided.")
 
-        if orientation == "h":
-            if resize == "match-height":
-                target_h = max(im.height for im in ims)
-                ims = [scale_to_height(im, target_h) for im in ims]
-            w = sum(im.width for im in ims) + gap * (len(ims)-1)
-            h = max(im.height for im in ims)
-            canvas = Image.new("RGB", (w, h), bg)
-            x = 0
-            for im in ims:
-                if align == "top": y = 0
-                elif align == "bottom": y = h - im.height
-                else: y = (h - im.height) // 2
-                canvas.paste(im, (x, y)); x += im.width + gap
+    if resize == "auto":
+        resize = "match-height" if orientation == "h" else "match-width"
+
+    # Pass 1: collect source sizes only (low memory)
+    src_sizes: List[Tuple[int, int]] = []
+    for p in images:
+        with Image.open(p) as im:
+            src_sizes.append((im.width, im.height))
+
+    planned_sizes: List[Tuple[int, int]] = []
+    if orientation == "h":
+        if resize == "match-height":
+            target_h = max(h for _, h in src_sizes)
+            for w, h in src_sizes:
+                if h == target_h:
+                    planned_sizes.append((w, h))
+                else:
+                    planned_sizes.append((max(1, int(round(w * (target_h / h)))), target_h))
         else:
-            if resize == "match-width":
-                target_w = max(im.width for im in ims)
-                ims = [scale_to_width(im, target_w) for im in ims]
-            w = max(im.width for im in ims)
-            h = sum(im.height for im in ims) + gap * (len(ims)-1)
-            canvas = Image.new("RGB", (w, h), bg)
-            y = 0
-            for im in ims:
-                if align == "left": x = 0
-                elif align == "right": x = w - im.width
-                else: x = (w - im.width) // 2
-                canvas.paste(im, (x, y)); y += im.height + gap
-        return canvas
-    finally:
-        for im in ims:
-            try: im.close()
-            except Exception: pass
+            planned_sizes = list(src_sizes)
+        canvas_w = sum(w for w, _ in planned_sizes) + gap * (len(planned_sizes) - 1)
+        canvas_h = max(h for _, h in planned_sizes)
+    else:
+        if resize == "match-width":
+            target_w = max(w for w, _ in src_sizes)
+            for w, h in src_sizes:
+                if w == target_w:
+                    planned_sizes.append((w, h))
+                else:
+                    planned_sizes.append((target_w, max(1, int(round(h * (target_w / w))))))
+        else:
+            planned_sizes = list(src_sizes)
+        canvas_w = max(w for w, _ in planned_sizes)
+        canvas_h = sum(h for _, h in planned_sizes) + gap * (len(planned_sizes) - 1)
+
+    canvas = Image.new("RGB", (canvas_w, canvas_h), bg)
+
+    # Pass 2: open-paste-close one-by-one
+    if orientation == "h":
+        x = 0
+        for path, (target_w, target_h) in zip(images, planned_sizes):
+            with Image.open(path) as src:
+                im = src.convert("RGB")
+                if im.width != target_w or im.height != target_h:
+                    im = im.resize((target_w, target_h), Image.Resampling.LANCZOS)
+                if align == "top":
+                    y = 0
+                elif align == "bottom":
+                    y = canvas_h - target_h
+                else:
+                    y = (canvas_h - target_h) // 2
+                canvas.paste(im, (x, y))
+                if im is not src:
+                    try:
+                        im.close()
+                    except Exception:
+                        pass
+            x += target_w + gap
+    else:
+        y = 0
+        for path, (target_w, target_h) in zip(images, planned_sizes):
+            with Image.open(path) as src:
+                im = src.convert("RGB")
+                if im.width != target_w or im.height != target_h:
+                    im = im.resize((target_w, target_h), Image.Resampling.LANCZOS)
+                if align == "left":
+                    x = 0
+                elif align == "right":
+                    x = canvas_w - target_w
+                else:
+                    x = (canvas_w - target_w) // 2
+                canvas.paste(im, (x, y))
+                if im is not src:
+                    try:
+                        im.close()
+                    except Exception:
+                        pass
+            y += target_h + gap
+
+    return canvas

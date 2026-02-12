@@ -637,6 +637,9 @@ def api_pipeline_start():
     payload["preset_file"] = (payload.get("preset_file") or "").strip()
     payload["image_exts"] = _parse_exts(payload.get("image_exts"))
     payload["recursive"] = _parse_bool(payload.get("recursive"))
+    payload["copy_mode"] = (payload.get("copy_mode") or "copy")
+    payload["incremental_copy"] = _parse_bool(payload.get("incremental_copy"))
+    payload["clean_working"] = _parse_bool(payload.get("clean_working", True), True)
     payload["run_autotag"] = _parse_bool(payload.get("run_autotag", True), True)
     payload["move_unknown_background_to_optional"] = _parse_bool(
         payload.get("move_unknown_background_to_optional")
@@ -680,7 +683,14 @@ def api_pipeline_stop():
 @app.get("/api/pipeline/status")
 def api_pipeline_status():
     job_id = request.args.get("job_id")
-    ok, data, err = PIPELINE_MANAGER.get_status(job_id)
+    since_log_id_raw = request.args.get("since_log_id")
+    since_log_id: Optional[int] = None
+    if since_log_id_raw not in (None, ""):
+        try:
+            since_log_id = int(since_log_id_raw)
+        except Exception:
+            since_log_id = None
+    ok, data, err = PIPELINE_MANAGER.get_status(job_id, since_log_id=since_log_id)
     code = 200 if ok else 404
     return jsonify({"ok": ok, "job": data, "error": err if not ok else ""}), code
 

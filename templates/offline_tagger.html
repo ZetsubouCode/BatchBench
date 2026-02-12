@@ -6,7 +6,8 @@
     Quick tips:
     <ul class="mb-0">
       <li>Start with the defaults. Lower thresholds if you get too few tags.</li>
-      <li>MCUT mode is recommended for the WD tagger.</li>
+      <li>MCUT mode is recommended for the WD tagger. Use MCUT tuning below if output is too simple.</li>
+      <li>Use Tag focus to output all tags, character/subject only, or non-character only.</li>
       <li>Set a trigger tag for LoRA so it is always the first tag.</li>
     </ul>
   </div>
@@ -75,10 +76,19 @@
         <div class="form-text text-muted">MCUT is recommended for the WD tagger.</div>
       </div>
 
+      <div class="col-md-3">
+        <label class="form-label">Tag focus</label>
+        <select class="form-select" name="tag_focus_mode" data-bs-toggle="tooltip" data-bs-title="Split between character/subject and non-character tags">
+          <option value="all" selected>all</option>
+          <option value="character">character/subject only</option>
+          <option value="non_character">non-character only</option>
+        </select>
+      </div>
+
       <div class="col-md-3 d-flex align-items-end">
         <div class="form-check" data-bs-toggle="tooltip" data-bs-title="Include character name tags">
           <input class="form-check-input" type="checkbox" id="offline_include_character" name="include_character" checked>
-          <label class="form-check-label" for="offline_include_character">Include character tags</label>
+          <label class="form-check-label" for="offline_include_character">Include character tags (focus=all)</label>
         </div>
       </div>
 
@@ -133,6 +143,27 @@
         <div class="col-md-3">
           <label class="form-label">Model ID (optional)</label>
           <input class="form-control" name="model_id" value="SmilingWolf/wd-swinv2-tagger-v3">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">MCUT relax general</label>
+          <input class="form-control" type="number" step="0.01" min="0" max="1" name="mcut_relax_general" value="0.08">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">MCUT relax character</label>
+          <input class="form-control" type="number" step="0.01" min="0" max="1" name="mcut_relax_character" value="0.02">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">MCUT min general tags</label>
+          <input class="form-control" type="number" min="0" name="mcut_min_general_tags" value="8">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">MCUT min character tags</label>
+          <input class="form-control" type="number" min="0" name="mcut_min_character_tags" value="0">
+        </div>
+        <div class="col-12">
+          <label class="form-label">Non-character regex (one per line)</label>
+          <textarea class="form-control" rows="3" name="non_character_regex" placeholder="(optional) override subject/background split regex"></textarea>
+          <div class="form-text text-muted">Leave empty to use WD-friendly default patterns.</div>
         </div>
 
         <div class="col-12 d-flex flex-wrap gap-4">

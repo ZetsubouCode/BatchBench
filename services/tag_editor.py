@@ -6,6 +6,29 @@ from utils.dataset import split_tags, join_tags
 import shutil
 
 EDIT_MODES = {"insert", "delete", "replace", "dedup"}  # non-move, non-undo
+_TXT_TAG_CACHE = {}
+
+
+def _read_tags_cached(txt_path: Path) -> List[str]:
+    key = str(txt_path)
+    try:
+        st = txt_path.stat()
+    except Exception:
+        return []
+    sig = (st.st_mtime_ns, st.st_size)
+    cached = _TXT_TAG_CACHE.get(key)
+    if cached and cached[0] == sig:
+        return list(cached[1])
+    try:
+        tags = split_tags(txt_path.read_text(encoding="utf-8"))
+    except Exception:
+        tags = []
+    _TXT_TAG_CACHE[key] = (sig, list(tags))
+    return tags
+
+
+def _invalidate_cache(txt_path: Path):
+    _TXT_TAG_CACHE.pop(str(txt_path), None)
 
 def _normalize_exts(exts: List[str]) -> Set[str]:
     out: Set[str] = set()
@@ -54,11 +77,7 @@ def scan_tags(folder: Path, exts: List[str], recursive: bool = False) -> dict:
         txt = img.with_suffix(".txt")
         if not txt.exists():
             continue
-        try:
-            text = txt.read_text(encoding="utf-8")
-        except Exception:
-            continue
-        tags = split_tags(text)
+        tags = _read_tags_cached(txt)
         tag_files += 1
         if tags:
             counts.update(set(tags))
@@ -96,10 +115,7 @@ def list_images_with_tags(folder: Path, exts: List[str], recursive: bool = False
         has_txt = False
         if txt.exists():
             has_txt = True
-            try:
-                tags = split_tags(txt.read_text(encoding="utf-8"))
-            except Exception:
-                tags = []
+            tags = _read_tags_cached(txt)
         rel = img.relative_to(folder).as_posix()
         items.append(
             {
@@ -131,6 +147,7 @@ def remove_tag(txt_path: Path, tag: str, backup: bool = True) -> dict:
             return {"ok": False, "error": str(exc)}
     try:
         txt_path.write_text(join_tags(newtags), encoding="utf-8")
+        _invalidate_cache(txt_path)
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
     return {"ok": True, "removed": True, "tags": newtags}
@@ -312,6 +329,7 @@ def handle(form, ctx) -> Tuple[str, str]:
             if backup:
                 txt.with_suffix(txt.suffix + ".bak").write_text(src, encoding="utf-8")
             txt.write_text(join_tags(taglist), encoding="utf-8")
+            _invalidate_cache(txt)
             lines.append(f"{img.name}: insert -> {add}")
 
         elif mode == "delete":
@@ -319,6 +337,7 @@ def handle(form, ctx) -> Tuple[str, str]:
             if backup:
                 txt.with_suffix(txt.suffix + ".bak").write_text(src, encoding="utf-8")
             txt.write_text(join_tags(newtags), encoding="utf-8")
+            _invalidate_cache(txt)
             lines.append(f"{img.name}: delete -> {sorted(deltags)}")
 
         elif mode == "replace":
@@ -326,6 +345,7 @@ def handle(form, ctx) -> Tuple[str, str]:
             if backup:
                 txt.with_suffix(txt.suffix + ".bak").write_text(src, encoding="utf-8")
             txt.write_text(join_tags(newtags), encoding="utf-8")
+            _invalidate_cache(txt)
             lines.append(f"{img.name}: replace -> {mapping}")
 
         elif mode == "dedup":
@@ -336,6 +356,7 @@ def handle(form, ctx) -> Tuple[str, str]:
             if backup:
                 txt.with_suffix(txt.suffix + ".bak").write_text(src, encoding="utf-8")
             txt.write_text(join_tags(out), encoding="utf-8")
+            _invalidate_cache(txt)
             lines.append(f"{img.name}: dedup -> {len(taglist)-len(out)} removed")
 
         processed += 1

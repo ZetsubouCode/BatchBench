@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Tuple, List, Dict, Any, Optional, Iterable
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import os
 
 from PIL import Image
 
@@ -207,55 +209,79 @@ def handle(form, ctx) -> Tuple[str, str]:
     errors = 0
     shown = 0
     max_show = 30
+    candidates = list(_iter_images(src, recursive=recursive, skip_root=skip_root))
+    if limit:
+        candidates = candidates[:limit]
 
-    for p in _iter_images(src, recursive=recursive, skip_root=skip_root):
+    planned: List[Tuple[int, Path, Path]] = []
+    reserved = set()
+    for idx, p in enumerate(candidates):
+        input_ext = p.suffix.lower()
+        out_ext = _pick_out_ext(input_ext, output_format)
         try:
-            with Image.open(p) as im:
-                input_ext = p.suffix.lower()
-                out_ext = _pick_out_ext(input_ext, output_format)
+            rel = p.relative_to(src)
+        except Exception:
+            rel = Path(p.name)
+        out_dir = dst / rel.parent
+        out_name = f"{rel.stem}{suffix}{out_ext}"
+        out_path = _unique_path(out_dir / out_name)
+        key = str(out_path).lower()
+        bump = 1
+        while key in reserved:
+            out_path = _unique_path(out_dir / f"{rel.stem}{suffix}_{bump}{out_ext}")
+            key = str(out_path).lower()
+            bump += 1
+        reserved.add(key)
+        planned.append((idx, p, out_path))
 
-                alpha = None
-                if im.mode in ("RGBA", "LA"):
-                    try:
-                        alpha = im.getchannel("A")
-                    except Exception:
-                        alpha = None
-
-                rgb = im.convert("RGB")
-                out_rgb = apply_preset(rgb, cfg)
-
-                # restore alpha if output supports it
-                if alpha is not None and out_ext in {".png", ".webp"}:
-                    out_img = out_rgb.convert("RGBA")
-                    out_img.putalpha(alpha)
-                else:
-                    out_img = out_rgb
-
+    def _process_one(item: Tuple[int, Path, Path]):
+        idx, src_path, out_path = item
+        with Image.open(src_path) as im:
+            alpha = None
+            if im.mode in ("RGBA", "LA"):
                 try:
-                    rel = p.relative_to(src)
+                    alpha = im.getchannel("A")
                 except Exception:
-                    rel = Path(p.name)
+                    alpha = None
 
-                out_dir = dst / rel.parent
-                out_name = f"{rel.stem}{suffix}{out_ext}"
-                out_path = _unique_path(out_dir / out_name)
+            rgb = im.convert("RGB")
+            out_rgb = apply_preset(rgb, cfg)
 
-                _save_image(out_img, out_path)
+            if alpha is not None and out_path.suffix.lower() in {".png", ".webp"}:
+                out_img = out_rgb.convert("RGBA")
+                out_img.putalpha(alpha)
+            else:
+                out_img = out_rgb
 
-            count += 1
-            if shown < max_show:
-                try:
-                    lines.append(f"[OK] {out_path.relative_to(dst).as_posix()}")
-                except Exception:
-                    lines.append(f"[OK] {out_path.name}")
-                shown += 1
+            _save_image(out_img, out_path)
 
-            if limit and count >= limit:
-                break
+        return idx, src_path, out_path, None
 
-        except Exception as e:
+    workers = max(1, min(8, (os.cpu_count() or 4)))
+    results: Dict[int, Tuple[Path, Optional[Path], Optional[str]]] = {}
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {pool.submit(_process_one, item): item for item in planned}
+        for fut in as_completed(futures):
+            idx, src_path, out_path = futures[fut]
+            try:
+                _, _, done_path, _ = fut.result()
+                results[idx] = (src_path, done_path, None)
+            except Exception as e:
+                results[idx] = (src_path, None, str(e))
+
+    for idx in range(len(planned)):
+        src_path, out_path, err = results.get(idx, (planned[idx][1], None, "unknown error"))
+        if err:
             errors += 1
-            lines.append(f"[ERROR] {p.name}: {e}")
+            lines.append(f"[ERROR] {src_path.name}: {err}")
+            continue
+        count += 1
+        if shown < max_show and out_path is not None:
+            try:
+                lines.append(f"[OK] {out_path.relative_to(dst).as_posix()}")
+            except Exception:
+                lines.append(f"[OK] {out_path.name}")
+            shown += 1
 
     if count > shown:
         lines.append(f"... ({count - shown} more files)")

@@ -48,6 +48,19 @@ class NormalizeOptions:
     pinned_tags: List[str] = field(default_factory=list)
 
 
+@dataclass
+class ScanContext:
+    root: Path
+    preset: Dict
+    tag_files: List[Path]
+    parsed: List[TagFile]
+    tag_counts: Counter
+    total_files: int
+    block_specific: Set[str]
+    rare_tags: List[str]
+    top_tags: List[Tuple[str, int]]
+
+
 def clean_input_list(raw: str) -> Set[str]:
     """
     Accepts comma/newline separated strings and returns a clean set of tags.
@@ -185,20 +198,21 @@ def collect_tag_files(root: Path, recursive: bool, image_exts: List[str], create
     return sorted(tag_paths, key=lambda x: x.as_posix().lower())
 
 
-def scan_dataset(opts: NormalizeOptions, preset_root: Path, preset_payload: Optional[Dict] = None) -> Dict:
+def _build_scan_context(
+    opts: NormalizeOptions, preset_root: Path, preset_payload: Optional[Dict] = None
+) -> Tuple[Optional[ScanContext], Optional[str]]:
     root = readable_path(str(opts.dataset_path))
     if not root.exists() or not root.is_dir():
-        return {"ok": False, "error": f"Dataset folder not found: {root}"}
+        return None, f"Dataset folder not found: {root}"
 
     try:
         preset = preset_payload or load_preset(preset_root, opts.preset_type, opts.preset_file)
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return None, str(exc)
 
     tag_files = collect_tag_files(root, opts.recursive, opts.image_exts, opts.include_missing_txt)
     parsed: List[TagFile] = []
     counts: Counter = Counter()
-
     for path in tag_files:
         tf = parse_tag_file(path)
         parsed.append(tf)
@@ -218,20 +232,40 @@ def scan_dataset(opts: NormalizeOptions, preset_root: Path, preset_payload: Opti
             if (cnt / total_files) < float(threshold):
                 rare_tags.append(tag)
 
-    top_tags = counts.most_common(50)
+    return (
+        ScanContext(
+            root=root,
+            preset=preset,
+            tag_files=tag_files,
+            parsed=parsed,
+            tag_counts=counts,
+            total_files=total_files,
+            block_specific=block_specific,
+            rare_tags=sorted(rare_tags),
+            top_tags=counts.most_common(50),
+        ),
+        None,
+    )
+
+
+def scan_dataset(opts: NormalizeOptions, preset_root: Path, preset_payload: Optional[Dict] = None) -> Dict:
+    context, err = _build_scan_context(opts, preset_root, preset_payload=preset_payload)
+    if err or context is None:
+        return {"ok": False, "error": err or "Failed building scan context"}
+
     sample = [
         {"file": str(tf.path), "main": tf.main, "optional": tf.optional, "warning": tf.warning}
-        for tf in parsed[: min(10, len(parsed))]
+        for tf in context.parsed[: min(10, len(context.parsed))]
     ]
 
     return {
         "ok": True,
-        "total_files": total_files,
-        "tag_files": len(tag_files),
-        "tag_counts": counts,
-        "top_tags": top_tags,
-        "rare_tags": sorted(rare_tags),
-        "block_specific_hits": [tag for tag in block_specific if counts.get(tag)],
+        "total_files": context.total_files,
+        "tag_files": len(context.tag_files),
+        "tag_counts": context.tag_counts,
+        "top_tags": context.top_tags,
+        "rare_tags": context.rare_tags,
+        "block_specific_hits": [tag for tag in context.block_specific if context.tag_counts.get(tag)],
         "sample": sample,
     }
 
@@ -420,23 +454,17 @@ def normalize_record(
 
 
 def dry_run(opts: NormalizeOptions, preset_root: Path, preset_payload: Optional[Dict] = None) -> Dict:
-    scan = scan_dataset(opts, preset_root, preset_payload=preset_payload)
-    if not scan.get("ok"):
-        return scan
-
-    preset = preset_payload or load_preset(preset_root, opts.preset_type, opts.preset_file)
-    tag_files = collect_tag_files(
-        readable_path(str(opts.dataset_path)), opts.recursive, opts.image_exts, opts.include_missing_txt
-    )
-    parsed = [parse_tag_file(p) for p in tag_files]
+    context, err = _build_scan_context(opts, preset_root, preset_payload=preset_payload)
+    if err or context is None:
+        return {"ok": False, "error": err or "Failed building scan context"}
     stats = {
-        "total_files": scan.get("total_files", len(parsed)),
-        "tag_counts": scan.get("tag_counts") or Counter(),
+        "total_files": context.total_files,
+        "tag_counts": context.tag_counts,
     }
 
     previews = []
-    for tf in parsed[: opts.preview_limit]:
-        after, meta = normalize_record(tf, preset, opts, stats)
+    for tf in context.parsed[: opts.preview_limit]:
+        after, meta = normalize_record(tf, context.preset, opts, stats)
         previews.append(
             {
                 "file": str(tf.path),
@@ -447,7 +475,11 @@ def dry_run(opts: NormalizeOptions, preset_root: Path, preset_payload: Optional[
             }
         )
 
-    return {"ok": True, "stats": {"total_files": stats["total_files"], "tag_files": len(tag_files)}, "previews": previews}
+    return {
+        "ok": True,
+        "stats": {"total_files": stats["total_files"], "tag_files": len(context.tag_files)},
+        "previews": previews,
+    }
 
 
 def _make_backup(path: Path) -> Optional[Path]:
@@ -463,26 +495,20 @@ def _make_backup(path: Path) -> Optional[Path]:
 
 
 def apply_normalization(opts: NormalizeOptions, preset_root: Path, preset_payload: Optional[Dict] = None) -> Dict:
-    scan = scan_dataset(opts, preset_root, preset_payload=preset_payload)
-    if not scan.get("ok"):
-        return scan
-
-    preset = preset_payload or load_preset(preset_root, opts.preset_type, opts.preset_file)
-    tag_files = collect_tag_files(
-        readable_path(str(opts.dataset_path)), opts.recursive, opts.image_exts, opts.include_missing_txt
-    )
-    parsed = [parse_tag_file(p) for p in tag_files]
+    context, err = _build_scan_context(opts, preset_root, preset_payload=preset_payload)
+    if err or context is None:
+        return {"ok": False, "error": err or "Failed building scan context"}
     stats = {
-        "total_files": scan.get("total_files", len(parsed)),
-        "tag_counts": scan.get("tag_counts") or Counter(),
+        "total_files": context.total_files,
+        "tag_counts": context.tag_counts,
     }
 
     changed_files = 0
     actions_total = Counter()
     backups_made = 0
 
-    for tf in parsed:
-        after, meta = normalize_record(tf, preset, opts, stats)
+    for tf in context.parsed:
+        after, meta = normalize_record(tf, context.preset, opts, stats)
         if not meta["changed"]:
             continue
         if opts.backup_enabled:
@@ -494,7 +520,7 @@ def apply_normalization(opts: NormalizeOptions, preset_root: Path, preset_payloa
 
     summary = {
         "ok": True,
-        "total_files": len(parsed),
+        "total_files": len(context.parsed),
         "changed_files": changed_files,
         "backups_made": backups_made,
         "actions": dict(actions_total),

@@ -56,6 +56,8 @@ STEP_LABELS = {
 
 TAG_STEPS = {"offline_tagger", "tag_editor", "normalize", "dedup_tags"}
 IMAGE_ONLY_STEPS = {"webp_to_png", "batch_adjust", "merge_groups", "webtoon_split"}
+VALID_COPY_MODES = {"copy", "hardlink", "incremental"}
+PERSIST_INTERVAL_RUNNING_SEC = 0.75
 
 
 @dataclass
@@ -77,6 +79,7 @@ class PipelineJob:
     log: List[Dict[str, Any]] = field(default_factory=list)
     artifacts: Dict[str, Any] = field(default_factory=dict)
     waiting_reason: str = ""
+    log_seq: int = 0
 
     def to_dict(self) -> Dict[str, Any]:
         out = asdict(self)
@@ -105,23 +108,87 @@ def _zipdir(src: Path, dest_zip: Path, include_txt: bool = True, include_images_
                 zf.write(p, arcname)
 
 
-def _copy_dataset(src: Path, dest: Path, image_exts: List[str], recursive: bool):
+def _coerce_copy_mode(raw: Any) -> str:
+    val = str(raw or "copy").strip().lower()
+    if val in {"link", "hardlink"}:
+        return "hardlink"
+    if val in {"incremental", "sync", "incremental_copy"}:
+        return "incremental"
+    return "copy"
+
+
+def _same_file_meta(src: Path, dst: Path) -> bool:
+    try:
+        s = src.stat()
+        d = dst.stat()
+    except Exception:
+        return False
+    return s.st_size == d.st_size and int(s.st_mtime) == int(d.st_mtime)
+
+
+def _transfer_file(src: Path, dst: Path, mode: str, incremental: bool) -> str:
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    if incremental and dst.exists() and _same_file_meta(src, dst):
+        return "skipped"
+
+    if mode == "hardlink":
+        if dst.exists():
+            try:
+                dst.unlink()
+            except Exception:
+                shutil.copy2(src, dst)
+                return "copied"
+        try:
+            os.link(src, dst)
+            return "linked"
+        except Exception:
+            shutil.copy2(src, dst)
+            return "copied"
+
+    shutil.copy2(src, dst)
+    return "copied"
+
+
+def _copy_dataset_fast(
+    src: Path,
+    dest: Path,
+    image_exts: List[str],
+    recursive: bool,
+    copy_mode: str = "copy",
+    incremental: bool = False,
+) -> Dict[str, int]:
+    mode = _coerce_copy_mode(copy_mode)
+    if mode == "incremental":
+        mode = "copy"
+        incremental = True
     _ensure_dir(dest)
-    if recursive:
-        for p in src.rglob("*"):
-            if p.is_dir():
-                continue
-            rel = p.relative_to(src)
-            if p.is_file():
-                if p.suffix.lower() in image_exts or p.suffix.lower() == ".txt":
-                    dest_path = dest / rel
-                    dest_path.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(p, dest_path)
-    else:
-        for p in src.iterdir():
-            if p.is_file() and (p.suffix.lower() in image_exts or p.suffix.lower() == ".txt"):
-                dest_path = dest / p.name
-                shutil.copy2(p, dest_path)
+
+    copied = 0
+    linked = 0
+    skipped = 0
+    errors = 0
+
+    def _eligible(path: Path) -> bool:
+        return path.is_file() and (path.suffix.lower() in image_exts or path.suffix.lower() == ".txt")
+
+    iterator = src.rglob("*") if recursive else src.iterdir()
+    for p in iterator:
+        if not _eligible(p):
+            continue
+        rel = p.relative_to(src) if recursive else Path(p.name)
+        dst = dest / rel
+        try:
+            result = _transfer_file(p, dst, mode=mode, incremental=incremental)
+            if result == "copied":
+                copied += 1
+            elif result == "linked":
+                linked += 1
+            else:
+                skipped += 1
+        except Exception:
+            errors += 1
+
+    return {"copied": copied, "linked": linked, "skipped": skipped, "errors": errors}
 
 
 def _find_images(folder: Path, recursive: bool, exts: List[str]) -> List[Path]:
@@ -214,6 +281,7 @@ def _dedup_txt_folder(folder: Path):
 class PipelineManager:
     def __init__(self):
         self.jobs: Dict[str, PipelineJob] = {}
+        self.last_persist_ts: Dict[str, float] = {}
         self.lock = threading.Lock()
         self.wake = threading.Event()
         self.step_runners = {
@@ -229,23 +297,130 @@ class PipelineManager:
             "merge_groups": self._step_merge_groups,
             "webtoon_split": self._step_webtoon_split,
         }
+        self._restore_jobs_from_disk()
         self.thread = threading.Thread(target=self._worker, daemon=True)
         self.thread.start()
 
     # ---------- persistence ----------
-    def _persist_job(self, job: PipelineJob):
+    def _persist_job(self, job: PipelineJob, force: bool = False):
+        now = _now_ts()
+        last = self.last_persist_ts.get(job.id, 0.0)
+        if not force and job.status == "RUNNING" and (now - last) < PERSIST_INTERVAL_RUNNING_SEC:
+            return
         workdir = Path(job.config.get("working_dir") or ".")
         _ensure_dir(workdir)
         path = workdir / ".pipeline_job.json"
         try:
             path.write_text(json.dumps(job.to_dict(), indent=2), encoding="utf-8")
+            self.last_persist_ts[job.id] = now
         except Exception:
             pass
 
     # ---------- job helpers ----------
     def _add_log(self, job: PipelineJob, message: str, level: str = "info"):
-        job.log.append({"ts": datetime.utcnow().isoformat(), "level": level, "message": message})
+        job.log_seq += 1
+        job.log.append(
+            {"id": job.log_seq, "ts": datetime.utcnow().isoformat(), "level": level, "message": message}
+        )
         job.log = job.log[-500:]
+
+    def _state_candidates(self) -> List[Path]:
+        candidates: List[Path] = []
+        roots = [Path("_work"), Path(".")]
+        for root in roots:
+            if not root.exists() or not root.is_dir():
+                continue
+            direct = root / ".pipeline_job.json"
+            if direct.exists():
+                candidates.append(direct)
+            try:
+                first_level = [p for p in root.iterdir() if p.is_dir()]
+            except Exception:
+                first_level = []
+            for child in first_level:
+                state = child / ".pipeline_job.json"
+                if state.exists():
+                    candidates.append(state)
+                try:
+                    second_level = [p for p in child.iterdir() if p.is_dir()]
+                except Exception:
+                    second_level = []
+                for grand in second_level:
+                    deep_state = grand / ".pipeline_job.json"
+                    if deep_state.exists():
+                        candidates.append(deep_state)
+        # preserve newest state files first
+        uniq = {}
+        for path in candidates:
+            uniq[str(path.resolve())] = path
+        return sorted(uniq.values(), key=lambda p: p.stat().st_mtime if p.exists() else 0.0, reverse=True)
+
+    def _restore_jobs_from_disk(self):
+        for path in self._state_candidates():
+            try:
+                raw = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            job_id = str(raw.get("id") or "").strip()
+            if not job_id or job_id in self.jobs:
+                continue
+            created_at_raw = raw.get("created_at")
+            created_at = _now_ts()
+            if isinstance(created_at_raw, (int, float)):
+                created_at = float(created_at_raw)
+            elif isinstance(created_at_raw, str) and created_at_raw.strip():
+                try:
+                    created_at = datetime.fromisoformat(created_at_raw).timestamp()
+                except Exception:
+                    created_at = _now_ts()
+
+            status = str(raw.get("status") or "WAITING_MANUAL").strip().upper()
+            if status in {"RUNNING", "QUEUED"}:
+                status = "WAITING_MANUAL"
+
+            steps = [str(x) for x in (raw.get("steps") or []) if str(x).strip()]
+            config = raw.get("config") if isinstance(raw.get("config"), dict) else {}
+            artifacts = raw.get("artifacts") if isinstance(raw.get("artifacts"), dict) else {}
+            waiting_reason = str(raw.get("waiting_reason") or "")
+            if status == "WAITING_MANUAL" and not waiting_reason:
+                waiting_reason = "Recovered after restart. Review and resume when ready."
+            logs_raw = raw.get("log") if isinstance(raw.get("log"), list) else []
+            logs: List[Dict[str, Any]] = []
+            max_log_id = 0
+            for item in logs_raw[-500:]:
+                if not isinstance(item, dict):
+                    continue
+                log_id = item.get("id")
+                if not isinstance(log_id, int):
+                    max_log_id += 1
+                    log_id = max_log_id
+                else:
+                    max_log_id = max(max_log_id, log_id)
+                logs.append(
+                    {
+                        "id": int(log_id),
+                        "ts": str(item.get("ts") or datetime.utcnow().isoformat()),
+                        "level": str(item.get("level") or "info"),
+                        "message": str(item.get("message") or ""),
+                    }
+                )
+
+            job = PipelineJob(
+                id=job_id,
+                created_at=created_at,
+                status=status if status in PIPELINE_STATUSES else "WAITING_MANUAL",
+                current_step=str(raw.get("current_step") or ""),
+                step_index=max(0, int(raw.get("step_index") or 0)),
+                steps=steps,
+                config=config,
+                log=logs,
+                artifacts=artifacts,
+                waiting_reason=waiting_reason,
+                log_seq=max_log_id,
+            )
+            self.jobs[job.id] = job
+            self._add_log(job, f"Recovered pipeline state from: {path}")
+            self._persist_job(job, force=True)
 
     def _register_job(self, job: PipelineJob):
         with self.lock:
@@ -333,7 +508,7 @@ class PipelineManager:
         )
         self._add_log(job, "Job created.")
         self._register_job(job)
-        self._persist_job(job)
+        self._persist_job(job, force=True)
         return True, job_id, None
 
     def pause_job(self, job_id: str) -> Tuple[bool, str]:
@@ -344,7 +519,7 @@ class PipelineManager:
             job.status = "WAITING_MANUAL"
             job.waiting_reason = "Paused by user"
             self._add_log(job, "Paused by user.")
-            self._persist_job(job)
+            self._persist_job(job, force=True)
         return True, "paused"
 
     def stop_job(self, job_id: str) -> Tuple[bool, str]:
@@ -354,7 +529,7 @@ class PipelineManager:
         with self.lock:
             job.status = "STOPPED"
             self._add_log(job, "Stopped by user.")
-            self._persist_job(job)
+            self._persist_job(job, force=True)
         return True, "stopped"
 
     def resume_job(self, job_id: str) -> Tuple[bool, str]:
@@ -371,18 +546,27 @@ class PipelineManager:
             job.status = "QUEUED"
             job.waiting_reason = ""
             self._add_log(job, "Resumed.")
-            self._persist_job(job)
+            self._persist_job(job, force=True)
         self.wake.set()
         return True, "resumed"
 
-    def get_status(self, job_id: Optional[str] = None) -> Tuple[bool, Optional[Dict[str, Any]], str]:
+    def get_status(
+        self, job_id: Optional[str] = None, since_log_id: Optional[int] = None
+    ) -> Tuple[bool, Optional[Dict[str, Any]], str]:
         if not job_id and self.jobs:
             # return latest job
             job_id = sorted(self.jobs.values(), key=lambda j: j.created_at)[-1].id
         job = self.jobs.get(job_id or "")
         if not job:
             return False, None, "job not found"
-        return True, job.to_dict(), ""
+        data = job.to_dict()
+        data["last_log_id"] = job.log_seq
+        if since_log_id is not None and since_log_id >= 0:
+            data["log"] = [item for item in job.log if int(item.get("id") or 0) > since_log_id]
+            data["log_delta"] = True
+        else:
+            data["log_delta"] = False
+        return True, data, ""
 
     # ---------- steps ----------
     def _build_step_names(self, cfg: Dict[str, Any]) -> List[str]:
@@ -402,7 +586,7 @@ class PipelineManager:
                 with self.lock:
                     job.status = "FAILED"
                     self._add_log(job, f"Fatal error: {exc}", level="error")
-                    self._persist_job(job)
+                    self._persist_job(job, force=True)
 
     def _next_job(self) -> Optional[PipelineJob]:
         with self.lock:
@@ -415,7 +599,7 @@ class PipelineManager:
         if not job.artifacts.get("prepared"):
             with self.lock:
                 if job.status == "STOPPED":
-                    self._persist_job(job)
+                    self._persist_job(job, force=True)
                     return
                 job.status = "RUNNING"
                 job.current_step = "Prepare workspace"
@@ -432,17 +616,17 @@ class PipelineManager:
                     job.status = result.wait_status or "WAITING_MANUAL"
                     job.waiting_reason = result.message
                     self._add_log(job, f"Waiting: {result.message}")
-                    self._persist_job(job)
+                    self._persist_job(job, force=True)
                     return
                 elif result.status == "FAIL":
                     job.status = "FAILED"
                     self._add_log(job, result.message, level="error")
-                    self._persist_job(job)
+                    self._persist_job(job, force=True)
                     return
                 elif result.status == "STOP":
                     job.status = "STOPPED"
                     self._add_log(job, "Stopped.")
-                    self._persist_job(job)
+                    self._persist_job(job, force=True)
                     return
 
         steps = self._build_steps(job)
@@ -450,7 +634,7 @@ class PipelineManager:
             step_name, fn = steps[job.step_index]
             with self.lock:
                 if job.status == "STOPPED":
-                    self._persist_job(job)
+                    self._persist_job(job, force=True)
                     return
                 job.status = "RUNNING"
                 job.current_step = step_name
@@ -467,17 +651,17 @@ class PipelineManager:
                     job.status = result.wait_status or "WAITING_MANUAL"
                     job.waiting_reason = result.message
                     self._add_log(job, f"Waiting: {result.message}")
-                    self._persist_job(job)
+                    self._persist_job(job, force=True)
                     return
                 elif result.status == "FAIL":
                     job.status = "FAILED"
                     self._add_log(job, result.message, level="error")
-                    self._persist_job(job)
+                    self._persist_job(job, force=True)
                     return
                 elif result.status == "STOP":
                     job.status = "STOPPED"
                     self._add_log(job, "Stopped.")
-                    self._persist_job(job)
+                    self._persist_job(job, force=True)
                     return
 
                 self._persist_job(job)
@@ -486,7 +670,7 @@ class PipelineManager:
             job.status = "COMPLETED"
             job.current_step = "Done"
             self._add_log(job, "Pipeline completed.")
-            self._persist_job(job)
+            self._persist_job(job, force=True)
 
     # Step builders
     def _build_steps(self, job: PipelineJob) -> List[Tuple[str, Any]]:
@@ -559,6 +743,10 @@ class PipelineManager:
         output = readable_path(cfg.get("output_dir", ""))
         image_exts = _coerce_exts(cfg.get("image_exts"))
         recursive = bool(cfg.get("recursive"))
+        copy_mode = _coerce_copy_mode(cfg.get("copy_mode"))
+        incremental_copy = copy_mode == "incremental" or _parse_bool(cfg.get("incremental_copy"))
+        clean_working_raw = cfg.get("clean_working")
+        clean_working = (not incremental_copy) if clean_working_raw is None else _parse_bool(clean_working_raw)
 
         if not dataset.exists():
             return StepResult(status="FAIL", message=f"Dataset not found: {dataset}")
@@ -568,11 +756,24 @@ class PipelineManager:
             return StepResult(status="FAIL", message="No images found in dataset")
 
         normalized_dir = working / "normalized"
+        if clean_working and normalized_dir.exists():
+            try:
+                shutil.rmtree(normalized_dir)
+            except Exception as exc:
+                return StepResult(status="FAIL", message=f"Failed cleaning working dir: {exc}")
+
         for d in [normalized_dir, output]:
             _ensure_dir(d)
 
         # copy dataset to normalized work area
-        _copy_dataset(dataset, normalized_dir, image_exts=image_exts, recursive=recursive)
+        copy_stats = _copy_dataset_fast(
+            dataset,
+            normalized_dir,
+            image_exts=image_exts,
+            recursive=recursive,
+            copy_mode=copy_mode,
+            incremental=incremental_copy,
+        )
 
         with self.lock:
             job.artifacts.update(
@@ -581,9 +782,17 @@ class PipelineManager:
                     "normalized_dir": str(normalized_dir),
                     "output_dir": str(output),
                     "working_copy": str(normalized_dir),
+                    "copy_mode": "incremental" if incremental_copy else copy_mode,
+                    "copy_stats": copy_stats,
                 }
             )
-            self._add_log(job, f"Prepared working dirs. Images: {len(images)}")
+            self._add_log(
+                job,
+                "Prepared working dirs. "
+                f"Images: {len(images)} | mode={job.artifacts['copy_mode']} | "
+                f"copied={copy_stats['copied']} linked={copy_stats['linked']} "
+                f"skipped={copy_stats['skipped']} errors={copy_stats['errors']}",
+            )
         return StepResult(status="SUCCESS", message="Prepared")
 
     def _step_autotag_offline(self, job: PipelineJob, step_cfg: Dict[str, Any]) -> StepResult:

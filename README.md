@@ -157,13 +157,17 @@ Parameter utama:
 - Device: `auto` memakai CUDA jika tersedia, fallback ke CPU.
 - Batch size: semakin besar semakin cepat, tapi butuh memori lebih.
 - General/Character threshold: semakin kecil, tag makin banyak (lebih noisy).
+- Threshold mode: `mcut` (default) lebih adaptif per gambar, `fixed` pakai threshold statis.
+- MCUT tuning (advanced): `mcut_relax_*` menurunkan threshold MCUT agar hasil lebih deskriptif, `mcut_min_*_tags` menjaga minimal jumlah tag.
+- Tag focus: `all`, `character/subject only`, atau `non-character only`.
 - Max tags: 0 berarti tidak dibatasi.
 - Write mode: `append` menambah ke tag lama, `overwrite` menimpa, `skip` mengabaikan file yang `.txt`-nya sudah berisi.
-- Include character/rating: kontrol tag karakter dan `rating:general`.
+- Include character/rating: kontrol tag karakter dan `rating:general` (opsi character berlaku saat focus `all`).
 - Replace underscores: `long_hair` -> `long hair`.
 - Preview only + Preview limit: hanya tampilkan contoh di log tanpa menulis file.
 - Image limit: batasi jumlah gambar (0 = semua).
 - Local files only: jangan download model; gagal jika cache kosong.
+- Non-character regex (advanced): pola pemisah subject/outfit vs background/scene; bisa diubah untuk model selain WD.
 Perhatian:
 - Tag ditulis ke `.txt` di samping gambar.
 - Jika ada `#optional:` atau `#warning:` di .txt, blok tersebut dipertahankan.

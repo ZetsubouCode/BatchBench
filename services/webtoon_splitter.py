@@ -15,14 +15,6 @@ def _list_images(folder: Path, glob_pat: str, exts: List[str]) -> List[Path]:
     )
 
 
-def _row_is_white(pix, y: int, w: int, threshold: int, ratio: float) -> bool:
-    white = 0
-    for x in range(w):
-        if pix[x, y] >= threshold:
-            white += 1
-    return (white / w) >= ratio
-
-
 def _fill_small_gaps(rows: List[bool], max_gap: int) -> List[bool]:
     if max_gap <= 0:
         return rows
@@ -46,10 +38,13 @@ def _fill_small_gaps(rows: List[bool], max_gap: int) -> List[bool]:
 def _find_stripes(
     img: Image.Image, threshold: int, min_height: int, ratio: float, max_gap: int
 ) -> List[Tuple[int, int]]:
-    gray = img.convert("L")
-    pix = gray.load()
-    w, h = gray.size
-    rows = [_row_is_white(pix, y, w, threshold, ratio) for y in range(h)]
+    import numpy as np
+
+    gray = np.asarray(img.convert("L"), dtype=np.uint8)
+    if gray.size == 0:
+        return []
+    h = gray.shape[0]
+    rows = ((gray >= threshold).mean(axis=1) >= ratio).tolist()
     rows = _fill_small_gaps(rows, max_gap)
 
     stripes: List[Tuple[int, int]] = []

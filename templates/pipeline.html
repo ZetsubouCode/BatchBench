@@ -67,7 +67,19 @@
         <label class="form-check-label" for="pipe-recursive">Include subfolders</label>
       </div>
     </div>
-    <div class="col-lg-8">
+    <div class="col-lg-4">
+      <label class="form-label">Working copy mode</label>
+      <select id="pipe-copy-mode" class="form-select">
+        <option value="copy" selected>Copy</option>
+        <option value="hardlink">Hardlink (fast, same drive)</option>
+        <option value="incremental">Incremental copy (skip unchanged)</option>
+      </select>
+      <div class="form-check mt-1">
+        <input class="form-check-input" type="checkbox" id="pipe-clean-working" checked>
+        <label class="form-check-label" for="pipe-clean-working">Clean working folder before copy</label>
+      </div>
+    </div>
+    <div class="col-lg-4">
       <div class="pipe-panel h-100">
         <div class="fw-semibold mb-1">How it works</div>
         <div class="small text-muted">Dataset is copied into the working folder first. Steps run against the working copy unless you override a step path.</div>
@@ -141,6 +153,7 @@
   let currentJobId = null;
   let pollTimer = null;
   let lastArtifacts = {};
+  let lastLogId = 0;
   let presetData = { types: [], files: {} };
 
   const batchPresets = Object.keys({{ presets|tojson }} || {});
@@ -169,6 +182,7 @@
         threshold_mode: 'mcut',
         general_threshold: 0.35,
         character_threshold: 0.75,
+        tag_focus_mode: 'all',
         write_mode: 'append',
         include_character: true,
         include_rating: false,
@@ -180,6 +194,11 @@
         max_general_tags: 0,
         max_character_tags: 0,
         character_topk: 0,
+        mcut_relax_general: 0.08,
+        mcut_relax_character: 0.02,
+        mcut_min_general_tags: 8,
+        mcut_min_character_tags: 0,
+        non_character_regex: '',
         dedupe: true,
         sort_tags: true,
         keep_existing_tags: true,
@@ -212,6 +231,14 @@
             <select class="form-select" data-field="threshold_mode">
               <option value="fixed">fixed</option>
               <option value="mcut">mcut</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Tag focus</label>
+            <select class="form-select" data-field="tag_focus_mode">
+              <option value="all">all</option>
+              <option value="character">character/subject only</option>
+              <option value="non_character">non-character only</option>
             </select>
           </div>
           <div class="col-md-3">
@@ -271,6 +298,26 @@
                 <div class="col-md-3">
                   <label class="form-label">Model ID (optional)</label>
                   <input class="form-control" data-field="model_id">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">MCUT relax general</label>
+                  <input class="form-control" type="number" min="0" max="1" step="0.01" data-field="mcut_relax_general">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">MCUT relax character</label>
+                  <input class="form-control" type="number" min="0" max="1" step="0.01" data-field="mcut_relax_character">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">MCUT min general tags</label>
+                  <input class="form-control" type="number" min="0" data-field="mcut_min_general_tags">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">MCUT min character tags</label>
+                  <input class="form-control" type="number" min="0" data-field="mcut_min_character_tags">
+                </div>
+                <div class="col-12">
+                  <label class="form-label">Non-character regex (one per line)</label>
+                  <textarea class="form-control" rows="2" data-field="non_character_regex" placeholder="optional override for subject/background split"></textarea>
                 </div>
                 <div class="col-12 d-flex flex-wrap gap-4">
                   <label class="form-check">
@@ -889,16 +936,24 @@
     });
   }
 
-  function renderLogs(logs){
+  function renderLogs(logs, isDelta){
     const wrap = q('pipe-log');
     if(!wrap) return;
-    wrap.innerHTML = '';
+    if(!isDelta){
+      wrap.innerHTML = '';
+      lastLogId = 0;
+    }
     (logs || []).slice(-200).forEach(item=>{
       const div = document.createElement('div');
       div.className = 'small';
       div.textContent = `[${item.ts}] (${item.level}) ${item.message}`;
       wrap.appendChild(div);
+      const logId = Number(item.id || 0);
+      if(logId > lastLogId){ lastLogId = logId; }
     });
+    while(wrap.children.length > 200){
+      wrap.removeChild(wrap.firstChild);
+    }
   }
 
   function renderArtifacts(art){
@@ -955,6 +1010,9 @@
       output_dir: q('pipe-output')?.value || '',
       image_exts: q('pipe-exts')?.value || '',
       recursive: q('pipe-recursive')?.checked || false,
+      copy_mode: q('pipe-copy-mode')?.value || 'copy',
+      incremental_copy: (q('pipe-copy-mode')?.value || '') === 'incremental',
+      clean_working: q('pipe-clean-working')?.checked ?? true,
       steps
     };
   }
@@ -1192,6 +1250,9 @@
       }
       const data = await fetchJson('/api/pipeline/start', { method:'POST', body: JSON.stringify(payload) });
       currentJobId = data.job_id;
+      lastLogId = 0;
+      const logWrap = q('pipe-log');
+      if(logWrap){ logWrap.innerHTML = ''; }
       setStatusBadge('running', 'primary');
       pollStatus(true);
     }catch(err){
@@ -1230,10 +1291,17 @@
       return;
     }
     try{
-      const data = await fetchJson(`/api/pipeline/status?job_id=${encodeURIComponent(currentJobId)}`);
+      const qs = new URLSearchParams({ job_id: currentJobId });
+      if(lastLogId > 0){
+        qs.set('since_log_id', String(lastLogId));
+      }
+      const data = await fetchJson(`/api/pipeline/status?${qs.toString()}`);
       const job = data.job;
       renderSteps(job.steps, job.current_step);
-      renderLogs(job.log);
+      renderLogs(job.log, !!job.log_delta);
+      if((job.last_log_id || 0) > lastLogId){
+        lastLogId = job.last_log_id;
+      }
       renderArtifacts(job.artifacts);
       q('pipe-step-text').textContent = `${job.current_step} (${job.status}) ${job.waiting_reason || ''}`;
       setProgress(job.step_index || 0, (job.steps || []).length);

@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 import re
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from utils.io import readable_path, log_join
@@ -14,10 +15,18 @@ DEFAULT_GENERAL_THRESHOLD = 0.35
 DEFAULT_CHARACTER_THRESHOLD = 0.75
 DEFAULT_THRESHOLD_MODE = "mcut"
 DEFAULT_MIN_THRESHOLD_FLOOR = 0.2
+DEFAULT_TAG_FOCUS_MODE = "all"
 
 DEFAULT_MAX_GENERAL_TAGS = 0
 DEFAULT_MAX_CHARACTER_TAGS = 0
 DEFAULT_MAX_META_TAGS = 0
+
+DEFAULT_MCUT_RELAX_GENERAL = 0.08
+DEFAULT_MCUT_RELAX_CHARACTER = 0.02
+DEFAULT_MCUT_RELAX_META = 0.05
+DEFAULT_MCUT_MIN_GENERAL_TAGS = 8
+DEFAULT_MCUT_MIN_CHARACTER_TAGS = 0
+DEFAULT_MCUT_MIN_META_TAGS = 0
 
 DEFAULT_BACKEND = "transformers"
 DEFAULT_ENABLE_COLOR_SANITY = True
@@ -27,6 +36,16 @@ DEFAULT_COLOR_MIN_VALUE = 0.15
 DEFAULT_COLOR_KEEP_IF_SCORE_GE = 0.92
 DEFAULT_COLOR_DOWNSCALE = 256
 DEFAULT_DEBUG_COLOR_SANITY = False
+
+DEFAULT_NON_CHARACTER_REGEX = [
+    r"(?:^|[ _])(background|scenery|landscape|cityscape)(?:$|[ _])",
+    r"(?:^|[ _])(indoors|outdoors|sky|cloud|sunset|sunrise|moon|star|night|day)(?:$|[ _])",
+    r"(?:^|[ _])(room|bedroom|bathroom|kitchen|classroom|office|library|corridor|hallway)(?:$|[ _])",
+    r"(?:^|[ _])(street|road|alley|bridge|sidewalk|building|window|door)(?:$|[ _])",
+    r"(?:^|[ _])(forest|tree|grass|flower|mountain|river|lake|sea|ocean|beach)(?:$|[ _])",
+    r"(?:^|[ _])(car|bus|train|airplane|ship|bicycle)(?:$|[ _])",
+    r" background$",
+]
 
 TAGGER_POLICY = {
     "force_wd_bgr_fix": True,
@@ -40,6 +59,13 @@ TAGGER_POLICY = {
     "character_threshold": DEFAULT_CHARACTER_THRESHOLD,
     "threshold_mode": DEFAULT_THRESHOLD_MODE,
     "min_threshold_floor": DEFAULT_MIN_THRESHOLD_FLOOR,
+    "mcut_relax_general": DEFAULT_MCUT_RELAX_GENERAL,
+    "mcut_relax_character": DEFAULT_MCUT_RELAX_CHARACTER,
+    "mcut_relax_meta": DEFAULT_MCUT_RELAX_META,
+    "mcut_min_general_tags": DEFAULT_MCUT_MIN_GENERAL_TAGS,
+    "mcut_min_character_tags": DEFAULT_MCUT_MIN_CHARACTER_TAGS,
+    "mcut_min_meta_tags": DEFAULT_MCUT_MIN_META_TAGS,
+    "tag_focus_mode": DEFAULT_TAG_FOCUS_MODE,
     "include_general": True,
     "include_character": True,
     "include_rating": False,
@@ -59,6 +85,7 @@ TAGGER_POLICY = {
     "local_only": False,
     "exclude_tags": "",
     "exclude_regex": "",
+    "non_character_regex": list(DEFAULT_NON_CHARACTER_REGEX),
     "use_normalizer_remove_as_exclude": False,
     "trigger_tag": "",
     "general_category_id": None,
@@ -165,6 +192,13 @@ class TaggerOptions:
     character_threshold: float
     threshold_mode: str
     min_threshold_floor: float
+    mcut_relax_general: float
+    mcut_relax_character: float
+    mcut_relax_meta: float
+    mcut_min_general_tags: int
+    mcut_min_character_tags: int
+    mcut_min_meta_tags: int
+    tag_focus_mode: str
     include_general: bool
     include_character: bool
     include_rating: bool
@@ -185,6 +219,7 @@ class TaggerOptions:
     local_only: bool
     exclude_tags: List[str]
     exclude_regex: List[str]
+    non_character_regex: List[str]
     use_normalizer_remove_as_exclude: bool
     backend: str
     use_amp: bool
@@ -346,14 +381,24 @@ def _effective_opts(form_opts: Dict[str, Any], policy: Dict[str, Any]) -> Tagger
     threshold_mode = (form_opts.get("threshold_mode") or policy.get("threshold_mode") or DEFAULT_THRESHOLD_MODE).strip().lower()
     if threshold_mode not in {"fixed", "mcut"}:
         threshold_mode = DEFAULT_THRESHOLD_MODE
+    tag_focus_mode = (form_opts.get("tag_focus_mode") or policy.get("tag_focus_mode") or DEFAULT_TAG_FOCUS_MODE).strip().lower()
+    if tag_focus_mode not in {"all", "character", "non_character"}:
+        tag_focus_mode = DEFAULT_TAG_FOCUS_MODE
 
     batch_size = max(1, _parse_int(_fallback("batch_size"), int(policy.get("batch_size", 4))))
     preview_limit = max(0, _parse_int(_fallback("preview_limit"), int(policy.get("preview_limit", 20))))
     limit = max(0, _parse_int(_fallback("limit"), int(policy.get("limit", 0))))
 
+    include_general = bool(policy.get("include_general", True))
     include_character = _parse_bool(_fallback("include_character")) if "include_character" in form_opts else bool(
         policy.get("include_character", True)
     )
+    if tag_focus_mode == "character":
+        include_general = True
+        include_character = True
+    elif tag_focus_mode == "non_character":
+        include_general = True
+        include_character = False
     include_rating = _parse_bool(_fallback("include_rating")) if "include_rating" in form_opts else bool(
         policy.get("include_rating", False)
     )
@@ -380,7 +425,47 @@ def _effective_opts(form_opts: Dict[str, Any], policy: Dict[str, Any]) -> Tagger
         character_threshold=character_threshold,
         threshold_mode=threshold_mode,
         min_threshold_floor=float(policy.get("min_threshold_floor", DEFAULT_MIN_THRESHOLD_FLOOR)),
-        include_general=bool(policy.get("include_general", True)),
+        mcut_relax_general=max(
+            0.0,
+            min(
+                _parse_float(_fallback("mcut_relax_general"), float(policy.get("mcut_relax_general", DEFAULT_MCUT_RELAX_GENERAL))),
+                1.0,
+            ),
+        ),
+        mcut_relax_character=max(
+            0.0,
+            min(
+                _parse_float(
+                    _fallback("mcut_relax_character"),
+                    float(policy.get("mcut_relax_character", DEFAULT_MCUT_RELAX_CHARACTER)),
+                ),
+                1.0,
+            ),
+        ),
+        mcut_relax_meta=max(
+            0.0,
+            min(
+                _parse_float(_fallback("mcut_relax_meta"), float(policy.get("mcut_relax_meta", DEFAULT_MCUT_RELAX_META))),
+                1.0,
+            ),
+        ),
+        mcut_min_general_tags=max(
+            0,
+            _parse_int(_fallback("mcut_min_general_tags"), int(policy.get("mcut_min_general_tags", DEFAULT_MCUT_MIN_GENERAL_TAGS))),
+        ),
+        mcut_min_character_tags=max(
+            0,
+            _parse_int(
+                _fallback("mcut_min_character_tags"),
+                int(policy.get("mcut_min_character_tags", DEFAULT_MCUT_MIN_CHARACTER_TAGS)),
+            ),
+        ),
+        mcut_min_meta_tags=max(
+            0,
+            _parse_int(_fallback("mcut_min_meta_tags"), int(policy.get("mcut_min_meta_tags", DEFAULT_MCUT_MIN_META_TAGS))),
+        ),
+        tag_focus_mode=tag_focus_mode,
+        include_general=include_general,
         include_character=include_character,
         include_rating=include_rating,
         include_meta=bool(policy.get("include_meta", False)),
@@ -404,6 +489,9 @@ def _effective_opts(form_opts: Dict[str, Any], policy: Dict[str, Any]) -> Tagger
         local_only=bool(policy.get("local_only", False)),
         exclude_tags=_parse_tag_list(_fallback("exclude_tags") or policy.get("exclude_tags") or ""),
         exclude_regex=_parse_regex_list(policy.get("exclude_regex") or []),
+        non_character_regex=_parse_regex_list(
+            _fallback("non_character_regex") or policy.get("non_character_regex") or DEFAULT_NON_CHARACTER_REGEX
+        ),
         use_normalizer_remove_as_exclude=bool(policy.get("use_normalizer_remove_as_exclude", False)),
         backend=(policy.get("backend") or DEFAULT_BACKEND).strip().lower(),
         use_amp=bool(policy.get("use_amp", False)),
@@ -832,16 +920,42 @@ def _matches_any(tag: str, patterns: List[re.Pattern]) -> bool:
     return any(pat.search(tag) for pat in patterns)
 
 
-def _mcut_threshold(scores: List[float], floor: float) -> float:
+def _mcut_threshold(scores: List[float], floor: float, relax: float = 0.0, min_tags: int = 0) -> float:
     if not scores:
         return 1.1
+    floor = max(0.0, min(float(floor), 1.0))
+    relax = max(0.0, min(float(relax), 1.0))
+    min_tags = max(0, int(min_tags))
     if len(scores) == 1:
-        return max(scores[0], floor)
+        return max(scores[0] - relax, floor)
     sorted_scores = sorted(scores, reverse=True)
     gaps = [sorted_scores[i] - sorted_scores[i + 1] for i in range(len(sorted_scores) - 1)]
     max_idx = max(range(len(gaps)), key=lambda idx: gaps[idx])
     threshold = (sorted_scores[max_idx] + sorted_scores[max_idx + 1]) / 2.0
+    threshold = threshold - relax
+    if min_tags > 0:
+        pivot_idx = min(min_tags - 1, len(sorted_scores) - 1)
+        threshold = min(threshold, sorted_scores[pivot_idx])
     return max(threshold, floor)
+
+
+def _split_general_focus(
+    general: List[Tuple[str, float]],
+    non_character_patterns: List[re.Pattern],
+) -> Tuple[List[Tuple[str, float]], List[Tuple[str, float]]]:
+    if not general:
+        return [], []
+    if not non_character_patterns:
+        return list(general), []
+    subject_general: List[Tuple[str, float]] = []
+    non_character_general: List[Tuple[str, float]] = []
+    for tag, score in general:
+        norm = _normalize_tag_for_color(tag)
+        if _matches_any(norm, non_character_patterns):
+            non_character_general.append((tag, score))
+        else:
+            subject_general.append((tag, score))
+    return subject_general, non_character_general
 
 
 def _apply_excludes(tags: List[str], exclude_tags: set, exclude_regex: List[re.Pattern]) -> List[str]:
@@ -876,6 +990,7 @@ def _build_tags(
     category_ids: CategoryIds,
     exclude_tags: set,
     exclude_regex: List[re.Pattern],
+    non_character_regex: Optional[List[re.Pattern]] = None,
     stats: Optional[Dict[str, int]] = None,
     color_presence: Optional[Dict[str, float]] = None,
     color_debug: Optional[List[str]] = None,
@@ -930,16 +1045,34 @@ def _build_tags(
     mode = (opts.threshold_mode or DEFAULT_THRESHOLD_MODE).strip().lower()
     floor = max(0.0, min(opts.min_threshold_floor, 1.0))
     use_mcut = mode == "mcut"
+    focus_mode = (opts.tag_focus_mode or DEFAULT_TAG_FOCUS_MODE).strip().lower()
+    if focus_mode not in {"all", "character", "non_character"}:
+        focus_mode = DEFAULT_TAG_FOCUS_MODE
 
-    def _threshold(items: List[Tuple[str, float]], fallback: float) -> float:
+    def _threshold(items: List[Tuple[str, float]], fallback: float, relax: float, min_tags: int) -> float:
         if not use_mcut:
             return fallback
         scores = [score for _, score in items]
-        return _mcut_threshold(scores, floor)
+        return _mcut_threshold(scores, floor, relax=relax, min_tags=min_tags)
 
-    general_thr = _threshold(general, opts.general_threshold)
-    character_thr = _threshold(characters, opts.character_threshold)
-    meta_thr = _threshold(meta + artists + copyrights, opts.general_threshold)
+    general_thr = _threshold(
+        general,
+        opts.general_threshold,
+        opts.mcut_relax_general,
+        opts.mcut_min_general_tags,
+    )
+    character_thr = _threshold(
+        characters,
+        opts.character_threshold,
+        opts.mcut_relax_character,
+        opts.mcut_min_character_tags,
+    )
+    meta_thr = _threshold(
+        meta + artists + copyrights,
+        opts.general_threshold,
+        opts.mcut_relax_meta,
+        opts.mcut_min_meta_tags,
+    )
 
     general = [item for item in general if item[1] >= general_thr]
     characters = [item for item in characters if item[1] >= character_thr]
@@ -961,6 +1094,11 @@ def _build_tags(
     if opts.max_character_tags > 0 and len(characters) > opts.max_character_tags:
         characters = characters[: opts.max_character_tags]
 
+    split_patterns = non_character_regex
+    if split_patterns is None:
+        split_patterns = _compile_regex(opts.non_character_regex)
+    subject_general, non_character_general = _split_general_focus(general, split_patterns)
+
     meta_bucket: List[Tuple[str, float]] = []
     if opts.include_meta:
         meta_bucket += meta
@@ -973,11 +1111,31 @@ def _build_tags(
         meta_bucket = meta_bucket[: opts.max_meta_tags]
 
     tags: List[str] = []
-    if opts.include_general:
-        tags.extend([t for t, _ in general])
-    if opts.include_character:
-        tags.extend([t for t, _ in characters])
-    tags.extend([t for t, _ in meta_bucket])
+    emitted_general: List[Tuple[str, float]] = []
+    emitted_character: List[Tuple[str, float]] = []
+    emitted_meta: List[Tuple[str, float]] = []
+    if focus_mode == "character":
+        if opts.include_general:
+            emitted_general = subject_general
+            tags.extend([t for t, _ in emitted_general])
+        if opts.include_character:
+            emitted_character = characters
+            tags.extend([t for t, _ in emitted_character])
+    elif focus_mode == "non_character":
+        if opts.include_general:
+            emitted_general = non_character_general
+            tags.extend([t for t, _ in emitted_general])
+        emitted_meta = meta_bucket
+        tags.extend([t for t, _ in emitted_meta])
+    else:
+        if opts.include_general:
+            emitted_general = general
+            tags.extend([t for t, _ in emitted_general])
+        if opts.include_character:
+            emitted_character = characters
+            tags.extend([t for t, _ in emitted_character])
+        emitted_meta = meta_bucket
+        tags.extend([t for t, _ in emitted_meta])
 
     if not categories_present and opts.include_general:
         unknown.sort(key=lambda x: x[1], reverse=True)
@@ -991,13 +1149,15 @@ def _build_tags(
         tags = [rating_tag] + tags
 
     if stats is not None:
-        stats["general"] = stats.get("general", 0) + (len(general) if opts.include_general else 0)
-        stats["character"] = stats.get("character", 0) + (len(characters) if opts.include_character else 0)
-        stats["meta"] = stats.get("meta", 0) + len(meta_bucket)
+        stats["general"] = stats.get("general", 0) + len(emitted_general)
+        stats["character"] = stats.get("character", 0) + len(emitted_character)
+        stats["meta"] = stats.get("meta", 0) + len(emitted_meta)
+        stats["subject_general"] = stats.get("subject_general", 0) + len(subject_general)
+        stats["non_character_general"] = stats.get("non_character_general", 0) + len(non_character_general)
         stats["rating"] = stats.get("rating", 0) + (1 if (opts.include_rating and ratings) else 0)
-        if general and opts.include_general:
+        if emitted_general:
             stats["images_with_general"] = stats.get("images_with_general", 0) + 1
-        if characters and opts.include_character:
+        if emitted_character:
             stats["images_with_character"] = stats.get("images_with_character", 0) + 1
 
     out: List[str] = []
@@ -1103,9 +1263,17 @@ def run_tagger(
         opts.keep_existing_tags = False
     if (opts.threshold_mode or "").strip().lower() not in {"fixed", "mcut"}:
         opts.threshold_mode = DEFAULT_THRESHOLD_MODE
+    if (opts.tag_focus_mode or "").strip().lower() not in {"all", "character", "non_character"}:
+        opts.tag_focus_mode = DEFAULT_TAG_FOCUS_MODE
     if (opts.backend or "").strip().lower() not in {"transformers", "onnx"}:
         opts.backend = DEFAULT_BACKEND
     opts.min_threshold_floor = max(0.0, min(float(opts.min_threshold_floor), 1.0))
+    opts.mcut_relax_general = max(0.0, min(float(opts.mcut_relax_general), 1.0))
+    opts.mcut_relax_character = max(0.0, min(float(opts.mcut_relax_character), 1.0))
+    opts.mcut_relax_meta = max(0.0, min(float(opts.mcut_relax_meta), 1.0))
+    opts.mcut_min_general_tags = max(0, int(opts.mcut_min_general_tags))
+    opts.mcut_min_character_tags = max(0, int(opts.mcut_min_character_tags))
+    opts.mcut_min_meta_tags = max(0, int(opts.mcut_min_meta_tags))
     opts.trigger_tag = (opts.trigger_tag or "").strip()
     opts.color_ratio_threshold = max(0.0, min(float(opts.color_ratio_threshold), 1.0))
     opts.color_min_saturation = max(0.0, min(float(opts.color_min_saturation), 1.0))
@@ -1125,6 +1293,12 @@ def run_tagger(
         f"Threshold mode: {opts.threshold_mode} "
         f"(general={opts.general_threshold}, character={opts.character_threshold})"
     )
+    if opts.threshold_mode == "mcut":
+        lines.append(
+            "MCUT tuning: "
+            f"relax(g/c/m)={opts.mcut_relax_general}/{opts.mcut_relax_character}/{opts.mcut_relax_meta}, "
+            f"min_tags(g/c/m)={opts.mcut_min_general_tags}/{opts.mcut_min_character_tags}/{opts.mcut_min_meta_tags}"
+        )
     lines.append(
         f"Output mode: {'skip_if_exists' if opts.write_mode == 'skip' else opts.write_mode}"
     )
@@ -1183,6 +1357,7 @@ def run_tagger(
     lines.append(f"Include general tags: {'on' if opts.include_general else 'off'}")
     lines.append(f"Include character tags: {'on' if opts.include_character else 'off'}")
     lines.append(f"Include rating tags: {'on' if opts.include_rating else 'off'}")
+    lines.append(f"Tag focus mode: {opts.tag_focus_mode}")
     lines.append(
         "Include meta/artist/copyright: "
         f"{'on' if opts.include_meta else 'off'} / "
@@ -1207,7 +1382,9 @@ def run_tagger(
         exclude_tags.update(remove_tags)
         exclude_regex_raw.extend(remove_regex)
     exclude_regex = _compile_regex(exclude_regex_raw)
+    non_character_regex = _compile_regex(opts.non_character_regex)
     lines.append(f"Exclude tags: {len(exclude_tags)} | Exclude regex: {len(exclude_regex)}")
+    lines.append(f"Non-character regex: {len(non_character_regex)}")
 
     paths = _iter_images(opts.dataset_path, opts.recursive, opts.image_exts)
     if opts.limit > 0:
@@ -1224,7 +1401,7 @@ def run_tagger(
             txt_path = p.with_suffix(".txt")
             if txt_path.exists():
                 try:
-                    if txt_path.read_text(encoding="utf-8").strip():
+                    if txt_path.stat().st_size > 0 and txt_path.read_text(encoding="utf-8").strip():
                         skipped += 1
                         continue
                 except Exception:
@@ -1242,10 +1419,26 @@ def run_tagger(
     samples: List[str] = []
     sample_count = 0
     total_images = len(paths)
+    progress_step = max(10, min(200, total_images // 20 if total_images > 0 else 10))
+    last_progress_ts = 0.0
     lines.append(f"Total images: {total_images}")
     tag_stats: Dict[str, int] = {}
     color_drop_total = 0
     color_drop_images = 0
+
+    def _report_progress(force: bool = False):
+        nonlocal last_progress_ts
+        if total_images <= 0 or processed <= 0:
+            return
+        now_ts = time.time()
+        if (
+            force
+            or processed == total_images
+            or (processed % progress_step == 0)
+            or (now_ts - last_progress_ts) >= 1.5
+        ):
+            print(f"{processed} out of {total_images} images tagged.")
+            last_progress_ts = now_ts
 
     try:
         from PIL import Image
@@ -1317,7 +1510,8 @@ def run_tagger(
                 category_ids,
                 exclude_tags,
                 exclude_regex,
-                tag_stats,
+                non_character_regex=non_character_regex,
+                stats=tag_stats,
                 color_presence=color_presence,
                 color_debug=color_debug,
             )
@@ -1327,7 +1521,7 @@ def run_tagger(
             tags = _apply_trigger_tag(tags, opts.trigger_tag)
             if opts.skip_empty and not tags:
                 processed += 1
-                print(f"{processed} out of {total_images} images tagged.")
+                _report_progress()
                 continue
 
             if opts.preview_limit > 0 and sample_count < opts.preview_limit:
@@ -1339,7 +1533,7 @@ def run_tagger(
 
             if opts.preview_only:
                 processed += 1
-                print(f"{processed} out of {total_images} images tagged.")
+                _report_progress()
                 continue
 
             txt_path = path.with_suffix(".txt")
@@ -1375,7 +1569,9 @@ def run_tagger(
                 written += 1
 
             processed += 1
-            print(f"{processed} out of {total_images} images tagged.")
+            _report_progress()
+
+    _report_progress(force=True)
 
     if samples:
         lines.append("Sample tags:")
@@ -1387,6 +1583,8 @@ def run_tagger(
             f"general={tag_stats.get('general', 0)}, "
             f"character={tag_stats.get('character', 0)}, "
             f"meta={tag_stats.get('meta', 0)}, "
+            f"subject_general={tag_stats.get('subject_general', 0)}, "
+            f"non_character_general={tag_stats.get('non_character_general', 0)}, "
             f"rating={tag_stats.get('rating', 0)}, "
             f"images_with_general={tag_stats.get('images_with_general', 0)}, "
             f"images_with_character={tag_stats.get('images_with_character', 0)}"
