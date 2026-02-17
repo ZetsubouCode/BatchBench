@@ -1,0 +1,664 @@
+<style>
+  .bb-brush-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .bb-brush-stage {
+    border: 1px solid var(--bb-border);
+    background: var(--bb-code-bg);
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    min-height: 320px;
+  }
+  .bb-brush-canvas-wrap {
+    position: relative;
+    width: fit-content;
+    max-width: 100%;
+    margin: 0 auto;
+  }
+  #bb-brush-canvas {
+    border: 1px solid var(--bb-border);
+    border-radius: 0.35rem;
+    cursor: crosshair;
+    max-width: 100%;
+    touch-action: none;
+    background: #111827;
+  }
+  .bb-brush-placeholder {
+    min-height: 280px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--bb-muted);
+    text-align: center;
+    padding: 1rem;
+    border: 1px dashed var(--bb-border);
+    border-radius: 0.5rem;
+  }
+  .bb-brush-log {
+    max-height: 220px;
+    overflow: auto;
+  }
+  .bb-brush-small {
+    font-size: 0.85rem;
+    color: var(--bb-muted);
+  }
+</style>
+
+<div class="card p-4 bb-brush-wrap">
+  <div class="row g-3">
+    <div class="col-lg-8">
+      <label class="form-label">Folder</label>
+      <div class="input-group">
+        <input id="bb-brush-folder" class="form-control" placeholder="D:\dataset" data-root-sync="1">
+        <button class="btn btn-outline-light btn-browse" type="button" data-target="bb-brush-folder">Browse</button>
+        <button class="btn btn-outline-light" type="button" id="bb-brush-refresh-images">Load Images</button>
+      </div>
+      <div class="bb-brush-small">Tips: pilih folder dataset, lalu load image list.</div>
+    </div>
+    <div class="col-lg-4">
+      <label class="form-label">Image</label>
+      <div class="input-group">
+        <select id="bb-brush-image" class="form-select"></select>
+        <button class="btn btn-outline-light" type="button" id="bb-brush-open-image">Open</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-2">
+      <label class="form-label">Mode</label>
+      <select id="bb-brush-mode" class="form-select">
+        <option value="blur">Gaussian Blur</option>
+        <option value="mosaic">Mosaic</option>
+        <option value="box">Box Blur</option>
+      </select>
+    </div>
+    <div class="col-lg-2">
+      <label class="form-label">Brush Size</label>
+      <div class="d-flex gap-2">
+        <input id="bb-brush-size" class="form-range" type="range" min="5" max="200" step="1" value="36">
+        <input id="bb-brush-size-num" class="form-control" type="number" min="5" max="200" value="36">
+      </div>
+    </div>
+    <div class="col-lg-2">
+      <label class="form-label">Strength</label>
+      <div class="d-flex gap-2">
+        <input id="bb-brush-strength" class="form-range" type="range" min="1" max="80" step="1" value="12">
+        <input id="bb-brush-strength-num" class="form-control" type="number" min="1" max="80" value="12">
+      </div>
+    </div>
+    <div class="col-lg-2">
+      <label class="form-label">Feather</label>
+      <div class="d-flex gap-2">
+        <input id="bb-brush-feather" class="form-range" type="range" min="0" max="20" step="1" value="0">
+        <input id="bb-brush-feather-num" class="form-control" type="number" min="0" max="20" value="0">
+      </div>
+    </div>
+    <div class="col-lg-2">
+      <label class="form-label">Output</label>
+      <select id="bb-brush-output" class="form-select">
+        <option value="overwrite">Overwrite</option>
+        <option value="copy">Copy</option>
+      </select>
+      <div class="form-check mt-2">
+        <input class="form-check-input" type="checkbox" id="bb-brush-backup" checked>
+        <label class="form-check-label" for="bb-brush-backup">Create .bak</label>
+      </div>
+    </div>
+    <div class="col-lg-2">
+      <label class="form-label">Brush Tool</label>
+      <div class="btn-group w-100" role="group">
+        <button class="btn btn-outline-light active" type="button" id="bb-brush-paint">Paint</button>
+        <button class="btn btn-outline-light" type="button" id="bb-brush-erase">Erase</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="d-flex flex-wrap gap-2">
+    <button class="btn btn-outline-light" type="button" id="bb-brush-undo">Undo</button>
+    <button class="btn btn-outline-light" type="button" id="bb-brush-redo">Redo</button>
+    <button class="btn btn-outline-light" type="button" id="bb-brush-clear">Clear Mask</button>
+    <button class="btn btn-outline-info" type="button" id="bb-brush-preview">Preview Result</button>
+    <button class="btn btn-outline-light d-none" type="button" id="bb-brush-preview-reset">Back to Original</button>
+    <button class="btn btn-primary" type="button" id="bb-brush-apply">Apply & Save</button>
+    <span class="bb-brush-small align-self-center" id="bb-brush-status"></span>
+  </div>
+
+  <div class="bb-brush-stage">
+    <div id="bb-brush-placeholder" class="bb-brush-placeholder">
+      Load folder and image to start painting mask.
+    </div>
+    <div class="bb-brush-canvas-wrap d-none" id="bb-brush-canvas-wrap">
+      <canvas id="bb-brush-canvas"></canvas>
+    </div>
+  </div>
+
+  <div class="card p-3">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h6 class="mb-0">Brush Blur Log</h6>
+      <span class="bb-brush-small" id="bb-brush-log-meta"></span>
+    </div>
+    <pre class="monospace mb-0 bb-brush-log" id="bb-brush-log"></pre>
+  </div>
+</div>
+
+<script>
+(() => {
+  const q = (id) => document.getElementById(id);
+  const getInt = (val, fallback) => {
+    const n = Number.parseInt(String(val || ""), 10);
+    if (Number.isFinite(n)) return n;
+    return fallback;
+  };
+  const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
+  const setStatus = (msg) => {
+    const el = q("bb-brush-status");
+    if (el) el.textContent = msg || "";
+  };
+  const setLog = (lines) => {
+    const el = q("bb-brush-log");
+    if (!el) return;
+    const text = Array.isArray(lines) ? lines.join("\n") : String(lines || "");
+    el.textContent = text;
+  };
+
+  const state = {
+    sourceImage: null,
+    previewImage: null,
+    previewUrl: "",
+    displayW: 0,
+    displayH: 0,
+    pointerX: 0,
+    pointerY: 0,
+    pointerInside: false,
+    drawing: false,
+    erasing: false,
+    lastPoint: null,
+    undo: [],
+    redo: [],
+    maskCanvas: document.createElement("canvas"),
+    tintCanvas: document.createElement("canvas"),
+  };
+  state.maskCtx = state.maskCanvas.getContext("2d", { willReadFrequently: true });
+  state.tintCtx = state.tintCanvas.getContext("2d");
+
+  const canvas = q("bb-brush-canvas");
+  const canvasWrap = q("bb-brush-canvas-wrap");
+  const placeholder = q("bb-brush-placeholder");
+  const viewCtx = canvas ? canvas.getContext("2d") : null;
+
+  function syncRange(rangeId, numId, lo, hi) {
+    const range = q(rangeId);
+    const num = q(numId);
+    if (!range || !num) return;
+    const applyVal = (raw) => {
+      const v = clamp(getInt(raw, lo), lo, hi);
+      range.value = String(v);
+      num.value = String(v);
+    };
+    range.addEventListener("input", () => applyVal(range.value));
+    num.addEventListener("input", () => applyVal(num.value));
+    applyVal(range.value || num.value);
+  }
+
+  function showCanvas(isVisible) {
+    if (!canvasWrap || !placeholder) return;
+    canvasWrap.classList.toggle("d-none", !isVisible);
+    placeholder.classList.toggle("d-none", isVisible);
+  }
+
+  function updateLogMeta() {
+    const meta = q("bb-brush-log-meta");
+    const folder = (q("bb-brush-folder")?.value || "").trim();
+    const rel = (q("bb-brush-image")?.value || "").trim();
+    if (!meta) return;
+    if (!folder || !rel) {
+      meta.textContent = "";
+      return;
+    }
+    meta.textContent = `${rel} @ ${folder}`;
+  }
+
+  function pushUndo() {
+    if (!state.maskCanvas.width || !state.maskCanvas.height || !state.maskCtx) return;
+    state.undo.push(state.maskCtx.getImageData(0, 0, state.maskCanvas.width, state.maskCanvas.height));
+    if (state.undo.length > 40) state.undo.shift();
+    state.redo = [];
+  }
+
+  function restoreFrom(stackFrom, stackTo) {
+    if (!state.maskCtx || !state.maskCanvas.width || !state.maskCanvas.height) return;
+    if (!stackFrom.length) return;
+    invalidatePreview();
+    const current = state.maskCtx.getImageData(0, 0, state.maskCanvas.width, state.maskCanvas.height);
+    stackTo.push(current);
+    const prev = stackFrom.pop();
+    state.maskCtx.putImageData(prev, 0, 0);
+    render();
+  }
+
+  function clearMask() {
+    if (!state.maskCtx || !state.maskCanvas.width || !state.maskCanvas.height) return;
+    invalidatePreview();
+    pushUndo();
+    state.maskCtx.clearRect(0, 0, state.maskCanvas.width, state.maskCanvas.height);
+    render();
+  }
+
+  function isMaskEmpty() {
+    if (!state.maskCtx || !state.maskCanvas.width || !state.maskCanvas.height) return true;
+    const data = state.maskCtx.getImageData(0, 0, state.maskCanvas.width, state.maskCanvas.height).data;
+    for (let i = 3; i < data.length; i += 4) {
+      if (data[i] > 0) return false;
+    }
+    return true;
+  }
+
+  function toCanvasPoint(evt) {
+    const rect = canvas.getBoundingClientRect();
+    const x = (evt.clientX - rect.left) * (canvas.width / Math.max(rect.width, 1));
+    const y = (evt.clientY - rect.top) * (canvas.height / Math.max(rect.height, 1));
+    return {
+      x: clamp(x, 0, canvas.width),
+      y: clamp(y, 0, canvas.height),
+    };
+  }
+
+  function drawStroke(a, b) {
+    if (!state.maskCtx) return;
+    const size = clamp(getInt(q("bb-brush-size")?.value, 36), 5, 200);
+    state.maskCtx.save();
+    state.maskCtx.globalCompositeOperation = state.erasing ? "destination-out" : "source-over";
+    state.maskCtx.strokeStyle = "rgba(255,255,255,1)";
+    state.maskCtx.fillStyle = "rgba(255,255,255,1)";
+    state.maskCtx.lineCap = "round";
+    state.maskCtx.lineJoin = "round";
+    state.maskCtx.lineWidth = size;
+    state.maskCtx.beginPath();
+    state.maskCtx.moveTo(a.x, a.y);
+    state.maskCtx.lineTo(b.x, b.y);
+    state.maskCtx.stroke();
+    state.maskCtx.beginPath();
+    state.maskCtx.arc(b.x, b.y, size / 2, 0, Math.PI * 2);
+    state.maskCtx.fill();
+    state.maskCtx.restore();
+  }
+
+  function clearPreviewImage() {
+    if (state.previewUrl) {
+      URL.revokeObjectURL(state.previewUrl);
+      state.previewUrl = "";
+    }
+    state.previewImage = null;
+    q("bb-brush-preview-reset")?.classList.add("d-none");
+  }
+
+  function invalidatePreview() {
+    if (!state.previewImage) return;
+    clearPreviewImage();
+    render();
+  }
+
+  function resetPreviewView() {
+    if (!state.previewImage) return;
+    clearPreviewImage();
+    render();
+    setStatus("Kembali ke tampilan asli.");
+  }
+
+  function render() {
+    if (!canvas || !viewCtx || !state.sourceImage) return;
+    viewCtx.clearRect(0, 0, canvas.width, canvas.height);
+    const base = state.previewImage || state.sourceImage;
+    viewCtx.drawImage(base, 0, 0, canvas.width, canvas.height);
+
+    if (!state.previewImage) {
+      state.tintCanvas.width = canvas.width;
+      state.tintCanvas.height = canvas.height;
+      state.tintCtx.clearRect(0, 0, canvas.width, canvas.height);
+      state.tintCtx.drawImage(state.maskCanvas, 0, 0);
+      state.tintCtx.globalCompositeOperation = "source-in";
+      state.tintCtx.fillStyle = "rgba(255,64,64,0.55)";
+      state.tintCtx.fillRect(0, 0, canvas.width, canvas.height);
+      state.tintCtx.globalCompositeOperation = "source-over";
+      viewCtx.drawImage(state.tintCanvas, 0, 0);
+    }
+
+    if (!state.previewImage && state.pointerInside && !state.drawing) {
+      const size = clamp(getInt(q("bb-brush-size")?.value, 36), 5, 200);
+      viewCtx.save();
+      viewCtx.beginPath();
+      viewCtx.arc(state.pointerX, state.pointerY, size / 2, 0, Math.PI * 2);
+      viewCtx.strokeStyle = state.erasing ? "rgba(120,215,255,0.9)" : "rgba(255,160,160,0.9)";
+      viewCtx.lineWidth = 1.2;
+      viewCtx.stroke();
+      viewCtx.restore();
+    }
+  }
+
+  async function fetchJson(url, options = {}) {
+    const res = await fetch(url, options);
+    let data = null;
+    try { data = await res.json(); } catch (_) {}
+    if (!res.ok || !data || data.ok === false) {
+      const msg = data?.error || `HTTP ${res.status}`;
+      throw new Error(msg);
+    }
+    return data;
+  }
+
+  async function fetchPreviewBlob(payload) {
+    const res = await fetch("/api/blur_brush/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      let msg = `HTTP ${res.status}`;
+      try {
+        const data = await res.json();
+        msg = data?.error || msg;
+      } catch (_) {}
+      throw new Error(msg);
+    }
+    return await res.blob();
+  }
+
+  async function loadImages(preferredRel = "") {
+    const folder = (q("bb-brush-folder")?.value || "").trim();
+    const imageSel = q("bb-brush-image");
+    if (!folder) {
+      setStatus("Folder wajib diisi.");
+      return;
+    }
+    setStatus("Loading image list...");
+    try {
+      const data = await fetchJson(`/api/blur_brush/list-images?folder=${encodeURIComponent(folder)}&recursive=1`);
+      if (!imageSel) return;
+      imageSel.innerHTML = "";
+      const items = data.images || [];
+      if (!items.length) {
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.textContent = "(no images)";
+        imageSel.appendChild(opt);
+        setStatus("Tidak ada gambar.");
+        return;
+      }
+      items.forEach((rel) => {
+        const opt = document.createElement("option");
+        opt.value = rel;
+        opt.textContent = rel;
+        imageSel.appendChild(opt);
+      });
+      const selected = preferredRel && items.includes(preferredRel) ? preferredRel : (imageSel.value || items[0]);
+      imageSel.value = selected;
+      setStatus(`Loaded ${items.length} image(s).`);
+      updateLogMeta();
+    } catch (err) {
+      setStatus(`Load gagal: ${err.message}`);
+      setLog([`[ERROR] ${err.message}`]);
+    }
+  }
+
+  async function openSelectedImage() {
+    const folder = (q("bb-brush-folder")?.value || "").trim();
+    const rel = (q("bb-brush-image")?.value || "").trim();
+    if (!folder || !rel) {
+      setStatus("Folder dan image harus dipilih.");
+      return;
+    }
+    updateLogMeta();
+    setStatus("Loading image...");
+    const img = new Image();
+    img.onload = () => {
+      const maxW = 980;
+      const maxH = 620;
+      const scale = Math.min(1, maxW / Math.max(img.naturalWidth, 1), maxH / Math.max(img.naturalHeight, 1));
+      state.displayW = Math.max(1, Math.round(img.naturalWidth * scale));
+      state.displayH = Math.max(1, Math.round(img.naturalHeight * scale));
+      state.sourceImage = img;
+      clearPreviewImage();
+
+      canvas.width = state.displayW;
+      canvas.height = state.displayH;
+      canvas.style.width = `${state.displayW}px`;
+      canvas.style.height = `${state.displayH}px`;
+
+      state.maskCanvas.width = state.displayW;
+      state.maskCanvas.height = state.displayH;
+      state.maskCtx.clearRect(0, 0, state.displayW, state.displayH);
+      state.undo = [];
+      state.redo = [];
+
+      showCanvas(true);
+      render();
+      setStatus(`Image ready: ${img.naturalWidth}x${img.naturalHeight}`);
+    };
+    img.onerror = () => {
+      setStatus("Gagal load image.");
+      setLog(["[ERROR] Gagal load image from server."]);
+    };
+    img.src = `/api/tags/image?folder=${encodeURIComponent(folder)}&path=${encodeURIComponent(rel)}&t=${Date.now()}`;
+  }
+
+  async function previewMask() {
+    const folder = (q("bb-brush-folder")?.value || "").trim();
+    const rel = (q("bb-brush-image")?.value || "").trim();
+    if (!folder || !rel || !state.sourceImage) {
+      setStatus("Load image terlebih dahulu.");
+      return;
+    }
+    if (isMaskEmpty()) {
+      setStatus("Mask kosong, tidak ada yang dipreview.");
+      setLog(["Nothing to preview: mask empty."]);
+      return;
+    }
+
+    const payload = {
+      folder,
+      rel,
+      mask_png_base64: state.maskCanvas.toDataURL("image/png"),
+      mode: q("bb-brush-mode")?.value || "blur",
+      strength: clamp(getInt(q("bb-brush-strength")?.value, 12), 1, 80),
+      feather: clamp(getInt(q("bb-brush-feather")?.value, 0), 0, 20),
+      preview_width: canvas.width,
+      preview_height: canvas.height,
+    };
+
+    setStatus("Generating preview...");
+    if (window.bbBusy?.show) window.bbBusy.show("Generating preview...");
+    let url = "";
+    try {
+      const blob = await fetchPreviewBlob(payload);
+      url = URL.createObjectURL(blob);
+      const img = new Image();
+      await new Promise((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error("Preview image invalid."));
+        img.src = url;
+      });
+      clearPreviewImage();
+      state.previewImage = img;
+      state.previewUrl = url;
+      q("bb-brush-preview-reset")?.classList.remove("d-none");
+      render();
+      setStatus("Preview ready (belum disimpan).");
+      setLog([
+        "Preview ready.",
+        "Klik Apply & Save untuk menyimpan hasil ke file.",
+      ]);
+    } catch (err) {
+      if (url) URL.revokeObjectURL(url);
+      setStatus(`Preview gagal: ${err.message}`);
+      setLog([`[ERROR] ${err.message}`]);
+    } finally {
+      if (window.bbBusy?.hide) window.bbBusy.hide();
+    }
+  }
+
+  async function applyMask() {
+    const folder = (q("bb-brush-folder")?.value || "").trim();
+    const rel = (q("bb-brush-image")?.value || "").trim();
+    if (!folder || !rel || !state.sourceImage) {
+      setStatus("Load image terlebih dahulu.");
+      return;
+    }
+    if (isMaskEmpty()) {
+      setStatus("Mask kosong, tidak ada yang di-apply.");
+      setLog(["Nothing to apply: mask empty."]);
+      return;
+    }
+
+    const payload = {
+      folder,
+      rel,
+      mask_png_base64: state.maskCanvas.toDataURL("image/png"),
+      mode: q("bb-brush-mode")?.value || "blur",
+      strength: clamp(getInt(q("bb-brush-strength")?.value, 12), 1, 80),
+      feather: clamp(getInt(q("bb-brush-feather")?.value, 0), 0, 20),
+      backup: !!q("bb-brush-backup")?.checked,
+      output_mode: q("bb-brush-output")?.value || "overwrite",
+    };
+
+    setStatus("Applying...");
+    if (window.bbBusy?.show) window.bbBusy.show("Applying brush blur...");
+    try {
+      clearPreviewImage();
+      const data = await fetchJson("/api/blur_brush/apply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      setLog(data.log || []);
+      setStatus(`Saved: ${data.saved || rel}`);
+
+      if ((payload.output_mode || "overwrite") === "overwrite") {
+        state.maskCtx.clearRect(0, 0, state.maskCanvas.width, state.maskCanvas.height);
+        state.undo = [];
+        state.redo = [];
+        await openSelectedImage();
+      } else {
+        await loadImages(data.saved || rel);
+        if (data.saved && q("bb-brush-image")) {
+          q("bb-brush-image").value = data.saved;
+          await openSelectedImage();
+        }
+      }
+    } catch (err) {
+      setStatus(`Apply gagal: ${err.message}`);
+      setLog([`[ERROR] ${err.message}`]);
+    } finally {
+      if (window.bbBusy?.hide) window.bbBusy.hide();
+    }
+  }
+
+  function setBrushMode(erasing) {
+    state.erasing = !!erasing;
+    q("bb-brush-paint")?.classList.toggle("active", !state.erasing);
+    q("bb-brush-erase")?.classList.toggle("active", state.erasing);
+    render();
+  }
+
+  function bindCanvas() {
+    if (!canvas) return;
+    canvas.addEventListener("pointerdown", (evt) => {
+      if (!state.sourceImage) return;
+      invalidatePreview();
+      canvas.setPointerCapture(evt.pointerId);
+      pushUndo();
+      state.drawing = true;
+      const p = toCanvasPoint(evt);
+      state.lastPoint = p;
+      state.pointerX = p.x;
+      state.pointerY = p.y;
+      drawStroke(p, p);
+      render();
+    });
+
+    canvas.addEventListener("pointermove", (evt) => {
+      if (!state.sourceImage) return;
+      const p = toCanvasPoint(evt);
+      state.pointerInside = true;
+      state.pointerX = p.x;
+      state.pointerY = p.y;
+      if (state.drawing && state.lastPoint) {
+        drawStroke(state.lastPoint, p);
+        state.lastPoint = p;
+      }
+      render();
+    });
+
+    const finish = (evt) => {
+      if (evt && canvas.hasPointerCapture(evt.pointerId)) {
+        canvas.releasePointerCapture(evt.pointerId);
+      }
+      state.drawing = false;
+      state.lastPoint = null;
+      render();
+    };
+    canvas.addEventListener("pointerup", finish);
+    canvas.addEventListener("pointercancel", finish);
+    canvas.addEventListener("pointerleave", () => {
+      state.pointerInside = false;
+      render();
+    });
+    canvas.addEventListener("pointerenter", () => {
+      state.pointerInside = true;
+      render();
+    });
+  }
+
+  function bindEvents() {
+    syncRange("bb-brush-size", "bb-brush-size-num", 5, 200);
+    syncRange("bb-brush-strength", "bb-brush-strength-num", 1, 80);
+    syncRange("bb-brush-feather", "bb-brush-feather-num", 0, 20);
+
+    q("bb-brush-refresh-images")?.addEventListener("click", () => loadImages());
+    q("bb-brush-open-image")?.addEventListener("click", openSelectedImage);
+    q("bb-brush-image")?.addEventListener("change", openSelectedImage);
+    q("bb-brush-folder")?.addEventListener("change", updateLogMeta);
+
+    q("bb-brush-paint")?.addEventListener("click", () => setBrushMode(false));
+    q("bb-brush-erase")?.addEventListener("click", () => setBrushMode(true));
+
+    q("bb-brush-undo")?.addEventListener("click", () => restoreFrom(state.undo, state.redo));
+    q("bb-brush-redo")?.addEventListener("click", () => restoreFrom(state.redo, state.undo));
+    q("bb-brush-clear")?.addEventListener("click", clearMask);
+    q("bb-brush-preview")?.addEventListener("click", previewMask);
+    q("bb-brush-preview-reset")?.addEventListener("click", resetPreviewView);
+    q("bb-brush-apply")?.addEventListener("click", applyMask);
+
+    document.addEventListener("keydown", (evt) => {
+      if (evt.target && ["INPUT", "TEXTAREA", "SELECT"].includes(evt.target.tagName)) return;
+      if (evt.ctrlKey && !evt.shiftKey && evt.key.toLowerCase() === "z") {
+        evt.preventDefault();
+        restoreFrom(state.undo, state.redo);
+      }
+      if ((evt.ctrlKey && evt.key.toLowerCase() === "y") || (evt.ctrlKey && evt.shiftKey && evt.key.toLowerCase() === "z")) {
+        evt.preventDefault();
+        restoreFrom(state.redo, state.undo);
+      }
+    });
+
+    ["bb-brush-size", "bb-brush-size-num"].forEach((id) => {
+      q(id)?.addEventListener("input", render);
+    });
+    ["bb-brush-mode", "bb-brush-strength", "bb-brush-strength-num", "bb-brush-feather", "bb-brush-feather-num"].forEach((id) => {
+      q(id)?.addEventListener("input", invalidatePreview);
+      q(id)?.addEventListener("change", invalidatePreview);
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    bindCanvas();
+    bindEvents();
+    setBrushMode(false);
+    showCanvas(false);
+    setLog("");
+    updateLogMeta();
+  });
+})();
+</script>

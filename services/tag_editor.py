@@ -1,12 +1,31 @@
-from collections import Counter
+from collections import Counter, OrderedDict
 from pathlib import Path
 from typing import Tuple, List, Set, Optional
-from utils.io import readable_path, log_join
+from utils.io import readable_path
 from utils.dataset import split_tags, join_tags
+from utils.parse import parse_bool, parse_exts
+from utils.tool_result import build_tool_result
+from utils.text_io import read_text_best_effort
 import shutil
 
 EDIT_MODES = {"insert", "delete", "replace", "dedup"}  # non-move, non-undo
-_TXT_TAG_CACHE = {}
+_TXT_TAG_CACHE: "OrderedDict[str, Tuple[Tuple[int, int], List[str]]]" = OrderedDict()
+_TXT_TAG_CACHE_MAX = 4096
+
+
+def _cache_put(key: str, value: Tuple[Tuple[int, int], List[str]]):
+    _TXT_TAG_CACHE[key] = value
+    _TXT_TAG_CACHE.move_to_end(key)
+    while len(_TXT_TAG_CACHE) > _TXT_TAG_CACHE_MAX:
+        _TXT_TAG_CACHE.popitem(last=False)
+
+
+def _read_text_tags(path: Path) -> List[str]:
+    try:
+        text, _, _ = read_text_best_effort(path)
+    except Exception:
+        return []
+    return split_tags(text)
 
 
 def _read_tags_cached(txt_path: Path) -> List[str]:
@@ -18,12 +37,10 @@ def _read_tags_cached(txt_path: Path) -> List[str]:
     sig = (st.st_mtime_ns, st.st_size)
     cached = _TXT_TAG_CACHE.get(key)
     if cached and cached[0] == sig:
+        _TXT_TAG_CACHE.move_to_end(key)
         return list(cached[1])
-    try:
-        tags = split_tags(txt_path.read_text(encoding="utf-8"))
-    except Exception:
-        tags = []
-    _TXT_TAG_CACHE[key] = (sig, list(tags))
+    tags = _read_text_tags(txt_path)
+    _cache_put(key, (sig, list(tags)))
     return tags
 
 
@@ -65,6 +82,66 @@ def _list_images(
         images = [p for p in folder_path.iterdir() if p.is_file() and p.suffix.lower() in extset]
     return sorted(images, key=lambda p: str(p).lower())
 
+
+def _is_within(path: Path, root: Path) -> bool:
+    try:
+        path_resolved = path.resolve()
+        root_resolved = root.resolve()
+    except Exception:
+        return False
+    return path_resolved == root_resolved or root_resolved in path_resolved.parents
+
+
+def _next_pair_target(folder: Path, stem: str, image_suffix: str) -> Tuple[Path, Path]:
+    bump = 0
+    while True:
+        suffix = "" if bump == 0 else f"_{bump}"
+        candidate_stem = f"{stem}{suffix}"
+        dst_img = folder / f"{candidate_stem}{image_suffix}"
+        dst_txt = folder / f"{candidate_stem}.txt"
+        if not dst_img.exists() and not dst_txt.exists():
+            return dst_img, dst_txt
+        bump += 1
+
+
+def _move_pair_transaction(
+    src_img: Path,
+    src_txt: Path,
+    dst_img: Path,
+    dst_txt: Path,
+    require_txt: bool,
+) -> Tuple[bool, str]:
+    moved: List[Tuple[Path, Path]] = []
+    had_txt = src_txt.exists()
+    if require_txt and not had_txt:
+        return False, f"Missing paired .txt for {src_img.name}"
+
+    try:
+        shutil.move(str(src_img), str(dst_img))
+        moved.append((dst_img, src_img))
+        if had_txt:
+            shutil.move(str(src_txt), str(dst_txt))
+            moved.append((dst_txt, src_txt))
+        return True, ""
+    except Exception as exc:
+        rollback_errors: List[str] = []
+        for moved_path, original_path in reversed(moved):
+            try:
+                if not moved_path.exists():
+                    continue
+                if original_path.exists():
+                    rollback_errors.append(
+                        f"cannot rollback {moved_path.name} because source already exists: {original_path}"
+                    )
+                    continue
+                shutil.move(str(moved_path), str(original_path))
+            except Exception as rollback_exc:
+                rollback_errors.append(f"{moved_path.name}: {rollback_exc}")
+        message = str(exc)
+        if rollback_errors:
+            message = f"{message} | rollback issues: {'; '.join(rollback_errors)}"
+        return False, message
+
 def scan_tags(folder: Path, exts: List[str], recursive: bool = False) -> dict:
     if not folder or not folder.exists() or not folder.is_dir():
         return {"ok": False, "error": f"Folder not found: {folder}"}
@@ -94,7 +171,13 @@ def scan_tags(folder: Path, exts: List[str], recursive: bool = False) -> dict:
         "tags": items,
     }
 
-def list_images_with_tags(folder: Path, exts: List[str], recursive: bool = False, limit: int = 80) -> dict:
+def list_images_with_tags(
+    folder: Path,
+    exts: List[str],
+    recursive: bool = False,
+    limit: int = 80,
+    tag_limit: int = 200,
+) -> dict:
     if not folder or not folder.exists() or not folder.is_dir():
         return {"ok": False, "error": f"Folder not found: {folder}"}
 
@@ -116,12 +199,17 @@ def list_images_with_tags(folder: Path, exts: List[str], recursive: bool = False
         if txt.exists():
             has_txt = True
             tags = _read_tags_cached(txt)
+        tag_count = len(tags)
+        if tag_limit > 0 and len(tags) > tag_limit:
+            tags = tags[:tag_limit]
         rel = img.relative_to(folder).as_posix()
         items.append(
             {
                 "name": img.name,
                 "rel": rel,
                 "tags": tags,
+                "tag_count": tag_count,
+                "tags_truncated": tag_count > len(tags),
                 "has_txt": has_txt,
             }
         )
@@ -132,7 +220,7 @@ def remove_tag(txt_path: Path, tag: str, backup: bool = True) -> dict:
     if not txt_path or not txt_path.exists() or not txt_path.is_file():
         return {"ok": False, "error": "Missing .txt"}
     try:
-        src = txt_path.read_text(encoding="utf-8")
+        src, _, _ = read_text_best_effort(txt_path)
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
     taglist = split_tags(src)
@@ -152,29 +240,43 @@ def remove_tag(txt_path: Path, tag: str, backup: bool = True) -> dict:
         return {"ok": False, "error": str(exc)}
     return {"ok": True, "removed": True, "tags": newtags}
 
-def handle(form, ctx) -> Tuple[str, str]:
+def handle(form, ctx):
     active_tab = "tags"
 
     # Raw inputs
-    raw_folder = readable_path(form.get("folder",""))
-    mode = (form.get("mode","insert") or "insert").lower()
-    edit_target = (form.get("edit_target","recursive") or "recursive").lower()
-    tags_field = form.get("tags","")
-    exts = [e.strip().lower() for e in form.get("exts",".jpg,.jpeg,.png,.webp").split(",") if e.strip()]
-    backup = bool(form.get("backup"))
-    stage_only = str(form.get("stage_only", "")).strip().lower() in {"1", "true", "yes", "on"}
+    raw_folder_text = (form.get("folder", "") or "").strip()
+    raw_folder = readable_path(raw_folder_text)
+    mode = (form.get("mode", "insert") or "insert").strip().lower()
+    edit_target = (form.get("edit_target", "recursive") or "recursive").strip().lower()
+    tags_field = form.get("tags", "")
+    exts = parse_exts(form.get("exts"), default=[".jpg", ".jpeg", ".png", ".webp"])
+    backup = parse_bool(form.get("backup"), default=False)
+    stage_only = parse_bool(form.get("stage_only"), default=False)
+    temp_dir_raw = (form.get("temp_dir", "") or "").strip()
 
     lines: List[str] = []
 
+    def _done(ok: bool, error: str = ""):
+        return build_tool_result(active_tab, lines, ok=ok, error=error)
+
     # Derive base and temp from whatever the user passed:
     # If they give <base>/_temp, base = parent; else base = given.
-    if not raw_folder:
+    if not raw_folder_text:
         lines.append("Folder not provided.")
-        return active_tab, log_join(lines)
+        return _done(False, "Folder not provided.")
 
-    base_folder = raw_folder.parent if raw_folder.name.lower() == "_temp" else raw_folder
-    temp_folder = base_folder / "_temp"
-    edit_target = "recursive"
+    if raw_folder.name.lower() == "_temp":
+        base_folder = raw_folder.parent
+        inferred_temp = raw_folder
+    else:
+        base_folder = raw_folder
+        inferred_temp = base_folder / "_temp"
+    temp_folder = readable_path(temp_dir_raw) if temp_dir_raw else inferred_temp
+    if stage_only and mode in EDIT_MODES:
+        edit_target = "temp"
+    if edit_target not in {"recursive", "temp", "base"}:
+        lines.append(f"Unknown edit_target: {edit_target}")
+        return _done(False, f"Unknown edit_target: {edit_target}")
 
     def _parse_tag_list(raw: str) -> List[str]:
         return [t.strip() for t in (raw or "").split(",") if t.strip()]
@@ -204,162 +306,177 @@ def handle(form, ctx) -> Tuple[str, str]:
     if mode == "move":
         if not base_folder.exists() or not base_folder.is_dir():
             lines.append(f"Base folder not found: {base_folder}")
-            return active_tab, log_join(lines)
-        # Lazily create temp on first move
-        temp_folder.mkdir(parents=True, exist_ok=True)
+            return _done(False, f"Base folder not found: {base_folder}")
+        if edit_target == "temp":
+            lines.append("Move mode does not support edit_target=temp. Use undo to restore from temp.")
+            return _done(False, "Move mode does not support edit_target=temp.")
+        recursive_scan = edit_target == "recursive"
+        exclude_dir = temp_folder if recursive_scan and _is_within(temp_folder, base_folder) else None
         scan_folder = base_folder
+        temp_folder.mkdir(parents=True, exist_ok=True)
     elif mode == "undo":
-        # For undo we require temp to exist; restore to base
         if not temp_folder.exists() or not temp_folder.is_dir():
             lines.append(f"Temp folder not found: {temp_folder}")
-            return active_tab, log_join(lines)
+            return _done(False, f"Temp folder not found: {temp_folder}")
+        recursive_scan = edit_target == "recursive"
+        exclude_dir = None
         scan_folder = temp_folder
     elif mode in EDIT_MODES:
         if not base_folder.exists() or not base_folder.is_dir():
             lines.append(f"Base folder not found: {base_folder}")
-            return active_tab, log_join(lines)
-        if stage_only:
-            lines.append("Stage-only is not supported for edit modes. Use Move mode to populate _temp.")
-            return active_tab, log_join(lines)
-        if not temp_folder.exists() or not temp_folder.is_dir():
-            lines.append(f"Temp folder not found: {temp_folder}")
-            return active_tab, log_join(lines)
-        scan_folder = temp_folder
+            return _done(False, f"Base folder not found: {base_folder}")
+        if edit_target == "temp":
+            if not temp_folder.exists() or not temp_folder.is_dir():
+                lines.append(f"Temp folder not found: {temp_folder}")
+                return _done(False, f"Temp folder not found: {temp_folder}")
+            scan_folder = temp_folder
+            recursive_scan = False
+            exclude_dir = None
+        elif edit_target == "base":
+            scan_folder = base_folder
+            recursive_scan = False
+            exclude_dir = None
+        else:
+            scan_folder = base_folder
+            recursive_scan = True
+            exclude_dir = temp_folder if _is_within(temp_folder, base_folder) else None
     else:
         lines.append(f"Unknown mode: {mode}")
-        return active_tab, log_join(lines)
+        return _done(False, f"Unknown mode: {mode}")
 
     # ---------- MOVE ----------
     if mode == "move":
-        images = _list_images(scan_folder, exts)
+        images = _list_images(scan_folder, exts, recursive=recursive_scan, exclude_dir=exclude_dir)
         processed = 0
+        errors = 0
         want: Set[str] = set([t.strip() for t in tags_field.split(",") if t.strip()])
         if not want:
             lines.append("Move skipped: no tags provided.")
-            return active_tab, log_join(lines)
+            return _done(False, "Move skipped: no tags provided.")
+        if not images:
+            lines.append(f"No image files with {exts} found in: {scan_folder}")
+            return _done(False, f"No images found in: {scan_folder}")
 
         for img in images:
             txt = img.with_suffix(".txt")
             if not txt.exists():
                 continue
-            src = txt.read_text(encoding="utf-8")
+            try:
+                src, _, _ = read_text_best_effort(txt)
+            except Exception as exc:
+                lines.append(f"[ERROR] reading {txt.name}: {exc}")
+                continue
             taglist = split_tags(src)
 
             matches = sorted([t for t in taglist if t in want])
             if matches:
-                stem, ext = img.stem, img.suffix
-                dest_img = temp_folder / img.name
-                dest_txt = temp_folder / txt.name
-                bump = 1
-                while dest_img.exists() or dest_txt.exists():
-                    new_stem = f"{stem}_{bump}"
-                    dest_img = temp_folder / f"{new_stem}{ext}"
-                    dest_txt = temp_folder / f"{new_stem}.txt"
-                    bump += 1
-                shutil.move(str(img), str(dest_img))
-                shutil.move(str(txt), str(dest_txt))
+                dest_img, dest_txt = _next_pair_target(temp_folder, img.stem, img.suffix.lower())
+                ok, error = _move_pair_transaction(
+                    img, txt, dest_img, dest_txt, require_txt=True
+                )
+                if not ok:
+                    lines.append(f"[ERROR] moving {img.name}: {error}")
+                    errors += 1
+                    continue
                 lines.append(f"{img.name}: moved to {temp_folder} (matched: {', '.join(matches)})")
                 processed += 1
 
-        lines.append(f"Done. {processed} file(s) moved to {temp_folder}.")
-        return active_tab, log_join(lines)
+        lines.append(f"Done. {processed} file(s) moved to {temp_folder}. Errors: {errors}.")
+        return _done(errors == 0, "" if errors == 0 else f"{errors} move operation(s) failed.")
 
     # ---------- UNDO ----------
     if mode == "undo":
-        images_in_temp = _list_images(scan_folder, exts)
+        images_in_temp = _list_images(scan_folder, exts, recursive=recursive_scan)
         if not images_in_temp:
             lines.append(f"No image files with {exts} found in temp folder: {scan_folder}")
-            return active_tab, log_join(lines)
+            return _done(False, f"No image files found in temp folder: {scan_folder}")
 
         restored = 0
+        errors = 0
         for img in sorted(images_in_temp, key=lambda p: p.name.lower()):
             txt = img.with_suffix(".txt")
-            stem, ext = img.stem, img.suffix
-            dest_img = base_folder / img.name
-            dest_txt = base_folder / (stem + ".txt")
+            had_txt = txt.exists()
+            dest_img, dest_txt = _next_pair_target(base_folder, img.stem, img.suffix.lower())
+            ok, error = _move_pair_transaction(
+                img, txt, dest_img, dest_txt, require_txt=False
+            )
+            if not ok:
+                lines.append(f"[ERROR] restoring {img.name}: {error}")
+                errors += 1
+                continue
+            restored += 1
+            lines.append(f"Restored: {dest_img.name}{' (+ .txt)' if had_txt else ''}")
 
-            bump = 1
-            while dest_img.exists() or dest_txt.exists():
-                new_stem = f"{stem}_{bump}"
-                dest_img = base_folder / f"{new_stem}{ext}"
-                dest_txt = base_folder / f"{new_stem}.txt"
-                bump += 1
-
-            try:
-                shutil.move(str(img), str(dest_img))
-                if txt.exists():
-                    shutil.move(str(txt), str(dest_txt))
-                restored += 1
-                lines.append(f"Restored: {dest_img.name}{' (+ .txt)' if dest_txt.exists() else ''}")
-            except Exception as e:
-                lines.append(f"[ERROR] restoring {img.name}: {e}")
-
-        lines.append(f"Done. {restored} file(s) restored from {scan_folder} to {base_folder}.")
-        return active_tab, log_join(lines)
+        lines.append(f"Done. {restored} file(s) restored from {scan_folder} to {base_folder}. Errors: {errors}.")
+        return _done(errors == 0, "" if errors == 0 else f"{errors} restore operation(s) failed.")
 
     # ---------- EDIT MODES (insert/delete/replace/dedup) ----------
     if mode in EDIT_MODES:
         if mode == "insert" and not add:
             lines.append("Insert skipped: no tags provided.")
-            return active_tab, log_join(lines)
+            return _done(False, "Insert skipped: no tags provided.")
         if mode == "delete" and not deltags:
             lines.append("Delete skipped: no tags provided.")
-            return active_tab, log_join(lines)
+            return _done(False, "Delete skipped: no tags provided.")
         if mode == "replace" and not mapping:
             lines.append("Replace skipped: no mappings provided.")
-            return active_tab, log_join(lines)
-        images = _list_images(scan_folder, exts)
+            return _done(False, "Replace skipped: no mappings provided.")
+        images = _list_images(scan_folder, exts, recursive=recursive_scan, exclude_dir=exclude_dir)
     if not images:
         lines.append(f"No image files with {exts} found in: {scan_folder}")
-        return active_tab, log_join(lines)
+        return _done(False, f"No image files found in: {scan_folder}")
 
     processed = 0
+    errors = 0
     for img in images:
         txt = img.with_suffix(".txt")
         if not txt.exists():
             continue
 
-        src = txt.read_text(encoding="utf-8")
+        try:
+            src, _, _ = read_text_best_effort(txt)
+        except Exception as exc:
+            lines.append(f"[ERROR] reading {txt.name}: {exc}")
+            errors += 1
+            continue
         taglist = split_tags(src)
 
+        newtags = list(taglist)
+        action_desc = ""
         if mode == "insert":
             for t in add:
-                if t not in taglist:
-                    taglist.append(t)
-            if backup:
-                txt.with_suffix(txt.suffix + ".bak").write_text(src, encoding="utf-8")
-            txt.write_text(join_tags(taglist), encoding="utf-8")
-            _invalidate_cache(txt)
-            lines.append(f"{img.name}: insert -> {add}")
-
+                if t not in newtags:
+                    newtags.append(t)
+            action_desc = f"insert -> {add}"
         elif mode == "delete":
             newtags = [t for t in taglist if t not in deltags]
-            if backup:
-                txt.with_suffix(txt.suffix + ".bak").write_text(src, encoding="utf-8")
-            txt.write_text(join_tags(newtags), encoding="utf-8")
-            _invalidate_cache(txt)
-            lines.append(f"{img.name}: delete -> {sorted(deltags)}")
-
+            action_desc = f"delete -> {sorted(deltags)}"
         elif mode == "replace":
             newtags = [mapping.get(t, t) for t in taglist]
-            if backup:
-                txt.with_suffix(txt.suffix + ".bak").write_text(src, encoding="utf-8")
-            txt.write_text(join_tags(newtags), encoding="utf-8")
-            _invalidate_cache(txt)
-            lines.append(f"{img.name}: replace -> {mapping}")
-
+            action_desc = f"replace -> {mapping}"
         elif mode == "dedup":
             seen: Set[str] = set(); out: List[str] = []
             for t in taglist:
                 if t not in seen:
                     out.append(t); seen.add(t)
+            newtags = out
+            action_desc = f"dedup -> {len(taglist)-len(out)} removed"
+
+        content = join_tags(newtags)
+        if content.strip() == src.strip():
+            continue
+        try:
             if backup:
                 txt.with_suffix(txt.suffix + ".bak").write_text(src, encoding="utf-8")
-            txt.write_text(join_tags(out), encoding="utf-8")
+            txt.write_text(content, encoding="utf-8")
             _invalidate_cache(txt)
-            lines.append(f"{img.name}: dedup -> {len(taglist)-len(out)} removed")
+            lines.append(f"{img.name}: {action_desc}")
+        except Exception as exc:
+            lines.append(f"[ERROR] writing {txt.name}: {exc}")
+            errors += 1
+            continue
 
         processed += 1
 
-    lines.append(f"Done. {processed} files checked in {scan_folder}.")
-    return active_tab, log_join(lines)
+    lines.append(f"Done. {processed} file(s) updated in {scan_folder}. Errors: {errors}.")
+    return _done(errors == 0, "" if errors == 0 else f"{errors} file update(s) failed.")

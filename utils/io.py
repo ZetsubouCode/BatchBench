@@ -1,11 +1,19 @@
 import os
 from pathlib import Path
-from typing import List
+from typing import Any, List, Optional
 
 def readable_path(p: str) -> Path:
     raw = str(p or "").strip().strip('"').strip("'")
     if not raw:
         return Path("")
+    expanded = os.path.expandvars(os.path.expanduser(raw))
+    return Path(expanded)
+
+
+def readable_path_or_none(p: Any) -> Optional[Path]:
+    raw = str(p or "").strip().strip('"').strip("'")
+    if not raw:
+        return None
     expanded = os.path.expandvars(os.path.expanduser(raw))
     return Path(expanded)
 

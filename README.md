@@ -2,7 +2,7 @@
 
 A tiny Flask site you can run on your own PC (**localhost**) with simple menus that wrap common batch utilities:
 
-- **WebP -> PNG converter**
+- **Image -> PNG converter**
 - **Batch photo adjust** using presets (warmth/tint/brightness/etc.)
 - **Dataset tag editor** (insert / delete / replace / move / dedup for `.txt` beside images)
 - **Append suffix** to all files in a folder
@@ -99,15 +99,15 @@ Tip: if you store models in this repo, put them under `models/` (ignored by git)
 
 Penjelasan singkat untuk tiap tab: cara pakai, parameter, dan hal yang perlu diperhatikan.
 
-### WebP -> PNG Converter
+### Image -> PNG Converter
 Cara pakai:
-- Isi Source Folder (berisi file `.webp`), isi Output Folder, klik Convert.
+- Isi Source Folder (berisi file gambar), isi Output Folder, klik Convert.
 Parameter:
-- Source Folder: folder berisi file `.webp` (hanya level paling atas).
+- Source Folder: folder berisi file gambar yang didukung Pillow (hanya level paling atas).
 - Output Folder: folder hasil `.png` (dibuat otomatis jika belum ada).
 Perhatian:
-- Hanya memproses `.webp`, tidak recursive.
-- Nama output memakai stem yang sama; jika sudah ada, bisa tertimpa.
+- Tidak recursive (hanya level folder teratas).
+- Semua format yang didukung akan dikonversi ke `.png`.
 
 ### Photo Adjust (preset)
 Cara pakai:
@@ -252,10 +252,10 @@ Keterangan rules:
 
 ### Combine Dataset
 Cara pakai:
-- Isi Folder A, Folder B, (opsional) Extra folders, Output Folder, klik Combine.
+- Isi Source folders (satu folder per baris) dan Output Folder, lalu klik Combine.
 Parameter:
-- Extra folders: tambahan dataset (satu folder per baris).
-- Suffix for extra sets: ditambahkan ke nama file dari dataset tambahan agar tidak bentrok. Jika lebih dari 2 dataset, suffix auto increment (`_B`, `_C`, `_D`).
+- Source folders: daftar semua dataset sumber (minimum 2 folder, satu folder per baris).
+- Suffix for non-base sets: ditambahkan ke nama file dari dataset non-base agar tidak bentrok. Jika lebih dari 2 dataset, suffix auto increment (`_B`, `_C`, `_D`).
 - Image ext: ekstensi gambar yang dianggap pasangan `.txt` (gunakan format `.png,.jpg`).
 - Move (not copy): jika aktif, file dipindah (bukan disalin).
 Perhatian:

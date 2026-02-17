@@ -3,7 +3,7 @@
   {% set tab = active_tab or 'webp' %}
 
   <ul class="nav nav-tabs mb-3" role="tablist">
-    <li class="nav-item"><button class="nav-link {{ 'active' if tab=='webp' }}" data-bs-toggle="tab" data-bs-target="#tab-webp" type="button">WebP → PNG Converter</button></li>
+    <li class="nav-item"><button class="nav-link {{ 'active' if tab=='webp' }}" data-bs-toggle="tab" data-bs-target="#tab-webp" type="button">Image -> PNG Converter</button></li>
     <li class="nav-item"><button class="nav-link {{ 'active' if tab=='batch' }}" data-bs-toggle="tab" data-bs-target="#tab-batch" type="button">Photo Adjust (preset)</button></li>
     <li class="nav-item"><button class="nav-link {{ 'active' if tab=='tags' }}" data-bs-toggle="tab" data-bs-target="#tab-tags" type="button">Dataset Tag Editor</button></li>
     <li class="nav-item"><button class="nav-link {{ 'active' if tab=='offline_tagger' }}" data-bs-toggle="tab" data-bs-target="#tab-offline-tagger" type="button">Offline Tagger (WD v3)</button></li>
@@ -12,8 +12,11 @@
     <li class="nav-item"><button class="nav-link {{ 'active' if tab=='rename' }}" data-bs-toggle="tab" data-bs-target="#tab-rename" type="button">Flatten & Renumber</button></li>
     <li class="nav-item"><button class="nav-link {{ 'active' if tab=='merge' }}" data-bs-toggle="tab" data-bs-target="#tab-merge" type="button">Stitch Groups</button></li>
     <li class="nav-item"><button class="nav-link {{ 'active' if tab=='webtoon' }}" data-bs-toggle="tab" data-bs-target="#tab-webtoon" type="button">Webtoon Panel Splitter</button></li>
+    <li class="nav-item"><button class="nav-link {{ 'active' if tab=='blur_brush' }}" data-bs-toggle="tab" data-bs-target="#tab-blur-brush" type="button">Brush Blur</button></li>
     <li class="nav-item"><button class="nav-link {{ 'active' if tab=='pipeline' }}" data-bs-toggle="tab" data-bs-target="#tab-pipeline" type="button">Pipeline (beta)</button></li>
-    <li class="nav-item ms-auto"><span class="nav-link disabled">Presets loaded: {{ preset_names|length }}</span></li>
+    <li class="nav-item ms-auto {{ '' if tab=='batch' else 'd-none' }}" id="batch-preset-info">
+      <span class="nav-link disabled">Presets loaded: {{ preset_names|length }}</span>
+    </li>
   </ul>
 
   <div class="tab-content">
@@ -101,6 +104,16 @@
       {% endif %}
     </div>
 
+    <div class="tab-pane fade {{ 'show active' if tab=='blur_brush' }}" id="tab-blur-brush">
+      {% include "blur_brush.html" %}
+      {% if log and tab=='blur_brush' %}
+        <div class="card p-3 mt-3">
+          <h5>Log</h5>
+          <pre class="monospace">{{ log }}</pre>
+        </div>
+      {% endif %}
+    </div>
+
     <div class="tab-pane fade {{ 'show active' if tab=='pipeline' }}" id="tab-pipeline">
       {% include "pipeline.html" %}
       {% if log and tab=='pipeline' %}
@@ -112,4 +125,25 @@
     </div>
   </div>
 
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const infoEl = document.getElementById('batch-preset-info');
+      if(!infoEl) return;
+
+      const setInfoVisible = (target) => {
+        infoEl.classList.toggle('d-none', target !== '#tab-batch');
+      };
+
+      const activeTab = document.querySelector('.nav-tabs [data-bs-toggle="tab"].active');
+      setInfoVisible(activeTab?.getAttribute('data-bs-target') || '');
+
+      document.querySelectorAll('.nav-tabs [data-bs-toggle="tab"]').forEach(btn => {
+        btn.addEventListener('shown.bs.tab', (ev) => {
+          setInfoVisible(ev.target?.getAttribute('data-bs-target') || '');
+        });
+      });
+    });
+  </script>
+
 {% endblock %}
+

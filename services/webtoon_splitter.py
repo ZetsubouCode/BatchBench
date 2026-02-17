@@ -1,10 +1,11 @@
-from typing import Tuple, List
+from typing import List, Tuple
 from pathlib import Path
 import re
 from PIL import Image
 
-from utils.io import readable_path, ensure_out_dir, log_join
+from utils.io import readable_path, ensure_out_dir
 from utils.merge_groups_core import merge_many
+from utils.tool_result import build_tool_result
 
 
 def _list_images(folder: Path, glob_pat: str, exts: List[str]) -> List[Path]:
@@ -93,9 +94,10 @@ def _targets(folder: Path, glob_pat: str, exts: List[str]) -> List[Tuple[Path, L
     return targets
 
 
-def handle(form, ctx) -> Tuple[str, str]:
+def handle(form, ctx):
     active_tab = "webtoon"
-    folder = readable_path(form.get("wt_folder", ""))
+    folder_raw = (form.get("wt_folder", "") or "").strip()
+    folder = readable_path(folder_raw)
     out_dir_raw = (form.get("wt_out_dir", "") or "").strip()
     out_dir = readable_path(out_dir_raw) if out_dir_raw else None
     glob_pat = form.get("wt_glob", "*.*").strip() or "*.*"
@@ -123,16 +125,22 @@ def handle(form, ctx) -> Tuple[str, str]:
     resize_mode = resize_mode if resize_mode in ("match-width", "none") else "match-width"
 
     lines: List[str] = []
+    def _done(ok: bool, error: str = ""):
+        return build_tool_result(active_tab, lines, ok=ok, error=error)
+    if not folder_raw:
+        lines.append("Source folder is required.")
+        return _done(False, "Source folder is required.")
     if not folder.exists() or not folder.is_dir():
         lines.append("Source folder not found.")
-        return active_tab, log_join(lines)
+        return _done(False, "Source folder not found.")
 
     targets = _targets(folder, glob_pat, exts)
     if not targets:
         lines.append(f"No images found with pattern '{glob_pat}' and extensions {', '.join(exts)}.")
-        return active_tab, log_join(lines)
+        return _done(False, "No images found for webtoon split.")
 
     lines.append(f"Root: {folder} | Chapters detected: {len(targets)}")
+    errors = 0
     for i, (chap_path, pages) in enumerate(targets, start=1):
         lines.append(f"[{i}/{len(targets)}] {chap_path.name}: {len(pages)} page(s)")
         target_out = (out_dir / chap_path.name) if out_dir else (chap_path / "_panels")
@@ -182,12 +190,15 @@ def handle(form, ctx) -> Tuple[str, str]:
                     saved += 1
                     lines.append(f"  Saved slice {idx} -> {out_path.name} (y={top}..{bottom-1})")
                 except Exception as e:
+                    errors += 1
                     lines.append(f"  [ERROR] slice {idx} ({out_path.name}): {e}")
             merged.close()
             lines.append(f"  Done: {saved} slice(s) into {target_out}")
         except Exception as e:
+            errors += 1
             lines.append(f"[ERROR] {chap_path.name}: {e}")
 
     if dry_run:
         lines.append("Dry run finished: no files were saved.")
-    return active_tab, log_join(lines)
+        return _done(True)
+    return _done(errors == 0, "" if errors == 0 else f"{errors} webtoon split operation(s) failed.")

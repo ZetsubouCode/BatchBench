@@ -7,8 +7,10 @@ import os
 
 from PIL import Image
 
-from utils.io import readable_path, ensure_out_dir, log_join
+from utils.io import readable_path, readable_path_or_none, ensure_out_dir
 from utils.image_ops import apply_preset
+from utils.parse import parse_bool, parse_int, parse_float
+from utils.tool_result import build_tool_result
 
 
 IMG_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
@@ -27,37 +29,15 @@ PARAM_KEYS = [
 
 
 def _pfloat(val: Any) -> Optional[float]:
-    if val is None:
-        return None
-    try:
-        s = str(val).strip()
-        if not s:
-            return None
-        return float(s)
-    except Exception:
-        return None
+    return parse_float(val)
 
 
 def _pint(val: Any, default: int = 0) -> int:
-    try:
-        if val is None:
-            return default
-        return int(str(val).strip() or default)
-    except Exception:
-        return default
+    return parse_int(val, default=default)
 
 
 def _pbool(val: Any, default: bool = False) -> bool:
-    if val is None:
-        return default
-    if isinstance(val, bool):
-        return val
-    s = str(val).strip().lower()
-    if s in {"1", "true", "yes", "on"}:
-        return True
-    if s in {"0", "false", "no", "off"}:
-        return False
-    return default
+    return parse_bool(val, default=default)
 
 
 def _iter_images(src: Path, recursive: bool, skip_root: Optional[Path]) -> Iterable[Path]:
@@ -126,7 +106,7 @@ def _save_image(img: Image.Image, out_path: Path) -> None:
     img.convert("RGB").save(out_path.with_suffix(".jpg"), "JPEG", quality=95)
 
 
-def handle(form, ctx) -> Tuple[str, str]:
+def handle(form, ctx):
     """
     Batch color/lighting adjustment.
 
@@ -146,24 +126,31 @@ def handle(form, ctx) -> Tuple[str, str]:
     recursive = _pbool(form.get("recursive"), True)
     output_format = (form.get("output_format") or "same").strip().lower()
 
-    work_dir = readable_path(ctx.get("work_dir", "")) if ctx.get("work_dir") else None
-    src = readable_path(src_raw) if src_raw else (work_dir if work_dir else readable_path(""))
+    work_dir = readable_path_or_none(ctx.get("work_dir", "")) if ctx.get("work_dir") else None
+    src = readable_path(src_raw) if src_raw else work_dir
     dst = readable_path(dst_raw) if dst_raw else Path("")
 
     lines: List[str] = []
+    def _done(ok: bool, error: str = ""):
+        return build_tool_result(active_tab, lines, ok=ok, error=error)
 
     if not preset_name:
         lines.append("Preset is required.")
-        return active_tab, log_join(lines)
+        return _done(False, "Preset is required.")
     if preset_name not in presets:
         lines.append(f"Preset not found: {preset_name}")
-        return active_tab, log_join(lines)
+        return _done(False, f"Preset not found: {preset_name}")
 
-    if not src or not src.exists() or not src.is_dir():
+    if src is None:
+        lines.append("Source folder is required.")
+        if work_dir:
+            lines.append(f"Hint: leave Source empty to use WORK_DIR: {work_dir}")
+        return _done(False, "Source folder is required.")
+    if not src.exists() or not src.is_dir():
         lines.append("Source folder not found.")
         if work_dir:
             lines.append(f"Hint: leave Source empty to use WORK_DIR: {work_dir}")
-        return active_tab, log_join(lines)
+        return _done(False, "Source folder not found.")
 
     # Default output under source if user didn't fill it.
     if not dst_raw:
@@ -286,4 +273,4 @@ def handle(form, ctx) -> Tuple[str, str]:
     if count > shown:
         lines.append(f"... ({count - shown} more files)")
     lines.append(f"Done. {count} files processed. Errors: {errors}.")
-    return active_tab, log_join(lines)
+    return _done(errors == 0, "" if errors == 0 else f"{errors} batch adjustment(s) failed.")

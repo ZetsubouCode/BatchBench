@@ -47,7 +47,7 @@
         <input id="pipe-workdir" class="form-control" placeholder="D:\work\pipeline">
         <button class="btn btn-outline-light btn-browse" type="button" data-target="pipe-workdir">Browse</button>
       </div>
-      <div class="small text-muted mt-1">Working copy + state stored here (.pipeline_job.json).</div>
+      <div class="small text-muted mt-1">Working copy: &lt;working_dir&gt;/jobs/&lt;job_id&gt;/ | state: _work/pipeline_jobs/&lt;job_id&gt;/state.json</div>
     </div>
     <div class="col-lg-4">
       <label class="form-label">Output Directory</label>
@@ -155,6 +155,7 @@
   let lastArtifacts = {};
   let lastLogId = 0;
   let presetData = { types: [], files: {} };
+  let isStarting = false;
 
   const batchPresets = Object.keys({{ presets|tojson }} || {});
 
@@ -505,8 +506,8 @@
       `
     },
     webp_to_png: {
-      label: 'WebP to PNG',
-      summary: 'Convert .webp files into PNGs.',
+      label: 'Image to PNG',
+      summary: 'Convert supported image files into PNGs.',
       defaults: {},
       body: `
         <div class="row g-3">
@@ -569,22 +570,9 @@
       body: `
         <div class="row g-3">
           <div class="col-lg-6">
-            <label class="form-label">Folder A</label>
-            <div class="input-group">
-              <input class="form-control" data-field="folder_a" data-browse="1" placeholder="Default: working copy">
-              <button class="btn btn-outline-light btn-browse" type="button" data-browse-target="folder_a">Browse</button>
-            </div>
-          </div>
-          <div class="col-lg-6">
-            <label class="form-label">Folder B</label>
-            <div class="input-group">
-              <input class="form-control" data-field="folder_b" data-browse="1" placeholder="Required if no extra folders">
-              <button class="btn btn-outline-light btn-browse" type="button" data-browse-target="folder_b">Browse</button>
-            </div>
-          </div>
-          <div class="col-lg-6">
-            <label class="form-label">Extra folders (one per line)</label>
-            <textarea class="form-control" rows="3" data-field="extra_folders"></textarea>
+            <label class="form-label">Source folders (one per line)</label>
+            <textarea class="form-control" rows="3" data-field="source_folders" placeholder="D:\\datasetA&#10;D:\\datasetB&#10;D:\\datasetC"></textarea>
+            <div class="pipe-inline-note mt-1">List all source folders here (minimum 2).</div>
           </div>
           <div class="col-lg-6">
             <label class="form-label">Output folder</label>
@@ -594,7 +582,7 @@
             </div>
           </div>
           <div class="col-lg-4">
-            <label class="form-label">Suffix for rename</label>
+            <label class="form-label">Suffix for non-base sets</label>
             <input class="form-control" data-field="suffix">
           </div>
           <div class="col-lg-4">
@@ -909,6 +897,36 @@
     if(!el) return;
     el.textContent = text || 'idle';
     el.className = `badge bg-${type}`;
+  }
+
+  function setRunBusy(busy){
+    isStarting = !!busy;
+    const runBtn = q('pipe-run');
+    if(runBtn){
+      runBtn.disabled = isStarting;
+      runBtn.textContent = isStarting ? 'Starting...' : 'Run Pipeline';
+    }
+  }
+
+  function syncActionButtons(status){
+    const state = String(status || '').toUpperCase();
+    const isActive = ['QUEUED', 'RUNNING', 'WAITING_MANUAL'].includes(state);
+    const runBtn = q('pipe-run');
+    const pauseBtn = q('pipe-pause');
+    const resumeBtn = q('pipe-resume');
+    const stopBtn = q('pipe-stop');
+    if(runBtn){
+      runBtn.disabled = isStarting || isActive;
+    }
+    if(pauseBtn){
+      pauseBtn.disabled = !['QUEUED', 'RUNNING'].includes(state);
+    }
+    if(resumeBtn){
+      resumeBtn.disabled = state !== 'WAITING_MANUAL';
+    }
+    if(stopBtn){
+      stopBtn.disabled = !['QUEUED', 'RUNNING', 'WAITING_MANUAL'].includes(state);
+    }
   }
 
   function setProgress(idx, total){
@@ -1241,11 +1259,16 @@
   }
 
   async function startPipeline(){
+    if(isStarting){
+      return;
+    }
+    setRunBusy(true);
     try{
       const payload = collectPayload();
       const validation = validateStepOrder(payload.steps);
       if(!validation.ok){
         alert(validation.message);
+        setRunBusy(false);
         return;
       }
       const data = await fetchJson('/api/pipeline/start', { method:'POST', body: JSON.stringify(payload) });
@@ -1254,9 +1277,12 @@
       const logWrap = q('pipe-log');
       if(logWrap){ logWrap.innerHTML = ''; }
       setStatusBadge('running', 'primary');
+      syncActionButtons('RUNNING');
       pollStatus(true);
     }catch(err){
       alert(err.message);
+    }finally{
+      setRunBusy(false);
     }
   }
 
@@ -1286,17 +1312,26 @@
 
   async function pollStatus(immediate){
     if(pollTimer){ clearTimeout(pollTimer); }
-    if(!currentJobId){
-      pollTimer = setTimeout(() => pollStatus(), 4000);
-      return;
-    }
     try{
-      const qs = new URLSearchParams({ job_id: currentJobId });
+      const qs = new URLSearchParams();
+      if(currentJobId){
+        qs.set('job_id', currentJobId);
+      }
       if(lastLogId > 0){
         qs.set('since_log_id', String(lastLogId));
       }
       const data = await fetchJson(`/api/pipeline/status?${qs.toString()}`);
       const job = data.job;
+      if(!job || !job.id){
+        setStatusBadge('idle', 'secondary');
+        syncActionButtons('IDLE');
+        pollTimer = setTimeout(() => pollStatus(), 6000);
+        return;
+      }
+      if(currentJobId !== job.id){
+        currentJobId = job.id;
+        lastLogId = 0;
+      }
       renderSteps(job.steps, job.current_step);
       renderLogs(job.log, !!job.log_delta);
       if((job.last_log_id || 0) > lastLogId){
@@ -1311,6 +1346,7 @@
                         state.startsWith('comp') ? 'success' :
                         state.startsWith('stop') ? 'secondary' : 'primary';
       setStatusBadge(job.status, badgeType);
+      syncActionButtons(job.status);
       if(job.status === 'COMPLETED' || job.status === 'FAILED' || job.status === 'STOPPED'){
         pollTimer = setTimeout(() => pollStatus(), 6000);
       }else{
@@ -1318,6 +1354,7 @@
       }
     }catch(err){
       setStatusBadge('idle','secondary');
+      syncActionButtons('IDLE');
       pollTimer = setTimeout(() => pollStatus(), 6000);
     }
   }
@@ -1352,6 +1389,7 @@
     resetDefaultSteps();
     wireButtons();
     refreshStepPicker();
+    syncActionButtons('IDLE');
     pollStatus();
   });
 })();

@@ -88,6 +88,40 @@
   .workdir-empty { font-size:.75rem; color:var(--bb-muted); padding:.2rem .35rem; }
   .workdir-root-drop { border:1px dashed var(--bb-border); border-radius:.35rem; padding:.25rem .45rem; font-size:.7rem; color:var(--bb-muted); }
   .workdir-root-drop.is-active { border-color:var(--bb-link); color:var(--bb-link); }
+  .danbooru-offcanvas { width:min(560px, 96vw); }
+  .danbooru-tabs { border-bottom-color:var(--bb-border); }
+  .danbooru-tabs .nav-link { color:var(--bb-muted); }
+  .danbooru-tabs .nav-link.active { color:var(--bb-text); background:var(--bb-card); border-color:var(--bb-border) var(--bb-border) var(--bb-card); }
+  .danbooru-status { font-size:.82rem; color:var(--bb-muted); min-height:1.35rem; display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+  .danbooru-status.is-error { color:#ffc6ce; }
+  .danbooru-status.is-success { color:#c5ffd9; }
+  .danbooru-tag-title { font-size:1rem; font-weight:600; word-break:break-word; }
+  .danbooru-tag-meta { font-size:.78rem; color:var(--bb-muted); }
+  .danbooru-section-title { font-size:.75rem; letter-spacing:.08em; text-transform:uppercase; color:var(--bb-muted); margin-bottom:.35rem; }
+  .danbooru-wiki-body { border:1px solid var(--bb-border); border-radius:.45rem; padding:.6rem; background:var(--bb-input-bg); font-size:.82rem; line-height:1.35; white-space:pre-wrap; word-break:break-word; min-height:4rem; }
+  .danbooru-related-wrap { display:flex; flex-wrap:wrap; gap:.35rem; max-height:210px; overflow:auto; padding:.25rem 0; }
+  .danbooru-related-chip { border:1px solid var(--bb-border); border-radius:999px; padding:.15rem .5rem; font-size:.78rem; color:var(--bb-text); background:var(--bb-card); cursor:pointer; }
+  .danbooru-related-chip:hover { border-color:var(--bb-link); color:var(--bb-link); }
+  .danbooru-glossary-list { display:flex; flex-direction:column; gap:.75rem; }
+  .danbooru-glossary-group { border:1px solid var(--bb-border); border-radius:.45rem; padding:.55rem; background:var(--bb-input-bg); }
+  .danbooru-glossary-head { font-size:.76rem; letter-spacing:.08em; text-transform:uppercase; color:var(--bb-muted); margin-bottom:.4rem; }
+  .danbooru-glossary-tags { display:flex; flex-wrap:wrap; gap:.35rem; }
+  .danbooru-glossary-chip { display:inline-flex; align-items:center; gap:.35rem; border:1px solid var(--bb-border); border-radius:999px; padding:.15rem .45rem; font-size:.78rem; color:var(--bb-text); background:var(--bb-card); }
+  .danbooru-glossary-tag { border:0; background:transparent; color:inherit; padding:0; cursor:pointer; }
+  .danbooru-glossary-tag:hover { color:var(--bb-link); }
+  .danbooru-glossary-remove { border:0; background:transparent; color:var(--bb-muted); padding:0; cursor:pointer; font-size:.9rem; line-height:1; }
+  .danbooru-glossary-remove:hover { color:#ffb0ba; }
+  .danbooru-preview-card { border:1px solid var(--bb-border); border-radius:.45rem; background:var(--bb-input-bg); padding:.55rem; }
+  .danbooru-preview-card.is-minimized .danbooru-preview-body { display:none; }
+  .danbooru-preview-header { display:flex; align-items:center; justify-content:space-between; gap:.5rem; }
+  .danbooru-preview-controls { display:flex; align-items:center; gap:.35rem; }
+  .danbooru-carousel { display:grid; grid-template-columns:32px minmax(0,1fr) 32px; gap:.4rem; align-items:center; }
+  .danbooru-carousel-btn { border:1px solid var(--bb-border); border-radius:.4rem; background:var(--bb-card); color:var(--bb-text); font-size:.85rem; padding:.25rem 0; }
+  .danbooru-carousel-btn:disabled { opacity:.4; cursor:not-allowed; }
+  .danbooru-carousel-frame { border:1px solid var(--bb-border); border-radius:.4rem; min-height:220px; max-height:220px; background:#0b1220; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+  .danbooru-carousel-frame img { max-width:100%; max-height:220px; object-fit:contain; display:block; }
+  .danbooru-carousel-empty { color:var(--bb-muted); font-size:.78rem; text-align:center; padding:.5rem; }
+  .danbooru-preview-meta { font-size:.75rem; color:var(--bb-muted); margin-top:.35rem; min-height:1rem; display:flex; justify-content:space-between; gap:.35rem; }
   @media (max-width: 991.98px) {
     .tag-editor-layout { grid-template-columns:1fr; }
     .tag-editor-layout.is-expanded .tag-editor-sidebar { width:100%; transform:none; }
@@ -175,6 +209,8 @@
               <button type="button" class="btn btn-outline-light btn-sm" id="tagviz-scan">Scan tags</button>
               <button type="button" class="btn btn-outline-secondary btn-sm" id="tagviz-sync"
                       data-bs-toggle="tooltip" data-bs-title="Sync selection into Tags / mapping and re-enable auto-sync">Sync to Tags</button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" id="tagviz-danbooru"
+                      data-bs-toggle="tooltip" data-bs-title="Open Danbooru tag info panel">Danbooru</button>
               <button type="button" class="btn btn-outline-secondary btn-sm" id="tagviz-clear">Clear selection</button>
             </div>
           </div>
@@ -300,6 +336,9 @@
           </div>
           <div class="gallery-status" id="gallery-status"></div>
           <div class="gallery-grid" id="gallery-grid"></div>
+          <div class="mt-2 text-center">
+            <button type="button" class="btn btn-sm btn-outline-light d-none" id="gallery-load-more">Load more</button>
+          </div>
         </div>
       </div>
     </div>
@@ -348,6 +387,88 @@
   </div>
 </div>
 
+<div class="offcanvas offcanvas-end danbooru-offcanvas" tabindex="-1" id="danbooruOffcanvas" aria-labelledby="danbooru-offcanvas-title">
+  <div class="offcanvas-header" style="border-bottom:1px solid var(--bb-border);">
+    <h5 class="offcanvas-title" id="danbooru-offcanvas-title">Danbooru Tag Info</h5>
+    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+  </div>
+  <div class="offcanvas-body d-flex flex-column gap-3">
+    <ul class="nav nav-tabs danbooru-tabs" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="danbooru-tab-info" data-bs-toggle="tab" data-bs-target="#danbooru-pane-info" type="button" role="tab" aria-controls="danbooru-pane-info" aria-selected="true">Tag Info</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="danbooru-tab-glossary" data-bs-toggle="tab" data-bs-target="#danbooru-pane-glossary" type="button" role="tab" aria-controls="danbooru-pane-glossary" aria-selected="false">Glossary</button>
+      </li>
+    </ul>
+    <div class="tab-content flex-grow-1 overflow-auto pe-1">
+      <div class="tab-pane fade show active" id="danbooru-pane-info" role="tabpanel" aria-labelledby="danbooru-tab-info" tabindex="0">
+        <div id="danbooru-status" class="danbooru-status">Click a tag in Tag Explorer to load Danbooru info.</div>
+        <div class="d-flex align-items-start justify-content-between gap-2 mt-2">
+          <div>
+            <div class="danbooru-tag-title" id="danbooru-tag-title">-</div>
+            <div class="danbooru-tag-meta" id="danbooru-tag-meta">No metadata loaded.</div>
+          </div>
+          <span class="badge text-bg-secondary" id="danbooru-tag-category">unknown</span>
+        </div>
+        <div class="d-flex gap-2 flex-wrap mt-2">
+          <button type="button" class="btn btn-sm btn-outline-warning" id="danbooru-star-btn" disabled>Star</button>
+          <select class="form-select form-select-sm" id="danbooru-star-category" style="max-width:160px;"></select>
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="danbooru-add-category">New category</button>
+          <button type="button" class="btn btn-sm btn-outline-light" id="danbooru-select-btn" disabled>Select this tag</button>
+          <a class="btn btn-sm btn-outline-light" id="danbooru-open-link" href="https://danbooru.donmai.us" target="_blank" rel="noopener noreferrer">Open Danbooru</a>
+        </div>
+        <div class="mt-3 danbooru-preview-card" id="danbooru-preview-card">
+          <div class="danbooru-preview-header">
+            <div class="danbooru-section-title mb-0">Preview carousel</div>
+            <div class="danbooru-preview-controls">
+              <span class="small text-muted" id="danbooru-preview-index">0 / 0</span>
+              <button type="button" class="btn btn-sm btn-outline-secondary" id="danbooru-preview-toggle">Minimize</button>
+            </div>
+          </div>
+          <div class="danbooru-preview-body mt-2" id="danbooru-preview-body">
+            <div class="danbooru-carousel">
+              <button type="button" class="danbooru-carousel-btn" id="danbooru-preview-prev" aria-label="Previous preview">&lt;</button>
+              <a id="danbooru-preview-link" href="https://danbooru.donmai.us/posts" target="_blank" rel="noopener noreferrer">
+                <div class="danbooru-carousel-frame" id="danbooru-preview-frame">
+                  <div class="danbooru-carousel-empty">No preview image.</div>
+                </div>
+              </a>
+              <button type="button" class="danbooru-carousel-btn" id="danbooru-preview-next" aria-label="Next preview">&gt;</button>
+            </div>
+            <div class="danbooru-preview-meta" id="danbooru-preview-meta">
+              <span>No preview loaded.</span>
+              <span></span>
+            </div>
+          </div>
+        </div>
+        <div class="mt-3">
+          <div class="danbooru-section-title">Wiki</div>
+          <div class="danbooru-wiki-body" id="danbooru-wiki">No wiki loaded.</div>
+          <button type="button" class="btn btn-sm btn-outline-secondary mt-2 d-none" id="danbooru-wiki-toggle">Show more</button>
+        </div>
+        <div class="mt-3">
+          <div class="danbooru-section-title">Related tags</div>
+          <div class="danbooru-related-wrap" id="danbooru-related">
+            <span class="small text-muted">No related tags loaded.</span>
+          </div>
+        </div>
+      </div>
+      <div class="tab-pane fade" id="danbooru-pane-glossary" role="tabpanel" aria-labelledby="danbooru-tab-glossary" tabindex="0">
+        <div class="row g-2">
+          <div class="col-7">
+            <input class="form-control form-control-sm" id="danbooru-glossary-search" placeholder="Search starred tags">
+          </div>
+          <div class="col-5">
+            <select class="form-select form-select-sm" id="danbooru-glossary-filter"></select>
+          </div>
+        </div>
+        <div class="danbooru-glossary-list mt-2" id="danbooru-glossary-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 (() => {
   const get = id => document.getElementById(id);
@@ -383,6 +504,7 @@
   const TAGVIZ = {
     scan: 'tagviz-scan',
     sync: 'tagviz-sync',
+    danbooru: 'tagviz-danbooru',
     clear: 'tagviz-clear',
     filter: 'tagviz-filter',
     sort: 'tagviz-sort',
@@ -393,6 +515,35 @@
     status: 'tagviz-status',
     hint: 'tagviz-hint',
     syncStatus: 'tagviz-sync-status'
+  };
+  const DANBOORU = {
+    offcanvas: 'danbooruOffcanvas',
+    tabInfo: 'danbooru-tab-info',
+    tabGlossary: 'danbooru-tab-glossary',
+    status: 'danbooru-status',
+    tagTitle: 'danbooru-tag-title',
+    tagMeta: 'danbooru-tag-meta',
+    tagCategory: 'danbooru-tag-category',
+    starBtn: 'danbooru-star-btn',
+    starCategory: 'danbooru-star-category',
+    addCategory: 'danbooru-add-category',
+    selectBtn: 'danbooru-select-btn',
+    openLink: 'danbooru-open-link',
+    wikiBody: 'danbooru-wiki',
+    wikiToggle: 'danbooru-wiki-toggle',
+    relatedWrap: 'danbooru-related',
+    previewCard: 'danbooru-preview-card',
+    previewBody: 'danbooru-preview-body',
+    previewToggle: 'danbooru-preview-toggle',
+    previewPrev: 'danbooru-preview-prev',
+    previewNext: 'danbooru-preview-next',
+    previewFrame: 'danbooru-preview-frame',
+    previewLink: 'danbooru-preview-link',
+    previewMeta: 'danbooru-preview-meta',
+    previewIndex: 'danbooru-preview-index',
+    glossarySearch: 'danbooru-glossary-search',
+    glossaryFilter: 'danbooru-glossary-filter',
+    glossaryList: 'danbooru-glossary-list'
   };
   const GALLERY = {
     layout: 'tag-editor-layout',
@@ -405,6 +556,7 @@
     path: 'gallery-path',
     drop: 'gallery-drop',
     input: 'gallery-upload-input',
+    loadMore: 'gallery-load-more',
     recursive: 'gallery-recursive',
     limit: 'gallery-limit',
     modal: 'galleryPreviewModal',
@@ -439,7 +591,10 @@
   const galleryState = {
     items: [],
     root: '',
-    zoom: 1
+    zoom: 1,
+    total: 0,
+    pageSize: 120,
+    visibleCount: 120
   };
   const uiState = {
     sidebarExpanded: false
@@ -448,6 +603,24 @@
     root: '',
     selected: '',
     expanded: new Set()
+  };
+  const danbooruState = {
+    offcanvas: null,
+    cache: new Map(),
+    cacheTtlMs: 1000 * 60 * 60 * 24,
+    reqSeq: 0,
+    debounceTimer: null,
+    autoOpenedOnce: false,
+    activeTag: '',
+    activeData: null,
+    wikiBody: '',
+    wikiExpanded: false,
+    previews: [],
+    previewIndex: 0,
+    previewMinimized: false,
+    glossary: { version: 1, categories: { Unsorted: [] }, updated_at: 0 },
+    glossarySearch: '',
+    glossaryFilter: '__all__'
   };
   let tagsSyncEnabled = true;
   let tagsSyncLocked = false;
@@ -467,6 +640,9 @@
     move:"mode-move", dedup:"mode-dedup"
   };
   const MODE_STORAGE_KEY = 'bb.tags.mode';
+  const DANBOORU_GLOSSARY_KEY = 'batchbench_glossary_v1';
+  const DANBOORU_LAST_CATEGORY_KEY = 'batchbench_glossary_last_category';
+  const DANBOORU_PREVIEW_MIN_KEY = 'batchbench_danbooru_preview_minimized';
 
   function getModeValue(){
     return (get(IDS.mode)?.value || '').trim();
@@ -707,7 +883,9 @@
       container.appendChild(chip);
       return;
     }
-    const shown = tags.slice(0, maxTags);
+    const limit = Number.isFinite(maxTags) ? Math.max(0, maxTags) : 0;
+    const showAll = limit === 0;
+    const shown = showAll ? tags : tags.slice(0, limit);
     shown.forEach(tag=>{
       const chip = document.createElement('span');
       const removable = !!(ctx && ctx.removable);
@@ -747,29 +925,39 @@
       }
       container.appendChild(chip);
     });
-    if (tags.length > maxTags){
+    if (!showAll && tags.length > limit){
       const more = document.createElement('span');
       more.className = 'gallery-tag';
-      more.textContent = `+${tags.length - maxTags}`;
+      more.textContent = `+${tags.length - limit}`;
       container.appendChild(more);
     }
   }
 
   function renderGalleryItems(){
     const wrap = get(GALLERY.grid);
+    const moreBtn = get(GALLERY.loadMore);
     if (!wrap) return;
     wrap.innerHTML = '';
+    if (moreBtn) moreBtn.classList.add('d-none');
     if (!galleryState.items || !galleryState.items.length){
       const empty = document.createElement('div');
       empty.className = 'gallery-empty';
       empty.textContent = 'No images to preview.';
       wrap.appendChild(empty);
+      setGalleryCount(0, 0);
       return;
     }
     const root = galleryState.root || getGalleryRoot();
     const frag = document.createDocumentFragment();
     const items = getSortedGalleryItems();
-    items.forEach(item=>{
+    const safePage = Math.max(20, parseInt(String(galleryState.pageSize || 120), 10) || 120);
+    galleryState.pageSize = safePage;
+    if (!Number.isFinite(galleryState.visibleCount) || galleryState.visibleCount <= 0){
+      galleryState.visibleCount = safePage;
+    }
+    galleryState.visibleCount = Math.min(items.length, Math.max(safePage, galleryState.visibleCount));
+    const visibleItems = items.slice(0, galleryState.visibleCount);
+    visibleItems.forEach(item=>{
       const matchScore = computeMatchScore(item.tags || [], tagVizState.selected);
       const card = document.createElement('div');
       card.className = 'gallery-card';
@@ -813,6 +1001,17 @@
       frag.appendChild(card);
     });
     wrap.appendChild(frag);
+    const remaining = items.length - visibleItems.length;
+    if (moreBtn){
+      if (remaining > 0){
+        const step = Math.min(galleryState.pageSize, remaining);
+        moreBtn.textContent = `Load ${step} more (${remaining} left)`;
+        moreBtn.classList.remove('d-none');
+      } else {
+        moreBtn.classList.add('d-none');
+      }
+    }
+    setGalleryCount(galleryState.total || items.length, visibleItems.length);
   }
 
   async function loadGallery(){
@@ -821,6 +1020,7 @@
     setGalleryPath(root);
     if (!root){
       galleryState.items = [];
+      galleryState.total = 0;
       renderGalleryItems();
       setGalleryCount(0, 0);
       setGalleryStatus('Folder not set.');
@@ -837,7 +1037,8 @@
       folder: root,
       exts: get(IDS.exts)?.value || '',
       recursive: !!get(GALLERY.recursive)?.checked,
-      limit
+      limit,
+      tag_limit: 200
     };
     const res = await fetch('/api/tags/images', {
       method: 'POST',
@@ -849,17 +1050,21 @@
     if (!res.ok || !data || !data.ok){
       const err = (data && data.error) ? data.error : `HTTP ${res.status}`;
       galleryState.items = [];
+      galleryState.total = 0;
       renderGalleryItems();
       setGalleryCount(0, 0);
       setGalleryStatus(err);
       return;
     }
     galleryState.items = data.images || [];
+    galleryState.total = data.total || galleryState.items.length;
+    galleryState.visibleCount = Math.min(galleryState.items.length, galleryState.pageSize);
     galleryState.items.forEach((item, idx)=>{
       if (item) item._idx = idx;
     });
     renderGalleryItems();
-    setGalleryCount(data.total || galleryState.items.length, galleryState.items.length);
+    const shown = Math.min(galleryState.items.length, galleryState.visibleCount);
+    setGalleryCount(galleryState.total, shown);
     setGalleryStatus(`Loaded ${galleryState.items.length} image(s).`);
   }
 
@@ -929,11 +1134,11 @@
       onRemoved: (updatedTags, info) => {
         item.tags = Array.isArray(updatedTags) ? updatedTags : [];
         if (info && info.removed && info.tag) updateTagVizCount(info.tag, -1);
-        fillGalleryTags(tags, item.tags || [], item.has_txt, 30, ctx);
+        fillGalleryTags(tags, item.tags || [], item.has_txt, 0, ctx);
         renderGalleryItems();
       }
     };
-    fillGalleryTags(tags, item.tags || [], item.has_txt, 30, ctx);
+    fillGalleryTags(tags, item.tags || [], item.has_txt, 0, ctx);
     setGalleryZoom(1);
     const modal = new bootstrap.Modal(modalEl);
     modal.show();
@@ -1498,6 +1703,700 @@
     updateTagHint();
   }
 
+  function normalizeDanbooruTag(raw){
+    let tag = String(raw || '').trim().toLowerCase();
+    if (!tag) return '';
+    tag = tag.replace(/\s+/g, '_').replace(/^_+|_+$/g, '');
+    while (tag.includes('__')) tag = tag.replace(/__+/g, '_');
+    return tag;
+  }
+
+  function normalizeGlossaryCategory(raw){
+    const cleaned = String(raw || '').trim().replace(/\s+/g, ' ');
+    if (!cleaned) return 'Unsorted';
+    return cleaned.length > 40 ? cleaned.slice(0, 40) : cleaned;
+  }
+
+  function preferredGlossaryCategory(){
+    try{
+      return normalizeGlossaryCategory(localStorage.getItem(DANBOORU_LAST_CATEGORY_KEY) || 'Unsorted');
+    }catch(_){
+      return 'Unsorted';
+    }
+  }
+
+  function setPreferredGlossaryCategory(category){
+    const normalized = normalizeGlossaryCategory(category);
+    try{ localStorage.setItem(DANBOORU_LAST_CATEGORY_KEY, normalized); }catch(_){}
+  }
+
+  function ensureDanbooruOffcanvas(){
+    if (danbooruState.offcanvas) return danbooruState.offcanvas;
+    const el = get(DANBOORU.offcanvas);
+    if (!el || !window.bootstrap || !bootstrap.Offcanvas) return null;
+    danbooruState.offcanvas = bootstrap.Offcanvas.getOrCreateInstance(el);
+    return danbooruState.offcanvas;
+  }
+
+  function setDanbooruTab(tabName){
+    const targetId = tabName === 'glossary' ? DANBOORU.tabGlossary : DANBOORU.tabInfo;
+    const btn = get(targetId);
+    if (!btn || !window.bootstrap || !bootstrap.Tab) return;
+    bootstrap.Tab.getOrCreateInstance(btn).show();
+  }
+
+  function openDanbooruOffcanvas(tabName='info', forceOpen=false){
+    setDanbooruTab(tabName);
+    const instance = ensureDanbooruOffcanvas();
+    const el = get(DANBOORU.offcanvas);
+    if (!instance || !el) return;
+    if (forceOpen || !el.classList.contains('show')){
+      instance.show();
+    }
+  }
+
+  function setDanbooruStatus(message, level=''){
+    const el = get(DANBOORU.status);
+    if (!el) return;
+    el.className = 'danbooru-status';
+    if (level === 'error') el.classList.add('is-error');
+    if (level === 'success') el.classList.add('is-success');
+    el.textContent = message || '';
+  }
+
+  function updateDanbooruOpenLink(tag){
+    const cleanTag = normalizeDanbooruTag(tag);
+    const link = get(DANBOORU.openLink);
+    if (!link) return;
+    const target = cleanTag ? `https://danbooru.donmai.us/wiki_pages/${encodeURIComponent(cleanTag)}` : 'https://danbooru.donmai.us/wiki_pages';
+    link.href = target;
+  }
+
+  function loadDanbooruPreviewPrefs(){
+    try{
+      danbooruState.previewMinimized = localStorage.getItem(DANBOORU_PREVIEW_MIN_KEY) === '1';
+    }catch(_){
+      danbooruState.previewMinimized = false;
+    }
+  }
+
+  function setDanbooruPreviewMinimized(minimized, persist=true){
+    danbooruState.previewMinimized = !!minimized;
+    const card = get(DANBOORU.previewCard);
+    if (card) card.classList.toggle('is-minimized', danbooruState.previewMinimized);
+    const btn = get(DANBOORU.previewToggle);
+    if (btn) btn.textContent = danbooruState.previewMinimized ? 'Expand' : 'Minimize';
+    if (persist){
+      try{
+        localStorage.setItem(DANBOORU_PREVIEW_MIN_KEY, danbooruState.previewMinimized ? '1' : '0');
+      }catch(_){}
+    }
+  }
+
+  function normalizeDanbooruPreviewItems(rawItems){
+    const out = [];
+    const seen = new Set();
+    (Array.isArray(rawItems) ? rawItems : []).forEach(raw=>{
+      if (!raw || typeof raw !== 'object') return;
+      const id = parseInt(String(raw.id || ''), 10);
+      if (!Number.isFinite(id) || id <= 0 || seen.has(id)) return;
+      const displayUrl = String(raw.display_url || raw.preview_url || '').trim();
+      const previewUrl = String(raw.preview_url || raw.display_url || '').trim();
+      const postUrl = String(raw.post_url || `https://danbooru.donmai.us/posts/${id}`).trim();
+      if (!displayUrl && !previewUrl) return;
+      seen.add(id);
+
+      const widthRaw = parseInt(String(raw.width || ''), 10);
+      const heightRaw = parseInt(String(raw.height || ''), 10);
+      out.push({
+        id,
+        display_url: displayUrl || previewUrl,
+        preview_url: previewUrl || displayUrl,
+        post_url: postUrl,
+        rating: String(raw.rating || '').trim(),
+        width: Number.isFinite(widthRaw) && widthRaw > 0 ? widthRaw : null,
+        height: Number.isFinite(heightRaw) && heightRaw > 0 ? heightRaw : null,
+        file_ext: String(raw.file_ext || '').trim().toLowerCase()
+      });
+    });
+    return out;
+  }
+
+  function renderDanbooruPreview(){
+    const frame = get(DANBOORU.previewFrame);
+    const link = get(DANBOORU.previewLink);
+    const meta = get(DANBOORU.previewMeta);
+    const index = get(DANBOORU.previewIndex);
+    const prev = get(DANBOORU.previewPrev);
+    const next = get(DANBOORU.previewNext);
+
+    setDanbooruPreviewMinimized(danbooruState.previewMinimized, false);
+
+    const total = danbooruState.previews.length;
+    if (total){
+      if (danbooruState.previewIndex >= total) danbooruState.previewIndex = 0;
+      if (danbooruState.previewIndex < 0) danbooruState.previewIndex = 0;
+    } else {
+      danbooruState.previewIndex = 0;
+    }
+    if (index){
+      const current = total ? (danbooruState.previewIndex + 1) : 0;
+      index.textContent = `${current} / ${total}`;
+    }
+    if (prev) prev.disabled = total <= 1;
+    if (next) next.disabled = total <= 1;
+    if (!frame || !link || !meta) return;
+
+    frame.innerHTML = '';
+    meta.innerHTML = '';
+
+    if (!total){
+      const empty = document.createElement('div');
+      empty.className = 'danbooru-carousel-empty';
+      empty.textContent = 'No preview image.';
+      frame.appendChild(empty);
+      link.href = 'https://danbooru.donmai.us/posts';
+      link.title = 'Open Danbooru posts';
+      const left = document.createElement('span');
+      left.textContent = 'No preview loaded.';
+      const right = document.createElement('span');
+      right.textContent = '';
+      meta.appendChild(left);
+      meta.appendChild(right);
+      return;
+    }
+
+    const item = danbooruState.previews[danbooruState.previewIndex];
+    const img = document.createElement('img');
+    img.loading = 'lazy';
+    img.alt = `${danbooruState.activeTag || 'tag'} preview ${danbooruState.previewIndex + 1}`;
+    img.src = item.display_url || item.preview_url;
+    frame.appendChild(img);
+
+    link.href = item.post_url || `https://danbooru.donmai.us/posts/${item.id}`;
+    link.title = `Open post #${item.id} on Danbooru`;
+
+    const leftParts = [`Post #${item.id}`];
+    if (item.rating) leftParts.push(`rating ${item.rating}`);
+    if (item.file_ext) leftParts.push(item.file_ext);
+
+    const rightParts = [];
+    if (item.width && item.height) rightParts.push(`${item.width}x${item.height}`);
+
+    const left = document.createElement('span');
+    left.textContent = leftParts.join(' | ');
+    const right = document.createElement('span');
+    right.textContent = rightParts.join(' | ');
+    meta.appendChild(left);
+    meta.appendChild(right);
+  }
+
+  function setDanbooruPreviewItems(items){
+    danbooruState.previews = normalizeDanbooruPreviewItems(items);
+    danbooruState.previewIndex = 0;
+    renderDanbooruPreview();
+  }
+
+  function stepDanbooruPreview(step){
+    const total = danbooruState.previews.length;
+    if (!total) return;
+    danbooruState.previewIndex = (danbooruState.previewIndex + step + total) % total;
+    renderDanbooruPreview();
+  }
+
+  function renderDanbooruWikiBody(){
+    const wrap = get(DANBOORU.wikiBody);
+    const toggle = get(DANBOORU.wikiToggle);
+    if (!wrap || !toggle) return;
+    const full = String(danbooruState.wikiBody || '');
+    if (!full){
+      wrap.textContent = 'No wiki text available.';
+      toggle.classList.add('d-none');
+      return;
+    }
+    if (!danbooruState.wikiExpanded && full.length > 700){
+      wrap.textContent = full.slice(0, 700) + '...';
+      toggle.textContent = 'Show more';
+      toggle.classList.remove('d-none');
+      return;
+    }
+    wrap.textContent = full;
+    if (full.length > 700){
+      toggle.textContent = danbooruState.wikiExpanded ? 'Show less' : 'Show more';
+      toggle.classList.remove('d-none');
+    } else {
+      toggle.classList.add('d-none');
+    }
+  }
+
+  function renderDanbooruRelated(related){
+    const wrap = get(DANBOORU.relatedWrap);
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    const tags = Array.isArray(related) ? related.map(normalizeDanbooruTag).filter(Boolean).slice(0, 30) : [];
+    if (!tags.length){
+      const empty = document.createElement('span');
+      empty.className = 'small text-muted';
+      empty.textContent = 'No related tags.';
+      wrap.appendChild(empty);
+      return;
+    }
+    tags.forEach(tag=>{
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'danbooru-related-chip';
+      btn.textContent = tag;
+      btn.addEventListener('click', ()=>{
+        openDanbooruOffcanvas('info', true);
+        triggerDanbooruLookup(tag, { forceOpen: true, immediate: true });
+      });
+      wrap.appendChild(btn);
+    });
+  }
+
+  function normalizeGlossaryPayload(payload){
+    const output = { version: 1, categories: {}, updated_at: Date.now() };
+    const src = payload && typeof payload === 'object' ? payload : {};
+    const categories = src.categories && typeof src.categories === 'object' ? src.categories : {};
+    Object.keys(categories).forEach(catName=>{
+      const normalizedCat = normalizeGlossaryCategory(catName);
+      const rawTags = Array.isArray(categories[catName]) ? categories[catName] : [];
+      const seen = new Set();
+      const tags = [];
+      rawTags.forEach(raw=>{
+        const tag = normalizeDanbooruTag(raw);
+        if (!tag || seen.has(tag)) return;
+        seen.add(tag);
+        tags.push(tag);
+      });
+      output.categories[normalizedCat] = tags;
+    });
+    if (!Object.keys(output.categories).length){
+      output.categories.Unsorted = [];
+    }
+    return output;
+  }
+
+  function saveGlossary(){
+    danbooruState.glossary.updated_at = Date.now();
+    try{ localStorage.setItem(DANBOORU_GLOSSARY_KEY, JSON.stringify(danbooruState.glossary)); }catch(_){}
+  }
+
+  function loadGlossary(){
+    let raw = null;
+    try{ raw = localStorage.getItem(DANBOORU_GLOSSARY_KEY); }catch(_){}
+    if (!raw){
+      danbooruState.glossary = normalizeGlossaryPayload(null);
+      return;
+    }
+    try{
+      danbooruState.glossary = normalizeGlossaryPayload(JSON.parse(raw));
+    }catch(_){
+      danbooruState.glossary = normalizeGlossaryPayload(null);
+    }
+  }
+
+  function glossaryCategoryNames(){
+    const names = Object.keys(danbooruState.glossary.categories || {});
+    if (!names.includes('Unsorted')) names.push('Unsorted');
+    names.sort((a,b)=>{
+      if (a === 'Unsorted') return -1;
+      if (b === 'Unsorted') return 1;
+      return a.localeCompare(b);
+    });
+    return names;
+  }
+
+  function ensureGlossaryCategory(category){
+    const name = normalizeGlossaryCategory(category);
+    if (!danbooruState.glossary.categories[name]){
+      danbooruState.glossary.categories[name] = [];
+    }
+    return name;
+  }
+
+  function isTagStarred(tag){
+    const cleanTag = normalizeDanbooruTag(tag);
+    if (!cleanTag) return false;
+    const categories = danbooruState.glossary.categories || {};
+    return Object.keys(categories).some(cat=> (categories[cat] || []).includes(cleanTag));
+  }
+
+  function addToGlossary(rawTag, rawCategory){
+    const tag = normalizeDanbooruTag(rawTag);
+    if (!tag) return false;
+    const category = ensureGlossaryCategory(rawCategory || preferredGlossaryCategory());
+    const bucket = danbooruState.glossary.categories[category] || [];
+    if (bucket.includes(tag)) return false;
+    bucket.push(tag);
+    bucket.sort((a,b)=> a.localeCompare(b));
+    danbooruState.glossary.categories[category] = bucket;
+    setPreferredGlossaryCategory(category);
+    saveGlossary();
+    return true;
+  }
+
+  function removeFromGlossary(rawTag, rawCategory){
+    const tag = normalizeDanbooruTag(rawTag);
+    const category = normalizeGlossaryCategory(rawCategory);
+    if (!tag || !danbooruState.glossary.categories[category]) return false;
+    const next = (danbooruState.glossary.categories[category] || []).filter(t => t !== tag);
+    if (next.length === danbooruState.glossary.categories[category].length) return false;
+    danbooruState.glossary.categories[category] = next;
+    saveGlossary();
+    return true;
+  }
+
+  function removeTagFromAllGlossaryCategories(rawTag){
+    const tag = normalizeDanbooruTag(rawTag);
+    if (!tag) return false;
+    let changed = false;
+    Object.keys(danbooruState.glossary.categories || {}).forEach(cat=>{
+      const current = danbooruState.glossary.categories[cat] || [];
+      const filtered = current.filter(t => t !== tag);
+      if (filtered.length !== current.length){
+        danbooruState.glossary.categories[cat] = filtered;
+        changed = true;
+      }
+    });
+    if (changed) saveGlossary();
+    return changed;
+  }
+
+  function renderGlossarySelectors(){
+    const starSelect = get(DANBOORU.starCategory);
+    const filterSelect = get(DANBOORU.glossaryFilter);
+    const names = glossaryCategoryNames();
+    const preferred = preferredGlossaryCategory();
+    if (starSelect){
+      const current = normalizeGlossaryCategory(starSelect.value || preferred);
+      starSelect.innerHTML = '';
+      names.forEach(name=>{
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        starSelect.appendChild(opt);
+      });
+      const pick = names.includes(current) ? current : (names.includes(preferred) ? preferred : 'Unsorted');
+      starSelect.value = pick;
+      setPreferredGlossaryCategory(pick);
+    }
+    if (filterSelect){
+      const prev = danbooruState.glossaryFilter || '__all__';
+      filterSelect.innerHTML = '';
+      const allOpt = document.createElement('option');
+      allOpt.value = '__all__';
+      allOpt.textContent = 'All categories';
+      filterSelect.appendChild(allOpt);
+      names.forEach(name=>{
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        filterSelect.appendChild(opt);
+      });
+      filterSelect.value = prev === '__all__' || names.includes(prev) ? prev : '__all__';
+      danbooruState.glossaryFilter = filterSelect.value;
+    }
+  }
+
+  function renderGlossaryList(){
+    const wrap = get(DANBOORU.glossaryList);
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    const categories = danbooruState.glossary.categories || {};
+    const names = glossaryCategoryNames();
+    const search = (danbooruState.glossarySearch || '').trim().toLowerCase();
+    const filter = danbooruState.glossaryFilter || '__all__';
+    let rendered = 0;
+
+    names.forEach(name=>{
+      if (filter !== '__all__' && name !== filter) return;
+      const tags = (categories[name] || []).filter(tag => !search || tag.toLowerCase().includes(search));
+      if (!tags.length) return;
+      rendered += 1;
+
+      const group = document.createElement('div');
+      group.className = 'danbooru-glossary-group';
+      const head = document.createElement('div');
+      head.className = 'danbooru-glossary-head';
+      head.textContent = `${name} (${tags.length})`;
+      group.appendChild(head);
+
+      const tagWrap = document.createElement('div');
+      tagWrap.className = 'danbooru-glossary-tags';
+      tags.forEach(tag=>{
+        const chip = document.createElement('div');
+        chip.className = 'danbooru-glossary-chip';
+
+        const tagBtn = document.createElement('button');
+        tagBtn.type = 'button';
+        tagBtn.className = 'danbooru-glossary-tag';
+        tagBtn.textContent = tag;
+        tagBtn.addEventListener('click', ()=>{
+          openDanbooruOffcanvas('info', true);
+          triggerDanbooruLookup(tag, { forceOpen: true, immediate: true });
+        });
+        chip.appendChild(tagBtn);
+
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'danbooru-glossary-remove';
+        removeBtn.textContent = 'x';
+        removeBtn.title = 'Remove from glossary';
+        removeBtn.addEventListener('click', (e)=>{
+          e.preventDefault();
+          e.stopPropagation();
+          if (!removeFromGlossary(tag, name)) return;
+          renderGlossarySelectors();
+          renderGlossaryList();
+          updateDanbooruActionState();
+        });
+        chip.appendChild(removeBtn);
+
+        tagWrap.appendChild(chip);
+      });
+      group.appendChild(tagWrap);
+      wrap.appendChild(group);
+    });
+
+    if (!rendered){
+      const empty = document.createElement('div');
+      empty.className = 'small text-muted';
+      empty.textContent = 'No starred tags yet.';
+      wrap.appendChild(empty);
+    }
+  }
+
+  function updateDanbooruActionState(){
+    const tag = normalizeDanbooruTag(danbooruState.activeTag);
+    const starBtn = get(DANBOORU.starBtn);
+    const selectBtn = get(DANBOORU.selectBtn);
+    if (starBtn){
+      if (!tag){
+        starBtn.disabled = true;
+        starBtn.textContent = 'Star';
+      } else if (isTagStarred(tag)){
+        starBtn.disabled = false;
+        starBtn.textContent = 'Unstar';
+      } else {
+        starBtn.disabled = false;
+        starBtn.textContent = 'Star';
+      }
+    }
+    if (selectBtn){
+      selectBtn.disabled = !tag;
+    }
+  }
+
+  function addDanbooruTagToInput(rawTag){
+    const tag = normalizeDanbooruTag(rawTag);
+    const input = get(IDS.tags);
+    if (!tag || !input) return;
+    const mode = getModeOrDefault();
+    let nextText = '';
+    if (mode === 'replace'){
+      const parts = (input.value || '')
+        .split(';')
+        .map(p=>p.trim())
+        .filter(Boolean);
+      const token = `${tag}->`;
+      if (!parts.includes(token)) parts.push(token);
+      nextText = parts.join('; ');
+    } else {
+      const tags = splitTagList(input.value || '')
+        .map(normalizeDanbooruTag)
+        .filter(Boolean);
+      if (!tags.includes(tag)) tags.push(tag);
+      nextText = tags.join(', ');
+    }
+    tagsSyncEnabled = false;
+    tagsSyncLocked = true;
+    input.value = nextText;
+    tagsSyncLocked = false;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    setTagVizStatus(`Added "${tag}" to Tags / mapping.`);
+    updateTagSyncStatus();
+    updateTagHint();
+  }
+
+  function clearDanbooruPanel(){
+    danbooruState.activeTag = '';
+    danbooruState.activeData = null;
+    danbooruState.wikiBody = '';
+    danbooruState.wikiExpanded = false;
+    const title = get(DANBOORU.tagTitle);
+    const meta = get(DANBOORU.tagMeta);
+    const category = get(DANBOORU.tagCategory);
+    if (title) title.textContent = '-';
+    if (meta) meta.textContent = 'No metadata loaded.';
+    if (category) category.textContent = 'unknown';
+    updateDanbooruOpenLink('');
+    setDanbooruPreviewItems([]);
+    renderDanbooruWikiBody();
+    renderDanbooruRelated([]);
+    setDanbooruStatus('Click a tag in Tag Explorer to load Danbooru info.');
+    updateDanbooruActionState();
+  }
+
+  function renderDanbooruLoading(tag){
+    const cleanTag = normalizeDanbooruTag(tag);
+    danbooruState.activeTag = cleanTag;
+    danbooruState.activeData = null;
+    danbooruState.wikiBody = '';
+    danbooruState.wikiExpanded = false;
+    const title = get(DANBOORU.tagTitle);
+    const meta = get(DANBOORU.tagMeta);
+    const category = get(DANBOORU.tagCategory);
+    if (title) title.textContent = cleanTag || '-';
+    if (meta) meta.textContent = 'Loading Danbooru data...';
+    if (category) category.textContent = 'loading';
+    updateDanbooruOpenLink(cleanTag);
+    setDanbooruPreviewItems([]);
+    renderDanbooruWikiBody();
+    renderDanbooruRelated([]);
+    setDanbooruStatus('Loading tag info...');
+    updateDanbooruActionState();
+  }
+
+  function renderDanbooruError(tag, message){
+    const cleanTag = normalizeDanbooruTag(tag);
+    const title = get(DANBOORU.tagTitle);
+    const meta = get(DANBOORU.tagMeta);
+    const category = get(DANBOORU.tagCategory);
+    danbooruState.activeTag = cleanTag;
+    danbooruState.activeData = null;
+    danbooruState.wikiBody = '';
+    danbooruState.wikiExpanded = false;
+    if (title) title.textContent = cleanTag || '-';
+    if (meta) meta.textContent = 'Failed to fetch Danbooru data.';
+    if (category) category.textContent = 'error';
+    updateDanbooruOpenLink(cleanTag);
+    setDanbooruPreviewItems([]);
+    renderDanbooruWikiBody();
+    renderDanbooruRelated([]);
+    setDanbooruStatus(message || 'Request failed.', 'error');
+    updateDanbooruActionState();
+  }
+
+  function renderDanbooruData(data){
+    danbooruState.activeData = data || null;
+    const cleanTag = normalizeDanbooruTag(data?.tag || danbooruState.activeTag);
+    danbooruState.activeTag = cleanTag;
+    const title = get(DANBOORU.tagTitle);
+    const meta = get(DANBOORU.tagMeta);
+    const category = get(DANBOORU.tagCategory);
+    if (title) title.textContent = cleanTag || '-';
+    updateDanbooruOpenLink(cleanTag);
+
+    const info = data?.info || null;
+    const wiki = data?.wiki || null;
+    const categoryName = info && info.category_name ? info.category_name : 'unknown';
+    if (category) category.textContent = categoryName;
+
+    const metaParts = [];
+    if (info && Number.isFinite(info.post_count)) metaParts.push(`${Number(info.post_count).toLocaleString()} posts`);
+    if (info && Number.isFinite(info.category)) metaParts.push(`category ${info.category}`);
+    if (data?.cached) metaParts.push('cached');
+    if (!data?.found) metaParts.push('no Danbooru entry');
+    if (meta) meta.textContent = metaParts.length ? metaParts.join(' | ') : 'No metadata available.';
+
+    setDanbooruPreviewItems(Array.isArray(data?.previews) ? data.previews : []);
+    danbooruState.wikiBody = String(wiki?.body || '');
+    danbooruState.wikiExpanded = false;
+    renderDanbooruWikiBody();
+    renderDanbooruRelated(Array.isArray(data?.related) ? data.related : []);
+
+    if (data?.found){
+      setDanbooruStatus('Danbooru info loaded.', 'success');
+    } else {
+      setDanbooruStatus('No entry found for this tag.');
+    }
+    updateDanbooruActionState();
+  }
+
+  function trimDanbooruClientCache(maxEntries=300){
+    while (danbooruState.cache.size > maxEntries){
+      const oldest = danbooruState.cache.keys().next().value;
+      danbooruState.cache.delete(oldest);
+    }
+  }
+
+  async function danbooruLookup(tag, opts={}){
+    const cleanTag = normalizeDanbooruTag(tag);
+    if (!cleanTag) return null;
+    const includeRelated = opts.includeRelated !== false;
+    const includePreview = opts.includePreview !== false;
+    const parsedPreviewLimit = parseInt(String(opts.previewLimit ?? 8), 10);
+    const previewLimit = Number.isFinite(parsedPreviewLimit) && parsedPreviewLimit > 0 ? Math.min(20, parsedPreviewLimit) : 8;
+    const cacheKey = `${cleanTag}|r${includeRelated ? '1' : '0'}|p${includePreview ? '1' : '0'}|l${previewLimit}`;
+    const cached = danbooruState.cache.get(cacheKey);
+    if (cached && (Date.now() - cached.ts) < danbooruState.cacheTtlMs){
+      renderDanbooruData(Object.assign({}, cached.data, { cached: true }));
+      return cached.data;
+    }
+
+    const seq = ++danbooruState.reqSeq;
+    renderDanbooruLoading(cleanTag);
+
+    let res = null;
+    let data = null;
+    try{
+      res = await fetch('/api/danbooru/taginfo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tag: cleanTag,
+          include_related: includeRelated,
+          include_preview: includePreview,
+          preview_limit: previewLimit
+        })
+      });
+      try{ data = await res.json(); }catch(_){}
+    }catch(err){
+      if (seq !== danbooruState.reqSeq) return null;
+      renderDanbooruError(cleanTag, err && err.message ? err.message : 'Failed to reach backend.');
+      return null;
+    }
+
+    if (seq !== danbooruState.reqSeq) return null;
+    if (!res || !res.ok || !data || !data.ok){
+      const err = (data && data.error) ? data.error : `HTTP ${res ? res.status : 0}`;
+      renderDanbooruError(cleanTag, err);
+      return null;
+    }
+
+    danbooruState.cache.set(cacheKey, { ts: Date.now(), data });
+    trimDanbooruClientCache(300);
+    renderDanbooruData(data);
+    return data;
+  }
+
+  function triggerDanbooruLookup(rawTag, opts={}){
+    const tag = normalizeDanbooruTag(rawTag);
+    if (!tag) return;
+    const autoOpen = !!opts.autoOpen;
+    const forceOpen = !!opts.forceOpen;
+    const immediate = !!opts.immediate;
+
+    if (forceOpen){
+      openDanbooruOffcanvas('info', true);
+    } else if (autoOpen && !danbooruState.autoOpenedOnce){
+      openDanbooruOffcanvas('info', true);
+      danbooruState.autoOpenedOnce = true;
+    }
+
+    const runLookup = () => danbooruLookup(tag, { includeRelated: true, includePreview: true, previewLimit: 8 });
+    if (immediate){
+      if (danbooruState.debounceTimer) clearTimeout(danbooruState.debounceTimer);
+      danbooruState.debounceTimer = null;
+      runLookup();
+      return;
+    }
+    if (danbooruState.debounceTimer) clearTimeout(danbooruState.debounceTimer);
+    danbooruState.debounceTimer = setTimeout(runLookup, 180);
+  }
+
   function renderTagViz(){
     const wrap = get(TAGVIZ.cloud);
     if(!wrap) return;
@@ -1566,6 +2465,7 @@
         syncTagsFromSelection(true);
         updateTagSyncStatus();
         updateTagHint();
+        triggerDanbooruLookup(item.tag, { autoOpen: true });
         renderGalleryItems();
       });
       frag.appendChild(btn);
@@ -1775,6 +2675,11 @@
 
     loadSaved();
     hookSavers();
+    loadGlossary();
+    renderGlossarySelectors();
+    renderGlossaryList();
+    loadDanbooruPreviewPrefs();
+    clearDanbooruPanel();
     document.querySelectorAll('.mode-btn').forEach(btn=>{
       btn.addEventListener('click', ()=>{
         const mode = btn.dataset.mode || '';
@@ -1798,12 +2703,77 @@
 
     get(TAGVIZ.scan)?.addEventListener('click', scanTagViz);
     get(TAGVIZ.sync)?.addEventListener('click', syncSelectionToTags);
+    get(TAGVIZ.danbooru)?.addEventListener('click', ()=> openDanbooruOffcanvas('info', true));
     get(TAGVIZ.clear)?.addEventListener('click', clearTagVizSelection);
     get(TAGVIZ.filter)?.addEventListener('input', renderTagViz);
     get(TAGVIZ.sort)?.addEventListener('change', renderTagViz);
     get(TAGVIZ.min)?.addEventListener('input', renderTagViz);
+    get(DANBOORU.tabInfo)?.addEventListener('click', ()=> setDanbooruTab('info'));
+    get(DANBOORU.tabGlossary)?.addEventListener('click', ()=>{
+      setDanbooruTab('glossary');
+      renderGlossaryList();
+    });
+    get(DANBOORU.previewToggle)?.addEventListener('click', ()=>{
+      setDanbooruPreviewMinimized(!danbooruState.previewMinimized, true);
+    });
+    get(DANBOORU.previewPrev)?.addEventListener('click', ()=> stepDanbooruPreview(-1));
+    get(DANBOORU.previewNext)?.addEventListener('click', ()=> stepDanbooruPreview(1));
+    get(DANBOORU.wikiToggle)?.addEventListener('click', ()=>{
+      danbooruState.wikiExpanded = !danbooruState.wikiExpanded;
+      renderDanbooruWikiBody();
+    });
+    get(DANBOORU.starCategory)?.addEventListener('change', (e)=>{
+      setPreferredGlossaryCategory(e.target.value || 'Unsorted');
+    });
+    get(DANBOORU.addCategory)?.addEventListener('click', ()=>{
+      const raw = prompt('Category name');
+      if (raw == null) return;
+      const category = ensureGlossaryCategory(raw);
+      saveGlossary();
+      renderGlossarySelectors();
+      const starSelect = get(DANBOORU.starCategory);
+      if (starSelect) starSelect.value = category;
+      setPreferredGlossaryCategory(category);
+      renderGlossaryList();
+    });
+    get(DANBOORU.starBtn)?.addEventListener('click', ()=>{
+      const tag = normalizeDanbooruTag(danbooruState.activeTag);
+      if (!tag) return;
+      if (isTagStarred(tag)){
+        if (removeTagFromAllGlossaryCategories(tag)){
+          setDanbooruStatus(`Removed "${tag}" from glossary.`, 'success');
+        }
+      } else {
+        const category = get(DANBOORU.starCategory)?.value || preferredGlossaryCategory();
+        if (addToGlossary(tag, category)){
+          setDanbooruStatus(`Added "${tag}" to glossary.`, 'success');
+        }
+      }
+      renderGlossarySelectors();
+      renderGlossaryList();
+      updateDanbooruActionState();
+    });
+    get(DANBOORU.selectBtn)?.addEventListener('click', ()=>{
+      addDanbooruTagToInput(danbooruState.activeTag);
+    });
+    get(DANBOORU.glossarySearch)?.addEventListener('input', (e)=>{
+      danbooruState.glossarySearch = e.target.value || '';
+      renderGlossaryList();
+    });
+    get(DANBOORU.glossaryFilter)?.addEventListener('change', (e)=>{
+      danbooruState.glossaryFilter = e.target.value || '__all__';
+      renderGlossaryList();
+    });
     get(GALLERY.toggle)?.addEventListener('click', toggleSidebarExpanded);
     get(GALLERY.refresh)?.addEventListener('click', loadGallery);
+    get(GALLERY.loadMore)?.addEventListener('click', ()=>{
+      const total = (galleryState.items || []).length;
+      galleryState.visibleCount = Math.min(
+        total,
+        (galleryState.visibleCount || galleryState.pageSize) + galleryState.pageSize
+      );
+      renderGalleryItems();
+    });
     get(GALLERY.recursive)?.addEventListener('change', loadGallery);
     get(GALLERY.limit)?.addEventListener('change', loadGallery);
     get(IDS.exts)?.addEventListener('change', scheduleGalleryRefresh);

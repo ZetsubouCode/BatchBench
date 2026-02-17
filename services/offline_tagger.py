@@ -4,8 +4,18 @@ import re
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-from utils.io import readable_path, log_join
+from utils.io import readable_path
 from utils.dataset import split_tags, join_tags
+from utils.parse import (
+    parse_bool,
+    parse_exts,
+    parse_float,
+    parse_int,
+    parse_line_list,
+    parse_optional_int,
+    parse_tag_list,
+)
+from utils.tool_result import build_tool_result
 
 
 DEFAULT_MODEL_ID = "SmilingWolf/wd-swinv2-tagger-v3"
@@ -256,86 +266,32 @@ class CategoryIds:
 
 
 def _parse_bool(val: Any) -> bool:
-    if isinstance(val, bool):
-        return val
-    if val is None:
-        return False
-    return str(val).strip().lower() in {"1", "true", "yes", "on"}
+    return parse_bool(val, default=False)
 
 
 def _parse_int(val: Any, default: int) -> int:
-    try:
-        return int(val)
-    except Exception:
-        return default
+    return parse_int(val, default=default)
 
 
 def _parse_float(val: Any, default: float) -> float:
-    try:
-        return float(val)
-    except Exception:
-        return default
+    parsed = parse_float(val, default=default)
+    return parsed if parsed is not None else default
 
 
 def _parse_optional_int(val: Any) -> Optional[int]:
-    if val is None:
-        return None
-    text = str(val).strip()
-    if not text:
-        return None
-    try:
-        return int(text)
-    except Exception:
-        return None
+    return parse_optional_int(val)
 
 
 def _parse_tag_list(raw: Any) -> List[str]:
-    if raw is None:
-        return []
-    if isinstance(raw, list):
-        chunks = [str(x) for x in raw]
-    else:
-        chunks = [str(raw)]
-    out: List[str] = []
-    for chunk in chunks:
-        for line in chunk.replace("\r", "\n").split("\n"):
-            for token in line.split(","):
-                val = token.strip()
-                if val:
-                    out.append(val)
-    return out
+    return parse_tag_list(raw, dedupe=False)
 
 
 def _parse_regex_list(raw: Any) -> List[str]:
-    if raw is None:
-        return []
-    if isinstance(raw, list):
-        chunks = [str(x) for x in raw]
-    else:
-        chunks = [str(raw)]
-    out: List[str] = []
-    for chunk in chunks:
-        for line in chunk.replace("\r", "\n").split("\n"):
-            val = line.strip()
-            if val:
-                out.append(val)
-    return out
+    return parse_line_list(raw, dedupe=False)
 
 
 def _parse_exts(raw: Any) -> List[str]:
-    if isinstance(raw, list):
-        values = raw
-    else:
-        values = str(raw or "").split(",")
-    out = []
-    for token in values:
-        val = str(token).strip().lower()
-        if not val:
-            continue
-        if not val.startswith("."):
-            val = "." + val
-        out.append(val)
-    return out or list(DEFAULT_IMAGE_EXTS)
+    return parse_exts(raw, default=DEFAULT_IMAGE_EXTS)
 
 
 def _is_wd_family(model_id: str) -> bool:
@@ -1604,16 +1560,26 @@ def run_tagger(
     return True, lines
 
 
-def handle(form, ctx) -> Tuple[str, str]:
+def handle(form, ctx):
     active_tab = "offline_tagger"
 
     raw_folder = (form.get("folder") or "").strip()
     if not raw_folder:
-        return active_tab, log_join(["Dataset folder is required."])
+        return build_tool_result(
+            active_tab,
+            ["Dataset folder is required."],
+            ok=False,
+            error="Dataset folder is required.",
+        )
 
     dataset_path = readable_path(raw_folder)
     if not dataset_path.exists() or not dataset_path.is_dir():
-        return active_tab, log_join([f"Dataset folder not found: {dataset_path}"])
+        return build_tool_result(
+            active_tab,
+            [f"Dataset folder not found: {dataset_path}"],
+            ok=False,
+            error=f"Dataset folder not found: {dataset_path}",
+        )
 
     form_opts = dict(form) if isinstance(form, dict) else {k: form.get(k) for k in form.keys()}
     form_opts["input_dir"] = raw_folder
@@ -1633,7 +1599,12 @@ def handle(form, ctx) -> Tuple[str, str]:
     deprecated = _find_deprecated_keys(form_opts)
     opts = _effective_opts(form_opts, TAGGER_POLICY)
     ok, lines = run_tagger(opts, deprecated_keys=deprecated)
-    return active_tab, log_join(lines)
+    return build_tool_result(
+        active_tab,
+        lines,
+        ok=ok,
+        error="" if ok else "Offline tagger failed. See logs for details.",
+    )
 
 
 def _cli():

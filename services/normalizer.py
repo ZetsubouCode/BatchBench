@@ -1,13 +1,14 @@
 import json
 import re
 import shutil
-from collections import Counter
+from collections import Counter, OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
 from utils.io import readable_path
+from utils.text_io import read_text_best_effort
 
 # Default image extensions we consider when pairing txt files
 DEFAULT_IMAGE_EXTS = [".jpg", ".jpeg", ".png", ".webp", ".bmp"]
@@ -61,6 +62,17 @@ class ScanContext:
     top_tags: List[Tuple[str, int]]
 
 
+@dataclass
+class _ScanCacheEntry:
+    root: str
+    signature: Tuple[int, int, int, int]
+    context: ScanContext
+
+
+_SCAN_CONTEXT_CACHE: "OrderedDict[str, _ScanCacheEntry]" = OrderedDict()
+_SCAN_CONTEXT_CACHE_MAX = 8
+
+
 def clean_input_list(raw: str) -> Set[str]:
     """
     Accepts comma/newline separated strings and returns a clean set of tags.
@@ -76,10 +88,25 @@ def clean_input_list(raw: str) -> Set[str]:
     return set(parts)
 
 
+def _resolve_preset_target(preset_root: Path, preset_type: str, preset_file: str) -> Path:
+    ptype = (preset_type or "").strip() or "default"
+    fname = (preset_file or "").strip()
+    if not fname:
+        raise ValueError("preset_file is required")
+    if Path(fname).is_absolute():
+        raise ValueError("Invalid preset file path")
+    if Path(ptype).is_absolute():
+        raise ValueError("Invalid preset type path")
+
+    base = (preset_root / ptype).resolve()
+    target = (base / fname).resolve()
+    if base != target and base not in target.parents:
+        raise ValueError("Invalid preset path")
+    return target
+
+
 def load_preset(preset_root: Path, preset_type: str, preset_file: str) -> Dict:
-    ptype = preset_type.strip() or "default"
-    fname = preset_file.strip()
-    target = preset_root / ptype / fname
+    target = _resolve_preset_target(preset_root, preset_type, preset_file)
     if not target.exists():
         raise FileNotFoundError(f"Preset not found: {target}")
     try:
@@ -89,7 +116,10 @@ def load_preset(preset_root: Path, preset_type: str, preset_file: str) -> Dict:
 
 
 def list_preset_files(preset_root: Path, preset_type: str) -> List[str]:
-    base = preset_root / (preset_type.strip() or "default")
+    base = (preset_root / (preset_type.strip() or "default")).resolve()
+    root = preset_root.resolve()
+    if root != base and root not in base.parents:
+        return []
     if not base.exists() or not base.is_dir():
         return []
     return sorted([p.name for p in base.glob("*.json") if p.is_file()])
@@ -100,7 +130,10 @@ def parse_tag_file(path: Path) -> TagFile:
     Parse a Danbooru-style tag txt into TagFile object.
     Supports optional '#optional:' and '#warning:' blocks.
     """
-    text = path.read_text(encoding="utf-8")
+    try:
+        text, used_encoding, had_replacement = read_text_best_effort(path)
+    except Exception as exc:
+        return TagFile(path=path, main=[], optional=[], warning=f"Failed reading file: {exc}")
     lines = [ln.strip() for ln in text.splitlines() if ln.strip() or ln.startswith("#warning:")]
     main_line = ""
     optional: List[str] = []
@@ -119,6 +152,9 @@ def parse_tag_file(path: Path) -> TagFile:
             main_line = f"{main_line}, {line}"
 
     main_tags = [t.strip() for t in main_line.split(",") if t.strip()] if main_line else []
+    if had_replacement:
+        decode_warning = f"Decoded with fallback ({used_encoding})"
+        warning = f"{warning} | {decode_warning}" if warning else decode_warning
     return TagFile(path=path, main=main_tags, optional=optional, warning=warning)
 
 
@@ -198,6 +234,88 @@ def collect_tag_files(root: Path, recursive: bool, image_exts: List[str], create
     return sorted(tag_paths, key=lambda x: x.as_posix().lower())
 
 
+def _root_key(path: Path) -> str:
+    try:
+        return str(path.resolve())
+    except Exception:
+        return str(path)
+
+
+def _preset_key(preset: Dict) -> str:
+    try:
+        return json.dumps(preset or {}, sort_keys=True)
+    except Exception:
+        return str(preset or {})
+
+
+def _scan_cache_key(root: Path, opts: NormalizeOptions, preset: Dict) -> str:
+    payload = {
+        "root": _root_key(root),
+        "recursive": bool(opts.recursive),
+        "include_missing_txt": bool(opts.include_missing_txt),
+        "image_exts": [str(x).lower() for x in (opts.image_exts or [])],
+        "preset_type": str(opts.preset_type or ""),
+        "preset_file": str(opts.preset_file or ""),
+        "background_threshold": opts.background_threshold,
+        "preset": _preset_key(preset),
+    }
+    return json.dumps(payload, sort_keys=True)
+
+
+def _scan_signature(tag_files: List[Path]) -> Tuple[int, int, int, int]:
+    count = len(tag_files)
+    size_sum = 0
+    mtime_sum = 0
+    latest_mtime = 0
+    for path in tag_files:
+        try:
+            stat = path.stat()
+            size = int(stat.st_size)
+            mtime = int(stat.st_mtime_ns)
+        except Exception:
+            size = 0
+            mtime = 0
+        size_sum += size
+        mtime_sum += mtime
+        if mtime > latest_mtime:
+            latest_mtime = mtime
+    return count, size_sum, mtime_sum, latest_mtime
+
+
+def _cache_get_scan_context(cache_key: str, signature: Tuple[int, int, int, int]) -> Optional[ScanContext]:
+    entry = _SCAN_CONTEXT_CACHE.get(cache_key)
+    if not entry:
+        return None
+    if entry.signature != signature:
+        _SCAN_CONTEXT_CACHE.pop(cache_key, None)
+        return None
+    _SCAN_CONTEXT_CACHE.move_to_end(cache_key)
+    return entry.context
+
+
+def _cache_put_scan_context(
+    cache_key: str,
+    root: Path,
+    signature: Tuple[int, int, int, int],
+    context: ScanContext,
+):
+    _SCAN_CONTEXT_CACHE[cache_key] = _ScanCacheEntry(
+        root=_root_key(root),
+        signature=signature,
+        context=context,
+    )
+    _SCAN_CONTEXT_CACHE.move_to_end(cache_key)
+    while len(_SCAN_CONTEXT_CACHE) > _SCAN_CONTEXT_CACHE_MAX:
+        _SCAN_CONTEXT_CACHE.popitem(last=False)
+
+
+def _invalidate_scan_cache_for_root(root: Path):
+    root_key = _root_key(root)
+    for key, entry in list(_SCAN_CONTEXT_CACHE.items()):
+        if entry.root == root_key:
+            _SCAN_CONTEXT_CACHE.pop(key, None)
+
+
 def _build_scan_context(
     opts: NormalizeOptions, preset_root: Path, preset_payload: Optional[Dict] = None
 ) -> Tuple[Optional[ScanContext], Optional[str]]:
@@ -211,6 +329,12 @@ def _build_scan_context(
         return None, str(exc)
 
     tag_files = collect_tag_files(root, opts.recursive, opts.image_exts, opts.include_missing_txt)
+    cache_key = _scan_cache_key(root, opts, preset)
+    signature = _scan_signature(tag_files)
+    cached = _cache_get_scan_context(cache_key, signature)
+    if cached is not None:
+        return cached, None
+
     parsed: List[TagFile] = []
     counts: Counter = Counter()
     for path in tag_files:
@@ -232,20 +356,19 @@ def _build_scan_context(
             if (cnt / total_files) < float(threshold):
                 rare_tags.append(tag)
 
-    return (
-        ScanContext(
-            root=root,
-            preset=preset,
-            tag_files=tag_files,
-            parsed=parsed,
-            tag_counts=counts,
-            total_files=total_files,
-            block_specific=block_specific,
-            rare_tags=sorted(rare_tags),
-            top_tags=counts.most_common(50),
-        ),
-        None,
+    context = ScanContext(
+        root=root,
+        preset=preset,
+        tag_files=tag_files,
+        parsed=parsed,
+        tag_counts=counts,
+        total_files=total_files,
+        block_specific=block_specific,
+        rare_tags=sorted(rare_tags),
+        top_tags=counts.most_common(50),
     )
+    _cache_put_scan_context(cache_key, root, signature, context)
+    return context, None
 
 
 def scan_dataset(opts: NormalizeOptions, preset_root: Path, preset_payload: Optional[Dict] = None) -> Dict:
@@ -482,16 +605,16 @@ def dry_run(opts: NormalizeOptions, preset_root: Path, preset_payload: Optional[
     }
 
 
-def _make_backup(path: Path) -> Optional[Path]:
+def _make_backup(path: Path) -> Tuple[bool, str]:
     try:
         stamp = datetime.now().strftime("%Y%m%d%H%M%S")
         bak = path.with_suffix(path.suffix + ".bak")
         if bak.exists():
             bak = path.with_suffix(path.suffix + f".{stamp}.bak")
         shutil.copy2(path, bak)
-        return bak
-    except Exception:
-        return None
+        return True, str(bak)
+    except Exception as exc:
+        return False, str(exc)
 
 
 def apply_normalization(opts: NormalizeOptions, preset_root: Path, preset_payload: Optional[Dict] = None) -> Dict:
@@ -512,12 +635,23 @@ def apply_normalization(opts: NormalizeOptions, preset_root: Path, preset_payloa
         if not meta["changed"]:
             continue
         if opts.backup_enabled:
-            if _make_backup(tf.path):
-                backups_made += 1
-        tf.path.write_text(meta["after"], encoding="utf-8")
+            backup_ok, backup_info = _make_backup(tf.path)
+            if not backup_ok:
+                _invalidate_scan_cache_for_root(context.root)
+                return {
+                    "ok": False,
+                    "error": f"Backup failed for {tf.path}: {backup_info}",
+                }
+            backups_made += 1
+        try:
+            tf.path.write_text(meta["after"], encoding="utf-8")
+        except Exception as exc:
+            _invalidate_scan_cache_for_root(context.root)
+            return {"ok": False, "error": f"Failed writing {tf.path}: {exc}"}
         changed_files += 1
         actions_total.update(meta["actions"])
 
+    _invalidate_scan_cache_for_root(context.root)
     summary = {
         "ok": True,
         "total_files": len(context.parsed),

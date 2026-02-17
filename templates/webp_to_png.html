@@ -1,19 +1,19 @@
 <div class="card p-4">
-  <form method="post" data-tool-label="WebP to PNG Converter">
+  <form method="post" data-tool-label="Image to PNG Converter">
     <input type="hidden" name="tool" value="webp">
     <div class="row g-3">
       <div class="col-md-6">
         <label class="form-label">Source Folder</label>
         <div class="input-group">
-          <input id="src_webp" name="src_webp" type="text" class="form-control" placeholder="D:\path\to\webp" data-root-sync="1" data-bs-toggle="tooltip" data-bs-title="Folder containing .webp files">
-          <button class="btn btn-outline-light btn-browse" type="button" data-target="src_webp" data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
+          <input id="src_png" name="src_png" type="text" class="form-control" placeholder="D:\path\to\images" data-root-sync="1" data-bs-toggle="tooltip" data-bs-title="Folder containing image files (jpg, png, webp, bmp, etc.)">
+          <button class="btn btn-outline-light btn-browse" type="button" data-target="src_png" data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
         </div>
       </div>
       <div class="col-md-6">
         <label class="form-label">Output Folder</label>
         <div class="input-group">
-          <input id="dst_webp" name="dst_webp" type="text" class="form-control" placeholder="D:\path\to\output" data-bs-toggle="tooltip" data-bs-title="Converted PNGs will be saved here">
-          <button class="btn btn-outline-light btn-browse" type="button" data-target="dst_webp" data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
+          <input id="dst_png" name="dst_png" type="text" class="form-control" placeholder="D:\path\to\output" data-bs-toggle="tooltip" data-bs-title="Converted PNG files will be saved here">
+          <button class="btn btn-outline-light btn-browse" type="button" data-target="dst_png" data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
         </div>
       </div>
     </div>

@@ -1,14 +1,19 @@
-import os, json, sys, shutil
+import os, json, re, sys, shutil
+from io import BytesIO
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict, Any
 from flask import Flask, render_template, request, flash, jsonify, redirect, url_for, session, send_file
 from dotenv import load_dotenv
 
-from utils.io import readable_path, windows_drives, default_browse_root
+from utils.io import readable_path, readable_path_or_none, windows_drives, default_browse_root
+from utils.parse import parse_bool, parse_int, parse_float, parse_exts, parse_tag_list
+from utils.tool_result import unpack_tool_result
 
 from services.registry import TOOL_REGISTRY
 from services import normalizer
 from services import tag_editor
+from services import danbooru_client
+from services import blur_brush
 from services.pipeline import PIPELINE_MANAGER
 
 load_dotenv()
@@ -25,6 +30,47 @@ Path(WORK_DIR).mkdir(parents=True, exist_ok=True)
 # Dataset normalization preset root
 NORMALIZE_PRESET_ROOT = Path(__file__).parent / "presets"
 NORMALIZE_PRESET_ROOT.mkdir(parents=True, exist_ok=True)
+SERVER_UPLOAD_IMAGE_EXTS = {ext.lower() for ext in normalizer.DEFAULT_IMAGE_EXTS}
+BROWSE_STRICT_MODE = parse_bool(os.getenv("BROWSE_STRICT_MODE"), default=False)
+
+
+def _parse_path_list(raw: str) -> List[Path]:
+    if not raw:
+        return []
+    out: List[Path] = []
+    for token in re.split(r"[,\n;]+", raw):
+        value = token.strip()
+        if not value:
+            continue
+        path = readable_path(value)
+        try:
+            out.append(path.resolve())
+        except Exception:
+            out.append(path)
+    return out
+
+
+_browse_roots = _parse_path_list(os.getenv("BROWSE_ALLOWED_ROOTS", ""))
+BROWSE_ALLOWED_ROOTS = _browse_roots
+
+
+def _is_allowed_path(path: Path) -> bool:
+    if not BROWSE_STRICT_MODE:
+        return True
+    if not BROWSE_ALLOWED_ROOTS:
+        return False
+    try:
+        target = path.resolve()
+    except Exception:
+        target = path
+    for root in BROWSE_ALLOWED_ROOTS:
+        try:
+            root_resolved = root.resolve()
+        except Exception:
+            root_resolved = root
+        if target == root_resolved or root_resolved in target.parents:
+            return True
+    return False
 
 # Load presets if present
 PRESET_FILES = {}
@@ -42,52 +88,19 @@ def list_presets() -> List[str]:
 
 # -------- Normalization helpers --------
 def _parse_exts(raw: Any) -> List[str]:
-    if isinstance(raw, list):
-        return [str(x).strip() for x in raw if str(x).strip()]
-    if not raw:
-        return normalizer.DEFAULT_IMAGE_EXTS
-    parts = []
-    for token in str(raw).split(","):
-        val = token.strip()
-        if val:
-            if not val.startswith("."):
-                val = "." + val
-            parts.append(val)
-    return parts or normalizer.DEFAULT_IMAGE_EXTS
+    return parse_exts(raw, default=normalizer.DEFAULT_IMAGE_EXTS)
 
 
 def _parse_bool(val: Any, default: bool = False) -> bool:
-    if isinstance(val, bool):
-        return val
-    if val is None:
-        return default
-    s = str(val).strip().lower()
-    if s in {"1", "true", "yes", "on"}:
-        return True
-    if s in {"0", "false", "no", "off"}:
-        return False
-    return default
+    return parse_bool(val, default=default)
 
 
 def _parse_float(val: Any) -> Optional[float]:
-    if val is None:
-        return None
-    try:
-        s = str(val).strip()
-        if not s:
-            return None
-        return float(s)
-    except Exception:
-        return None
+    return parse_float(val)
 
 
 def _parse_int(val: Any, default: int) -> int:
-    if val is None:
-        return default
-    try:
-        return int(str(val).strip())
-    except Exception:
-        return default
+    return parse_int(val, default=default)
 
 
 def _safe_child(root: Path, rel: str) -> Optional[Path]:
@@ -123,22 +136,7 @@ def _bad_rel(rel: str) -> bool:
 
 
 def _parse_tag_list(raw: Any) -> List[str]:
-    if raw is None:
-        return []
-    if isinstance(raw, list):
-        chunks = [str(x) for x in raw]
-    else:
-        chunks = [str(raw)]
-    out: List[str] = []
-    seen = set()
-    for chunk in chunks:
-        for line in chunk.replace("\r", "\n").split("\n"):
-            for token in line.split(","):
-                val = token.strip()
-                if val and val not in seen:
-                    out.append(val)
-                    seen.add(val)
-    return out
+    return parse_tag_list(raw, dedupe=True)
 
 
 def build_normalize_options(payload: Dict[str, Any]) -> Tuple[Optional[normalizer.NormalizeOptions], Optional[str]]:
@@ -162,7 +160,7 @@ def build_normalize_options(payload: Dict[str, Any]) -> Tuple[Optional[normalize
         move_unknown_background_to_optional=_parse_bool(payload.get("move_unknown_background_to_optional")),
         background_threshold=_parse_float(payload.get("background_threshold")),
         normalize_order=_parse_bool(payload.get("normalize_order", True), True),
-        preview_limit=int(payload.get("preview_limit") or 30),
+        preview_limit=_parse_int(payload.get("preview_limit"), 30),
         backup_enabled=_parse_bool(payload.get("backup_enabled", True), True),
         image_exts=_parse_exts(payload.get("image_exts")),
         identity_tags=normalizer.clean_input_list(payload.get("identity_tags") or ""),
@@ -184,6 +182,9 @@ def _serialize_scan_result(data: Dict[str, Any]) -> Dict[str, Any]:
 # -------- Folder picker APIs --------
 @app.get("/api/drives")
 def api_drives():
+    if BROWSE_STRICT_MODE:
+        allowed = [str(root) for root in BROWSE_ALLOWED_ROOTS]
+        return jsonify({"drives": allowed or [str(default_browse_root())]})
     if os.name == "nt":
         drives = windows_drives()
         return jsonify({"drives": drives or [str(default_browse_root())]})
@@ -192,16 +193,50 @@ def api_drives():
 @app.get("/api/list-dir")
 def api_list_dir():
     path = request.args.get("path", "")
-    p = readable_path(path) if path else default_browse_root()
-    out = {"path": str(p), "parent": str(p.parent) if p != p.parent else str(p)}
+    if path:
+        p = readable_path(path)
+    elif BROWSE_STRICT_MODE and BROWSE_ALLOWED_ROOTS:
+        p = BROWSE_ALLOWED_ROOTS[0]
+    else:
+        p = default_browse_root()
+    if not _is_allowed_path(p):
+        return jsonify({"ok": False, "error": f"Path is outside allowed roots: {p}"}), 403
+    if not p.exists() or not p.is_dir():
+        return jsonify({"ok": False, "error": f"Path not found: {p}"}), 404
+
+    out = {"ok": True, "path": str(p), "parent": str(p.parent) if p != p.parent else str(p)}
     dirs = []
     try:
         for d in sorted([x for x in p.iterdir() if x.is_dir()], key=lambda x: x.name.lower()):
+            if not _is_allowed_path(d):
+                continue
             dirs.append(str(d))
-    except Exception:
-        pass
+    except Exception as exc:
+        return jsonify({**out, "ok": False, "error": str(exc)}), 500
     out["dirs"] = dirs
     return jsonify(out)
+
+
+@app.post("/api/danbooru/taginfo")
+def api_danbooru_taginfo():
+    payload = request.get_json(silent=True) or {}
+    include_related = _parse_bool(payload.get("include_related", True), True)
+    include_preview = _parse_bool(payload.get("include_preview", True), True)
+    preview_limit = _parse_int(payload.get("preview_limit"), 8)
+    preview_limit = max(1, min(20, preview_limit))
+    result = danbooru_client.lookup_tag_info(
+        payload.get("tag"),
+        include_related=include_related,
+        include_preview=include_preview,
+        preview_limit=preview_limit,
+    )
+    error_code = result.get("error_code")
+    if error_code:
+        result = {k: v for k, v in result.items() if k != "error_code"}
+    if result.get("ok"):
+        return jsonify(result)
+    code = 400 if error_code == "invalid_input" else 502
+    return jsonify(result), code
 
 @app.post("/api/tags/scan")
 def api_tags_scan():
@@ -228,7 +263,15 @@ def api_tags_images():
     if limit <= 0:
         limit = 80
     limit = max(1, min(500, limit))
-    result = tag_editor.list_images_with_tags(readable_path(folder), exts, recursive=recursive, limit=limit)
+    tag_limit = _parse_int(payload.get("tag_limit"), 200)
+    tag_limit = max(10, min(2000, tag_limit))
+    result = tag_editor.list_images_with_tags(
+        readable_path(folder),
+        exts,
+        recursive=recursive,
+        limit=limit,
+        tag_limit=tag_limit,
+    )
     code = 200 if result.get("ok") else 400
     return jsonify(result), code
 
@@ -282,6 +325,138 @@ def api_tags_image():
     return send_file(target, conditional=True)
 
 
+@app.get("/api/blur_brush/list-images")
+def api_blur_brush_list_images():
+    folder = (request.args.get("folder") or "").strip()
+    recursive = _parse_bool(request.args.get("recursive"), True)
+    exts = _parse_exts(request.args.get("exts"))
+    if not folder:
+        return jsonify({"ok": False, "error": "folder is required"}), 400
+    root = readable_path(folder)
+    if not root.exists() or not root.is_dir():
+        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
+    images = blur_brush.list_images(root, recursive=recursive, exts=exts)
+    return jsonify({"ok": True, "folder": str(root), "total": len(images), "images": images})
+
+
+@app.post("/api/blur_brush/apply")
+def api_blur_brush_apply():
+    payload = request.get_json(silent=True) or {}
+    folder = (payload.get("folder") or "").strip()
+    rel = (payload.get("rel") or payload.get("rel_image_path") or "").strip()
+    mask_png_base64 = (payload.get("mask_png_base64") or "").strip()
+    mode = (payload.get("mode") or "blur").strip().lower()
+    strength = _parse_int(payload.get("strength"), 12)
+    feather = _parse_int(payload.get("feather"), 0)
+    backup = _parse_bool(payload.get("backup"), True)
+    output_mode = (payload.get("output_mode") or "overwrite").strip().lower()
+
+    if not folder or not rel:
+        return jsonify({"ok": False, "error": "folder and rel are required"}), 400
+    if not mask_png_base64:
+        return jsonify({"ok": False, "error": "mask_png_base64 is required"}), 400
+    if _bad_rel(rel):
+        return jsonify({"ok": False, "error": "Invalid path"}), 400
+
+    root = readable_path(folder)
+    if not root.exists() or not root.is_dir():
+        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
+    target = _safe_child(root, rel)
+    if not target or not target.exists() or not target.is_file():
+        return jsonify({"ok": False, "error": "File not found"}), 404
+
+    result = blur_brush.apply_brush_effect(
+        image_path=target,
+        mask_png_base64=mask_png_base64,
+        mode=mode,
+        strength=strength,
+        feather=feather,
+        backup=backup,
+        output_mode=output_mode,
+    )
+    if not result.get("ok"):
+        return jsonify({"ok": False, "error": result.get("error") or "Apply failed", "log": result.get("log") or []}), 400
+
+    saved_path = result.get("saved_path")
+    backup_path = result.get("backup_path")
+    saved_rel = ""
+    backup_rel = ""
+    if isinstance(saved_path, Path):
+        try:
+            saved_rel = saved_path.relative_to(root).as_posix()
+        except Exception:
+            saved_rel = str(saved_path)
+    if isinstance(backup_path, Path):
+        try:
+            backup_rel = backup_path.relative_to(root).as_posix()
+        except Exception:
+            backup_rel = str(backup_path)
+
+    return jsonify(
+        {
+            "ok": True,
+            "saved": saved_rel,
+            "backup": backup_rel,
+            "mode": result.get("mode"),
+            "strength": result.get("strength"),
+            "feather": result.get("feather"),
+            "output_mode": result.get("output_mode"),
+            "log": result.get("log") or [],
+        }
+    )
+
+
+@app.post("/api/blur_brush/preview")
+def api_blur_brush_preview():
+    payload = request.get_json(silent=True) or {}
+    folder = (payload.get("folder") or "").strip()
+    rel = (payload.get("rel") or payload.get("rel_image_path") or "").strip()
+    mask_png_base64 = (payload.get("mask_png_base64") or "").strip()
+    mode = (payload.get("mode") or "blur").strip().lower()
+    strength = _parse_int(payload.get("strength"), 12)
+    feather = _parse_int(payload.get("feather"), 0)
+    preview_width = _parse_int(payload.get("preview_width"), 0)
+    preview_height = _parse_int(payload.get("preview_height"), 0)
+
+    if not folder or not rel:
+        return jsonify({"ok": False, "error": "folder and rel are required"}), 400
+    if not mask_png_base64:
+        return jsonify({"ok": False, "error": "mask_png_base64 is required"}), 400
+    if _bad_rel(rel):
+        return jsonify({"ok": False, "error": "Invalid path"}), 400
+
+    root = readable_path(folder)
+    if not root.exists() or not root.is_dir():
+        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
+    target = _safe_child(root, rel)
+    if not target or not target.exists() or not target.is_file():
+        return jsonify({"ok": False, "error": "File not found"}), 404
+
+    preview_size = None
+    if preview_width > 0 and preview_height > 0:
+        preview_size = (preview_width, preview_height)
+
+    result = blur_brush.preview_brush_effect(
+        image_path=target,
+        mask_png_base64=mask_png_base64,
+        mode=mode,
+        strength=strength,
+        feather=feather,
+        preview_size=preview_size,
+    )
+    if not result.get("ok"):
+        return jsonify({"ok": False, "error": result.get("error") or "Preview failed", "log": result.get("log") or []}), 400
+
+    preview_bytes = result.get("preview_bytes")
+    if not isinstance(preview_bytes, (bytes, bytearray)) or not preview_bytes:
+        return jsonify({"ok": False, "error": "Invalid preview bytes"}), 500
+
+    preview_mime = str(result.get("preview_mime") or "image/png")
+    resp = send_file(BytesIO(preview_bytes), mimetype=preview_mime, conditional=False, download_name="brush_preview.png")
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
 @app.post("/api/tags/upload")
 def api_tags_upload():
     folder = (request.form.get("folder") or "").strip()
@@ -291,8 +466,10 @@ def api_tags_upload():
     if not root.exists() or not root.is_dir():
         return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
 
-    exts = _parse_exts(request.form.get("exts"))
-    allowed = set([e.lower() for e in exts])
+    requested_exts = _parse_exts(request.form.get("exts"))
+    allowed = {e.lower() for e in requested_exts if e.lower() in SERVER_UPLOAD_IMAGE_EXTS}
+    if not allowed:
+        allowed = set(SERVER_UPLOAD_IMAGE_EXTS)
     allowed.add(".txt")
 
     saved = []
@@ -527,17 +704,31 @@ def api_tags_move_file():
             break
         bump += 1
 
+    moved_pairs = []
     try:
-        shutil.move(str(src), str(dest_img))
-    except Exception as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 500
+        # Move image + sidecars as one transaction; rollback on failure.
+        move_plan = [(src, dest_img)]
+        for src_path, dest_suffix in sidecars:
+            move_plan.append((src_path, dst_parent / f"{dest_img.stem}{dest_suffix}"))
 
-    for src_path, dest_suffix in sidecars:
-        dest_path = dst_parent / f"{dest_img.stem}{dest_suffix}"
-        try:
+        for src_path, dest_path in move_plan:
             shutil.move(str(src_path), str(dest_path))
-        except Exception as exc:
-            warnings.append(f"Failed moving {src_path.name}: {exc}")
+            moved_pairs.append((src_path, dest_path))
+    except Exception as exc:
+        rollback_errors = []
+        for src_path, dest_path in reversed(moved_pairs):
+            try:
+                if dest_path.exists() and not src_path.exists():
+                    shutil.move(str(dest_path), str(src_path))
+            except Exception as rb_exc:
+                rollback_errors.append(f"{dest_path.name}: {rb_exc}")
+        error_msg = str(exc)
+        if rollback_errors:
+            error_msg = f"{error_msg} | rollback errors: {'; '.join(rollback_errors)}"
+        return jsonify({"ok": False, "error": error_msg}), 500
+    except BaseException:
+        # Keep default exception chain for non-Exception errors.
+        raise
 
     return jsonify(
         {
@@ -698,7 +889,11 @@ def api_pipeline_status():
 @app.post("/api/pipeline/open-path")
 def api_pipeline_open_path():
     payload = request.get_json(silent=True) or {}
-    target = readable_path(payload.get("path", ""))
+    target = readable_path_or_none(payload.get("path", ""))
+    if not target:
+        return jsonify({"ok": False, "error": "path is required"}), 400
+    if not _is_allowed_path(target):
+        return jsonify({"ok": False, "error": f"Path is outside allowed roots: {target}"}), 403
     if not target.exists():
         return jsonify({"ok": False, "error": f"Path not found: {target}"}), 400
     try:
@@ -723,8 +918,12 @@ def index():
     if request.method == "POST":
         tool = request.form.get("tool", "")
         handler = TOOL_REGISTRY.get(tool)
+        request_ok = True
+        request_error = ""
         if not handler:
-            flash(f"Unknown tool: {tool}")
+            request_ok = False
+            request_error = f"Unknown tool: {tool}"
+            flash(request_error)
         else:
             ctx = {
                 "presets": PRESET_FILES,
@@ -732,12 +931,21 @@ def index():
                 "work_dir": str(WORK_DIR),
             }
             try:
-                active_tab, log = handler(request.form, ctx)
+                raw_result = handler(request.form, ctx)
+                active_tab, log, meta = unpack_tool_result(raw_result)
+                if not meta.get("ok", True):
+                    request_ok = False
+                    request_error = str(meta.get("error") or "Tool failed")
             except Exception as e:
-                flash(f"Error running tool '{tool}': {e}")
+                request_ok = False
+                request_error = f"Error running tool '{tool}': {e}"
+                flash(request_error)
+            if not request_ok and request_error:
+                flash(request_error)
 
         if is_ajax:
-            return jsonify({"ok": True, "active_tab": active_tab, "log": log})
+            code = 200 if request_ok else 400
+            return jsonify({"ok": request_ok, "active_tab": active_tab, "log": log, "error": request_error}), code
         session["last_log"] = log
         session["last_tab"] = active_tab
         return redirect(url_for("index", tab=active_tab))
