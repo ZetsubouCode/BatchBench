@@ -83,15 +83,6 @@ def _list_images(
     return sorted(images, key=lambda p: str(p).lower())
 
 
-def _is_within(path: Path, root: Path) -> bool:
-    try:
-        path_resolved = path.resolve()
-        root_resolved = root.resolve()
-    except Exception:
-        return False
-    return path_resolved == root_resolved or root_resolved in path_resolved.parents
-
-
 def _next_pair_target(folder: Path, stem: str, image_suffix: str) -> Tuple[Path, Path]:
     bump = 0
     while True:
@@ -247,19 +238,16 @@ def handle(form, ctx):
     raw_folder_text = (form.get("folder", "") or "").strip()
     raw_folder = readable_path(raw_folder_text)
     mode = (form.get("mode", "insert") or "insert").strip().lower()
-    edit_target = (form.get("edit_target", "recursive") or "recursive").strip().lower()
     tags_field = form.get("tags", "")
     exts = parse_exts(form.get("exts"), default=[".jpg", ".jpeg", ".png", ".webp"])
     backup = parse_bool(form.get("backup"), default=False)
-    stage_only = parse_bool(form.get("stage_only"), default=False)
-    temp_dir_raw = (form.get("temp_dir", "") or "").strip()
 
     lines: List[str] = []
 
     def _done(ok: bool, error: str = ""):
         return build_tool_result(active_tab, lines, ok=ok, error=error)
 
-    # Derive base and temp from whatever the user passed:
+    # Derive base from whatever the user passed:
     # If they give <base>/_temp, base = parent; else base = given.
     if not raw_folder_text:
         lines.append("Folder not provided.")
@@ -267,16 +255,9 @@ def handle(form, ctx):
 
     if raw_folder.name.lower() == "_temp":
         base_folder = raw_folder.parent
-        inferred_temp = raw_folder
     else:
         base_folder = raw_folder
-        inferred_temp = base_folder / "_temp"
-    temp_folder = readable_path(temp_dir_raw) if temp_dir_raw else inferred_temp
-    if stage_only and mode in EDIT_MODES:
-        edit_target = "temp"
-    if edit_target not in {"recursive", "temp", "base"}:
-        lines.append(f"Unknown edit_target: {edit_target}")
-        return _done(False, f"Unknown edit_target: {edit_target}")
+    temp_folder = base_folder / "_temp"
 
     def _parse_tag_list(raw: str) -> List[str]:
         return [t.strip() for t in (raw or "").split(",") if t.strip()]
@@ -302,47 +283,37 @@ def handle(form, ctx):
     elif mode == "replace":
         mapping = _parse_replace_mapping(tags_field)
 
-    # Ensure folders exist as appropriate per mode
+    if mode not in {"move", "undo"} and mode not in EDIT_MODES:
+        lines.append(f"Unknown mode: {mode}")
+        return _done(False, f"Unknown mode: {mode}")
+
+    if not base_folder.exists() or not base_folder.is_dir():
+        lines.append(f"Base folder not found: {base_folder}")
+        return _done(False, f"Base folder not found: {base_folder}")
+
+    # Fixed path behavior:
+    # - move scans base (recursive), excludes base/_temp, and stages into base/_temp.
+    # - undo scans base/_temp (recursive) and restores to base.
+    # - edit modes always run on base/_temp (recursive).
     if mode == "move":
-        if not base_folder.exists() or not base_folder.is_dir():
-            lines.append(f"Base folder not found: {base_folder}")
-            return _done(False, f"Base folder not found: {base_folder}")
-        if edit_target == "temp":
-            lines.append("Move mode does not support edit_target=temp. Use undo to restore from temp.")
-            return _done(False, "Move mode does not support edit_target=temp.")
-        recursive_scan = edit_target == "recursive"
-        exclude_dir = temp_folder if recursive_scan and _is_within(temp_folder, base_folder) else None
+        recursive_scan = True
+        exclude_dir = temp_folder
         scan_folder = base_folder
         temp_folder.mkdir(parents=True, exist_ok=True)
     elif mode == "undo":
         if not temp_folder.exists() or not temp_folder.is_dir():
             lines.append(f"Temp folder not found: {temp_folder}")
             return _done(False, f"Temp folder not found: {temp_folder}")
-        recursive_scan = edit_target == "recursive"
+        recursive_scan = True
         exclude_dir = None
         scan_folder = temp_folder
-    elif mode in EDIT_MODES:
-        if not base_folder.exists() or not base_folder.is_dir():
-            lines.append(f"Base folder not found: {base_folder}")
-            return _done(False, f"Base folder not found: {base_folder}")
-        if edit_target == "temp":
-            if not temp_folder.exists() or not temp_folder.is_dir():
-                lines.append(f"Temp folder not found: {temp_folder}")
-                return _done(False, f"Temp folder not found: {temp_folder}")
-            scan_folder = temp_folder
-            recursive_scan = False
-            exclude_dir = None
-        elif edit_target == "base":
-            scan_folder = base_folder
-            recursive_scan = False
-            exclude_dir = None
-        else:
-            scan_folder = base_folder
-            recursive_scan = True
-            exclude_dir = temp_folder if _is_within(temp_folder, base_folder) else None
     else:
-        lines.append(f"Unknown mode: {mode}")
-        return _done(False, f"Unknown mode: {mode}")
+        if not temp_folder.exists() or not temp_folder.is_dir():
+            lines.append(f"Temp folder not found: {temp_folder}")
+            return _done(False, f"Temp folder not found: {temp_folder}")
+        recursive_scan = True
+        exclude_dir = None
+        scan_folder = temp_folder
 
     # ---------- MOVE ----------
     if mode == "move":
@@ -370,7 +341,10 @@ def handle(form, ctx):
 
             matches = sorted([t for t in taglist if t in want])
             if matches:
-                dest_img, dest_txt = _next_pair_target(temp_folder, img.stem, img.suffix.lower())
+                rel_parent = img.parent.relative_to(base_folder)
+                dest_parent = temp_folder / rel_parent
+                dest_parent.mkdir(parents=True, exist_ok=True)
+                dest_img, dest_txt = _next_pair_target(dest_parent, img.stem, img.suffix.lower())
                 ok, error = _move_pair_transaction(
                     img, txt, dest_img, dest_txt, require_txt=True
                 )
@@ -378,7 +352,9 @@ def handle(form, ctx):
                     lines.append(f"[ERROR] moving {img.name}: {error}")
                     errors += 1
                     continue
-                lines.append(f"{img.name}: moved to {temp_folder} (matched: {', '.join(matches)})")
+                lines.append(
+                    f"{img.name}: moved to {dest_parent.relative_to(base_folder)} (matched: {', '.join(matches)})"
+                )
                 processed += 1
 
         lines.append(f"Done. {processed} file(s) moved to {temp_folder}. Errors: {errors}.")
@@ -396,7 +372,10 @@ def handle(form, ctx):
         for img in sorted(images_in_temp, key=lambda p: p.name.lower()):
             txt = img.with_suffix(".txt")
             had_txt = txt.exists()
-            dest_img, dest_txt = _next_pair_target(base_folder, img.stem, img.suffix.lower())
+            rel_parent = img.parent.relative_to(temp_folder)
+            dest_parent = base_folder / rel_parent
+            dest_parent.mkdir(parents=True, exist_ok=True)
+            dest_img, dest_txt = _next_pair_target(dest_parent, img.stem, img.suffix.lower())
             ok, error = _move_pair_transaction(
                 img, txt, dest_img, dest_txt, require_txt=False
             )
@@ -405,7 +384,9 @@ def handle(form, ctx):
                 errors += 1
                 continue
             restored += 1
-            lines.append(f"Restored: {dest_img.name}{' (+ .txt)' if had_txt else ''}")
+            lines.append(
+                f"Restored: {dest_img.relative_to(base_folder)}{' (+ .txt)' if had_txt else ''}"
+            )
 
         lines.append(f"Done. {restored} file(s) restored from {scan_folder} to {base_folder}. Errors: {errors}.")
         return _done(errors == 0, "" if errors == 0 else f"{errors} restore operation(s) failed.")
