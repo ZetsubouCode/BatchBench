@@ -213,3 +213,6 @@ hf_cache/
 huggingface/
 .hf_cache/
 *.safetensors
+
+# Local notes/tasks
+todo/
