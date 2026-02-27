@@ -2500,6 +2500,26 @@
     return { ok: true, data };
   }
 
+  async function checkInsertNeedsMissingTxtWarning(){
+    const mode = getModeValue();
+    if (mode !== 'insert') return { warn: false, createMissingTxt: false };
+    const root = stripTemp((get(IDS.folder)?.value||'').trim());
+    if (!root) return { warn: false, createMissingTxt: false };
+    const tempFolder = defaultTempFor(root);
+    if (!tempFolder) return { warn: false, createMissingTxt: false };
+
+    const result = await fetchTagScan(tempFolder, true);
+    if (!result.ok || !result.data) return { warn: false, createMissingTxt: false };
+
+    const totalImages = Number(result.data.total_images || 0);
+    const tagFiles = Number(result.data.tag_files || 0);
+    if (totalImages <= 0 || tagFiles > 0){
+      return { warn: false, createMissingTxt: false };
+    }
+
+    return { warn: true, createMissingTxt: true, totalImages, tempFolder };
+  }
+
   async function scanTagViz(){
     const root = stripTemp((get(IDS.folder)?.value||'').trim());
     if (!root){
@@ -2863,6 +2883,18 @@
         const ok = await showConfirm('Delete mode will remove tags from files in the target folder. Continue?', 'Delete tags');
         if (!ok) return;
       }
+      let createMissingTxt = false;
+      if (mode === 'insert'){
+        const missingTxtCheck = await checkInsertNeedsMissingTxtWarning();
+        if (missingTxtCheck.warn){
+          const ok = await showConfirm(
+            `_temp has ${missingTxtCheck.totalImages} image(s) and no paired .txt files. Continue and create new .txt files with the insert tags?`,
+            'Continue'
+          );
+          if (!ok) return;
+          createMissingTxt = true;
+        }
+      }
       if (mode === 'insert' || mode === 'replace'){
         const existing = new Set((tagVizState.items || []).map(it => it.tag));
         let dupes = [];
@@ -2905,6 +2937,11 @@
       }
       const fd = new FormData(form);
       finalizeFormDataForMode(fd);
+      if (createMissingTxt){
+        fd.set('create_missing_txt', '1');
+      } else {
+        fd.set('create_missing_txt', '0');
+      }
       try{
         const data = await postForm(fd);
         showStatus(data.ok ? 'Done.' : 'Finished with issues.');

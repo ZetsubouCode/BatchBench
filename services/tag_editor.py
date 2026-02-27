@@ -241,6 +241,7 @@ def handle(form, ctx):
     tags_field = form.get("tags", "")
     exts = parse_exts(form.get("exts"), default=[".jpg", ".jpeg", ".png", ".webp"])
     backup = parse_bool(form.get("backup"), default=False)
+    create_missing_txt = parse_bool(form.get("create_missing_txt"), default=False)
 
     lines: List[str] = []
 
@@ -409,9 +410,23 @@ def handle(form, ctx):
 
     processed = 0
     errors = 0
+    missing_txt_skipped = 0
+    missing_txt_created = 0
     for img in images:
         txt = img.with_suffix(".txt")
         if not txt.exists():
+            if mode == "insert" and create_missing_txt:
+                try:
+                    txt.write_text(join_tags(add), encoding="utf-8")
+                    _invalidate_cache(txt)
+                    lines.append(f"{img.name}: created missing .txt with insert tags")
+                    processed += 1
+                    missing_txt_created += 1
+                except Exception as exc:
+                    lines.append(f"[ERROR] creating {txt.name}: {exc}")
+                    errors += 1
+            else:
+                missing_txt_skipped += 1
             continue
 
         try:
@@ -458,6 +473,15 @@ def handle(form, ctx):
             continue
 
         processed += 1
+
+    if mode == "insert" and missing_txt_skipped:
+        lines.append(
+            f"Skipped {missing_txt_skipped} image(s) without paired .txt in {scan_folder}."
+        )
+    if mode == "insert" and missing_txt_created:
+        lines.append(
+            f"Created {missing_txt_created} new .txt file(s) for images that had no paired tags."
+        )
 
     lines.append(f"Done. {processed} file(s) updated in {scan_folder}. Errors: {errors}.")
     return _done(errors == 0, "" if errors == 0 else f"{errors} file update(s) failed.")

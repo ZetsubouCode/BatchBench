@@ -121,6 +121,29 @@ class TagEditorTransactionTests(unittest.TestCase):
             self.assertEqual(base_txt, "cat, dog")
             self.assertEqual(temp_txt, "cat, dog, bird")
 
+    def test_insert_can_create_missing_txt_in_temp(self):
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td) / "dataset"
+            temp = base / "_temp"
+            temp.mkdir(parents=True, exist_ok=True)
+            (temp / "sample.png").write_bytes(b"img")
+
+            _, _, meta = tag_editor.handle(
+                {
+                    "folder": str(base),
+                    "mode": "insert",
+                    "tags": "bird, sky",
+                    "exts": ".png",
+                    "create_missing_txt": "1",
+                },
+                {},
+            )
+
+            self.assertTrue(meta.get("ok"), msg=meta)
+            txt = temp / "sample.txt"
+            self.assertTrue(txt.exists())
+            self.assertEqual(txt.read_text(encoding="utf-8").strip(), "bird, sky")
+
 
 if __name__ == "__main__":
     unittest.main()
