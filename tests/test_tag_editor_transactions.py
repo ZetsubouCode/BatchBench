@@ -144,6 +144,91 @@ class TagEditorTransactionTests(unittest.TestCase):
             self.assertTrue(txt.exists())
             self.assertEqual(txt.read_text(encoding="utf-8").strip(), "bird, sky")
 
+    def test_dedup_handles_newline_delimited_tags(self):
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td) / "dataset"
+            temp = base / "_temp"
+            temp.mkdir(parents=True, exist_ok=True)
+            (temp / "sample.png").write_bytes(b"img")
+            (temp / "sample.txt").write_text("cat\ndog\ncat\n", encoding="utf-8")
+
+            _, _, meta = tag_editor.handle(
+                {
+                    "folder": str(base),
+                    "mode": "dedup",
+                    "exts": ".png",
+                },
+                {},
+            )
+
+            self.assertTrue(meta.get("ok"), msg=meta)
+            self.assertEqual((temp / "sample.txt").read_text(encoding="utf-8").strip(), "cat, dog")
+
+    def test_dedup_normalizes_whitespace_variants_before_comparing(self):
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td) / "dataset"
+            temp = base / "_temp"
+            temp.mkdir(parents=True, exist_ok=True)
+            (temp / "sample.png").write_bytes(b"img")
+            (temp / "sample.txt").write_text("long hair, long_hair, cat\n", encoding="utf-8")
+
+            _, _, meta = tag_editor.handle(
+                {
+                    "folder": str(base),
+                    "mode": "dedup",
+                    "exts": ".png",
+                },
+                {},
+            )
+
+            self.assertTrue(meta.get("ok"), msg=meta)
+            self.assertEqual((temp / "sample.txt").read_text(encoding="utf-8").strip(), "long_hair, cat")
+
+    def test_replace_sanitizes_space_tags_in_input_and_file(self):
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td) / "dataset"
+            temp = base / "_temp"
+            temp.mkdir(parents=True, exist_ok=True)
+            (temp / "sample.png").write_bytes(b"img")
+            (temp / "sample.txt").write_text("legs folded, brick wall\n", encoding="utf-8")
+
+            _, _, meta = tag_editor.handle(
+                {
+                    "folder": str(base),
+                    "mode": "replace",
+                    "tags": "legs folded -> legs_crossed; brick wall -> brick_wall",
+                    "exts": ".png",
+                },
+                {},
+            )
+
+            self.assertTrue(meta.get("ok"), msg=meta)
+            self.assertEqual(
+                (temp / "sample.txt").read_text(encoding="utf-8").strip(),
+                "legs_crossed, brick_wall",
+            )
+
+    def test_delete_sanitizes_space_tags(self):
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td) / "dataset"
+            temp = base / "_temp"
+            temp.mkdir(parents=True, exist_ok=True)
+            (temp / "sample.png").write_bytes(b"img")
+            (temp / "sample.txt").write_text("hands_on_own_knees, cat\n", encoding="utf-8")
+
+            _, _, meta = tag_editor.handle(
+                {
+                    "folder": str(base),
+                    "mode": "delete",
+                    "tags": "hands on own knees",
+                    "exts": ".png",
+                },
+                {},
+            )
+
+            self.assertTrue(meta.get("ok"), msg=meta)
+            self.assertEqual((temp / "sample.txt").read_text(encoding="utf-8").strip(), "cat")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -26,6 +26,7 @@ app.config["APP_NAME"] = APP_NAME
 # Work dir
 WORK_DIR = os.getenv("WORK_DIR", "").strip() or str(Path(__file__).parent.joinpath("_work"))
 Path(WORK_DIR).mkdir(parents=True, exist_ok=True)
+TAG_EDITOR_GLOSSARY_PATH = Path(__file__).parent / "tag_editor_glossary.json"
 
 # Dataset normalization preset root
 NORMALIZE_PRESET_ROOT = Path(__file__).parent / "presets"
@@ -137,6 +138,53 @@ def _bad_rel(rel: str) -> bool:
 
 def _parse_tag_list(raw: Any) -> List[str]:
     return parse_tag_list(raw, dedupe=True)
+
+
+def _default_glossary_payload() -> Dict[str, Any]:
+    return {"version": 1, "categories": {"Unsorted": []}, "updated_at": 0}
+
+
+def _normalize_glossary_payload(payload: Any) -> Dict[str, Any]:
+    src = payload if isinstance(payload, dict) else {}
+    categories = src.get("categories") if isinstance(src.get("categories"), dict) else {}
+    normalized_categories: Dict[str, List[str]] = {}
+    for raw_name, raw_tags in categories.items():
+        name = str(raw_name).strip() or "Unsorted"
+        seen = set()
+        tags: List[str] = []
+        if isinstance(raw_tags, list):
+            for raw_tag in raw_tags:
+                tag = str(raw_tag or "").strip().lower()
+                tag = re.sub(r"\s+", "_", tag).strip("_")
+                if not tag or tag in seen:
+                    continue
+                seen.add(tag)
+                tags.append(tag)
+        normalized_categories[name] = tags
+    if "Unsorted" not in normalized_categories:
+        normalized_categories["Unsorted"] = []
+    updated_at = src.get("updated_at", 0)
+    try:
+        updated_at = int(updated_at)
+    except Exception:
+        updated_at = 0
+    return {"version": 1, "categories": normalized_categories, "updated_at": max(0, updated_at)}
+
+
+def _load_tag_editor_glossary() -> Dict[str, Any]:
+    if not TAG_EDITOR_GLOSSARY_PATH.exists():
+        return _default_glossary_payload()
+    try:
+        payload = json.loads(TAG_EDITOR_GLOSSARY_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return _default_glossary_payload()
+    return _normalize_glossary_payload(payload)
+
+
+def _save_tag_editor_glossary(payload: Any) -> Dict[str, Any]:
+    normalized = _normalize_glossary_payload(payload)
+    TAG_EDITOR_GLOSSARY_PATH.write_text(json.dumps(normalized, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+    return normalized
 
 
 def build_normalize_options(payload: Dict[str, Any]) -> Tuple[Optional[normalizer.NormalizeOptions], Optional[str]]:
@@ -404,6 +452,21 @@ def api_blur_brush_apply():
             "log": result.get("log") or [],
         }
     )
+
+
+@app.get("/api/tags/glossary")
+def api_tags_glossary_get():
+    return jsonify({"ok": True, "glossary": _load_tag_editor_glossary()})
+
+
+@app.post("/api/tags/glossary")
+def api_tags_glossary_save():
+    payload = request.get_json(silent=True) or {}
+    try:
+        saved = _save_tag_editor_glossary(payload.get("glossary"))
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    return jsonify({"ok": True, "glossary": saved})
 
 
 @app.post("/api/blur_brush/preview")

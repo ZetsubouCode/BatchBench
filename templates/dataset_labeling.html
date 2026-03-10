@@ -58,6 +58,7 @@
   .gallery-card.is-match { outline:2px solid #2d4f86; box-shadow:0 0 0 1px rgba(45,79,134,.45); }
   .gallery-thumb { border:0; padding:0; background:transparent; display:block; width:100%; cursor:zoom-in; }
   .gallery-thumb img { width:100%; height:160px; object-fit:cover; border-radius:.4rem; border:1px solid var(--bb-border); background:#0b1220; }
+  .gallery-thumb-fallback { width:100%; height:160px; border-radius:.4rem; border:1px dashed var(--bb-border); display:flex; align-items:center; justify-content:center; font-size:.78rem; color:var(--bb-muted); background:#0b1220; }
   .gallery-name { font-size:.85rem; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .gallery-subpath { font-size:.7rem; color:var(--bb-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .gallery-tags { display:flex; flex-wrap:wrap; gap:.25rem; }
@@ -68,8 +69,15 @@
   .gallery-tag.is-missing { border-color:#6f1f26; color:#ffe8ea; background:#2b1416; }
   .gallery-empty { font-size:.85rem; color:var(--bb-muted); border:1px dashed var(--bb-border); border-radius:.5rem; padding:.6rem; text-align:center; }
   .gallery-modal-img { max-width:100%; max-height:70vh; transform-origin:center; transition:transform .15s ease; }
+  .gallery-modal-nav { display:flex; align-items:center; justify-content:space-between; gap:.5rem; margin-bottom:.55rem; }
+  .gallery-modal-index { font-size:.8rem; color:var(--bb-muted); min-width:5.5rem; text-align:center; }
+  .gallery-modal-error { font-size:.78rem; color:#ffc6ce; min-height:1.1rem; text-align:center; }
   .gallery-zoom { display:flex; align-items:center; gap:.5rem; }
   .gallery-zoom-label { font-size:.85rem; color:var(--bb-muted); min-width:4ch; text-align:right; }
+  .tag-editor-layout.is-expanded .gallery-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+  @media (hover: none), (pointer: coarse) {
+    .gallery-tag.is-removable .tag-x { display:inline; opacity:1; }
+  }
   .workdir-panel { border:1px solid var(--bb-border); border-radius:.5rem; padding:.6rem; background:var(--bb-input-bg); }
   .workdir-head { display:flex; align-items:center; justify-content:space-between; gap:.5rem; }
   .workdir-actions { display:flex; align-items:center; gap:.4rem; flex-wrap:wrap; }
@@ -126,6 +134,7 @@
     .tag-editor-layout { grid-template-columns:1fr; }
     .tag-editor-layout.is-expanded .tag-editor-sidebar { width:100%; transform:none; }
     .tag-editor-sidebar { position:static; max-height:none; width:100%; }
+    .tag-editor-layout.is-expanded .gallery-grid { grid-template-columns:1fr; }
     .mode-layout { grid-template-columns:1fr; }
     .mode-panel { position:static; flex-direction:row; flex-wrap:wrap; }
     .mode-buttons { flex-direction:row; flex-wrap:wrap; }
@@ -369,9 +378,15 @@
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
+        <div class="gallery-modal-nav">
+          <button type="button" class="btn btn-sm btn-outline-light" id="gallery-preview-prev" aria-label="Previous image">Prev</button>
+          <span class="gallery-modal-index" id="gallery-preview-index">0 / 0</span>
+          <button type="button" class="btn btn-sm btn-outline-light" id="gallery-preview-next" aria-label="Next image">Next</button>
+        </div>
         <div class="d-flex justify-content-center">
           <img id="gallery-preview-img" class="gallery-modal-img" src="" alt="">
         </div>
+        <div class="gallery-modal-error mt-2" id="gallery-preview-error"></div>
         <div class="d-flex align-items-center justify-content-between mt-3">
           <div class="small text-muted" id="gallery-preview-name"></div>
           <div class="gallery-zoom">
@@ -563,6 +578,10 @@
     modalImg: 'gallery-preview-img',
     modalName: 'gallery-preview-name',
     modalTags: 'gallery-preview-tags',
+    modalError: 'gallery-preview-error',
+    modalPrev: 'gallery-preview-prev',
+    modalNext: 'gallery-preview-next',
+    modalIndex: 'gallery-preview-index',
     zoomIn: 'gallery-zoom-in',
     zoomOut: 'gallery-zoom-out',
     zoomReset: 'gallery-zoom-reset',
@@ -594,7 +613,10 @@
     zoom: 1,
     total: 0,
     pageSize: 120,
-    visibleCount: 120
+    visibleCount: 120,
+    previewRel: '',
+    previewIndex: -1,
+    modalInstance: null
   };
   const uiState = {
     sidebarExpanded: false
@@ -624,9 +646,14 @@
   };
   let tagsSyncEnabled = true;
   let tagsSyncLocked = false;
-  let bypassDupesOnce = false;
+  let pendingRunOptions = null;
   let galleryRefreshTimer = null;
   let workdirRefreshTimer = null;
+  let formBusy = false;
+  let tagScanBusy = false;
+  let galleryLoadBusy = false;
+  let galleryLoadQueued = false;
+  const TAGS_PLACEHOLDER_DEFAULT = get(IDS.tags)?.getAttribute('placeholder') || '';
 
   const MODE_HELP = {
     insert:"Insert: add missing tags to each .txt (comma-separated).",
@@ -736,7 +763,18 @@
     updateTagSyncStatus();
   }
 
+  function updateTagsInputState(){
+    const input = get(IDS.tags);
+    if (!input) return;
+    const dedupMode = getModeValue() === 'dedup';
+    input.readOnly = dedupMode;
+    input.placeholder = dedupMode
+      ? 'Dedup mode: Tags / mapping is ignored.'
+      : TAGS_PLACEHOLDER_DEFAULT;
+  }
+
   function handleModeChange(){
+    updateTagsInputState();
     if (!getModeValue()){
       updateModeHelp();
       refreshTempHints();
@@ -866,6 +904,15 @@
     });
   }
 
+  function getVisibleGalleryItems(){
+    const items = getSortedGalleryItems();
+    if (!items.length) return [];
+    const count = Number.isFinite(galleryState.visibleCount)
+      ? Math.max(1, Math.min(items.length, galleryState.visibleCount))
+      : items.length;
+    return items.slice(0, count);
+  }
+
   function fillGalleryTags(container, tags, hasTxt, maxTags, ctx=null){
     if (!container) return;
     container.innerHTML = '';
@@ -945,6 +992,9 @@
       empty.textContent = 'No images to preview.';
       wrap.appendChild(empty);
       setGalleryCount(0, 0);
+      if (isGalleryPreviewOpen()){
+        renderGalleryPreviewModal();
+      }
       return;
     }
     const root = galleryState.root || getGalleryRoot();
@@ -977,8 +1027,20 @@
       img.loading = 'lazy';
       img.alt = item.name || item.rel || 'image';
       img.src = `/api/tags/image?folder=${encodeURIComponent(root)}&path=${encodeURIComponent(item.rel)}`;
+      const fallback = document.createElement('div');
+      fallback.className = 'gallery-thumb-fallback d-none';
+      fallback.textContent = 'Preview unavailable';
+      img.addEventListener('error', ()=>{
+        img.classList.add('d-none');
+        fallback.classList.remove('d-none');
+      });
+      img.addEventListener('load', ()=>{
+        img.classList.remove('d-none');
+        fallback.classList.add('d-none');
+      });
       thumbBtn.appendChild(img);
-      thumbBtn.addEventListener('click', ()=> openGalleryPreview(item));
+      thumbBtn.appendChild(fallback);
+      thumbBtn.addEventListener('click', ()=> openGalleryPreviewByRel(item.rel || ''));
       card.appendChild(thumbBtn);
 
       const name = document.createElement('div');
@@ -1012,60 +1074,85 @@
       }
     }
     setGalleryCount(galleryState.total || items.length, visibleItems.length);
+    if (isGalleryPreviewOpen()){
+      renderGalleryPreviewModal();
+    }
   }
 
   async function loadGallery(){
+    if (galleryLoadBusy){
+      galleryLoadQueued = true;
+      return;
+    }
+    galleryLoadBusy = true;
+    setGalleryRefreshBusy(true);
     const root = getGalleryRoot();
-    galleryState.root = root;
-    setGalleryPath(root);
-    if (!root){
-      galleryState.items = [];
-      galleryState.total = 0;
-      renderGalleryItems();
-      setGalleryCount(0, 0);
-      setGalleryStatus('Folder not set.');
-      return;
-    }
-    const limitInput = get(GALLERY.limit);
-    let limit = parseInt(limitInput?.value || '80', 10);
-    if (!limit || limit < 1) limit = 80;
-    limit = Math.max(1, Math.min(500, limit));
-    if (limitInput) limitInput.value = limit;
+    try{
+      galleryState.root = root;
+      setGalleryPath(root);
+      if (!root){
+        galleryState.items = [];
+        galleryState.total = 0;
+        renderGalleryItems();
+        setGalleryCount(0, 0);
+        setGalleryStatus('Folder not set.');
+        return;
+      }
+      const limitInput = get(GALLERY.limit);
+      let limit = parseInt(limitInput?.value || '80', 10);
+      if (!limit || limit < 1) limit = 80;
+      limit = Math.max(1, Math.min(500, limit));
+      if (limitInput) limitInput.value = limit;
 
-    setGalleryStatus('Loading...');
-    const payload = {
-      folder: root,
-      exts: get(IDS.exts)?.value || '',
-      recursive: !!get(GALLERY.recursive)?.checked,
-      limit,
-      tag_limit: 200
-    };
-    const res = await fetch('/api/tags/images', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    let data = null;
-    try{ data = await res.json(); }catch(_){}
-    if (!res.ok || !data || !data.ok){
-      const err = (data && data.error) ? data.error : `HTTP ${res.status}`;
+      setGalleryStatus('Loading...');
+      const payload = {
+        folder: root,
+        exts: get(IDS.exts)?.value || '',
+        recursive: !!get(GALLERY.recursive)?.checked,
+        limit,
+        tag_limit: 200
+      };
+      const res = await fetch('/api/tags/images', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      let data = null;
+      try{ data = await res.json(); }catch(_){}
+      if (!res.ok || !data || !data.ok){
+        const err = (data && data.error) ? data.error : `HTTP ${res.status}`;
+        galleryState.items = [];
+        galleryState.total = 0;
+        renderGalleryItems();
+        setGalleryCount(0, 0);
+        setGalleryStatus(err);
+        return;
+      }
+      galleryState.items = data.images || [];
+      galleryState.total = data.total || galleryState.items.length;
+      galleryState.visibleCount = Math.min(galleryState.items.length, galleryState.pageSize);
+      galleryState.items.forEach((item, idx)=>{
+        if (item) item._idx = idx;
+      });
+      renderGalleryItems();
+      const shown = Math.min(galleryState.items.length, galleryState.visibleCount);
+      setGalleryCount(galleryState.total, shown);
+      setGalleryStatus(`Loaded ${galleryState.items.length} image(s).`);
+    } catch (err) {
+      console.error(err);
       galleryState.items = [];
       galleryState.total = 0;
       renderGalleryItems();
       setGalleryCount(0, 0);
-      setGalleryStatus(err);
-      return;
+      setGalleryStatus(`Preview load failed: ${err && err.message ? err.message : 'Unknown error'}`);
+    } finally {
+      galleryLoadBusy = false;
+      setGalleryRefreshBusy(false);
+      if (galleryLoadQueued){
+        galleryLoadQueued = false;
+        await loadGallery();
+      }
     }
-    galleryState.items = data.images || [];
-    galleryState.total = data.total || galleryState.items.length;
-    galleryState.visibleCount = Math.min(galleryState.items.length, galleryState.pageSize);
-    galleryState.items.forEach((item, idx)=>{
-      if (item) item._idx = idx;
-    });
-    renderGalleryItems();
-    const shown = Math.min(galleryState.items.length, galleryState.visibleCount);
-    setGalleryCount(galleryState.total, shown);
-    setGalleryStatus(`Loaded ${galleryState.items.length} image(s).`);
   }
 
   function scheduleGalleryRefresh(){
@@ -1090,21 +1177,26 @@
     fd.set('folder', root);
     fd.set('exts', get(IDS.exts)?.value || '');
     files.forEach(file => fd.append('files', file, file.name));
-    setGalleryStatus(`Uploading ${files.length} file(s)...`);
-    const res = await fetch('/api/tags/upload', { method: 'POST', body: fd });
-    let data = null;
-    try{ data = await res.json(); }catch(_){}
-    if (!res.ok || !data || !data.ok){
-      const err = (data && data.error) ? data.error : `HTTP ${res.status}`;
-      setGalleryStatus(`Upload failed: ${err}`);
-      return;
+    try{
+      setGalleryStatus(`Uploading ${files.length} file(s)...`);
+      const res = await fetch('/api/tags/upload', { method: 'POST', body: fd });
+      let data = null;
+      try{ data = await res.json(); }catch(_){}
+      if (!res.ok || !data || !data.ok){
+        const err = (data && data.error) ? data.error : `HTTP ${res.status}`;
+        setGalleryStatus(`Upload failed: ${err}`);
+        return;
+      }
+      const parts = [];
+      if (data.saved && data.saved.length) parts.push(`Saved ${data.saved.length}`);
+      if (data.skipped && data.skipped.length) parts.push(`Skipped ${data.skipped.length}`);
+      if (data.errors && data.errors.length) parts.push(`Errors ${data.errors.length}`);
+      setGalleryStatus(parts.length ? parts.join(' | ') : 'Upload complete.');
+      await loadGallery();
+    } catch (err) {
+      console.error(err);
+      setGalleryStatus(`Upload failed: ${err && err.message ? err.message : 'Unknown error'}`);
     }
-    const parts = [];
-    if (data.saved && data.saved.length) parts.push(`Saved ${data.saved.length}`);
-    if (data.skipped && data.skipped.length) parts.push(`Skipped ${data.skipped.length}`);
-    if (data.errors && data.errors.length) parts.push(`Errors ${data.errors.length}`);
-    setGalleryStatus(parts.length ? parts.join(' | ') : 'Upload complete.');
-    await loadGallery();
   }
 
   function setGalleryZoom(value){
@@ -1117,31 +1209,122 @@
     if (label) label.textContent = `${Math.round(next * 100)}%`;
   }
 
-  function openGalleryPreview(item){
+  function setGalleryPreviewError(message){
+    const el = get(GALLERY.modalError);
+    if (el) el.textContent = message || '';
+  }
+
+  function isGalleryPreviewOpen(){
     const modalEl = get(GALLERY.modal);
+    return !!(modalEl && modalEl.classList.contains('show'));
+  }
+
+  function ensureGalleryPreviewModal(){
+    const modalEl = get(GALLERY.modal);
+    if (!modalEl || !window.bootstrap || !bootstrap.Modal) return null;
+    galleryState.modalInstance = bootstrap.Modal.getOrCreateInstance(modalEl);
+    return galleryState.modalInstance;
+  }
+
+  function resolveGalleryPreviewCursor(preferredRel = ''){
+    const items = getVisibleGalleryItems();
+    if (!items.length){
+      galleryState.previewIndex = -1;
+      galleryState.previewRel = '';
+      return { items, item: null, index: -1 };
+    }
+    const targetRel = preferredRel || galleryState.previewRel || '';
+    let index = targetRel ? items.findIndex(it => it.rel === targetRel) : -1;
+    if (index < 0 && Number.isFinite(galleryState.previewIndex)){
+      index = Math.max(0, Math.min(items.length - 1, galleryState.previewIndex));
+    }
+    if (index < 0) index = 0;
+    const item = items[index];
+    galleryState.previewIndex = index;
+    galleryState.previewRel = item?.rel || '';
+    return { items, item, index };
+  }
+
+  function renderGalleryPreviewModal(preferredRel = ''){
     const img = get(GALLERY.modalImg);
-    if (!modalEl || !img) return;
-    const root = galleryState.root || getGalleryRoot();
-    img.src = `/api/tags/image?folder=${encodeURIComponent(root)}&path=${encodeURIComponent(item.rel)}`;
-    img.alt = item.name || item.rel || 'image';
     const name = get(GALLERY.modalName);
-    if (name) name.textContent = item.rel || item.name || '';
     const tags = get(GALLERY.modalTags);
+    const title = get(GALLERY.modalTitle);
+    const prevBtn = get(GALLERY.modalPrev);
+    const nextBtn = get(GALLERY.modalNext);
+    const idxEl = get(GALLERY.modalIndex);
+    if (!img || !name || !tags) return;
+
+    const { items, item, index } = resolveGalleryPreviewCursor(preferredRel);
+    const total = items.length;
+    if (idxEl) idxEl.textContent = total ? `${index + 1} / ${total}` : '0 / 0';
+    if (prevBtn) prevBtn.disabled = total <= 1;
+    if (nextBtn) nextBtn.disabled = total <= 1;
+
+    if (!item){
+      img.removeAttribute('src');
+      img.dataset.previewKey = '';
+      img.alt = 'No preview';
+      if (title) title.textContent = 'Image preview';
+      name.textContent = 'No image selected.';
+      fillGalleryTags(tags, [], false, 0);
+      setGalleryPreviewError('');
+      return;
+    }
+
+    const modalEl = get(GALLERY.modal);
+    if (!modalEl) return;
+    const root = galleryState.root || getGalleryRoot();
+    const nextSrc = `/api/tags/image?folder=${encodeURIComponent(root)}&path=${encodeURIComponent(item.rel)}`;
+    const previewKey = `${root}::${item.rel || ''}`;
+    if (img.dataset.previewKey !== previewKey){
+      img.src = nextSrc;
+      img.dataset.previewKey = previewKey;
+    }
+    img.alt = item.name || item.rel || 'image';
+    img.onload = ()=> setGalleryPreviewError('');
+    img.onerror = ()=> setGalleryPreviewError(`Failed to load preview: ${item.rel || item.name || 'file'}`);
+    if (title) title.textContent = `Image preview (${index + 1}/${total})`;
+    name.textContent = item.rel || item.name || '';
+
     const ctx = {
       removable: true,
       folder: root,
       rel: item.rel || '',
       onRemoved: (updatedTags, info) => {
         item.tags = Array.isArray(updatedTags) ? updatedTags : [];
+        const srcItem = (galleryState.items || []).find(it => it.rel === item.rel);
+        if (srcItem){
+          srcItem.tags = [...item.tags];
+          srcItem.tag_count = item.tags.length;
+        }
         if (info && info.removed && info.tag) updateTagVizCount(info.tag, -1);
         fillGalleryTags(tags, item.tags || [], item.has_txt, 0, ctx);
         renderGalleryItems();
       }
     };
     fillGalleryTags(tags, item.tags || [], item.has_txt, 0, ctx);
+  }
+
+  function openGalleryPreviewByRel(rel){
+    if (!rel) return;
+    galleryState.previewRel = rel;
+    renderGalleryPreviewModal(rel);
     setGalleryZoom(1);
-    const modal = new bootstrap.Modal(modalEl);
-    modal.show();
+    const modal = ensureGalleryPreviewModal();
+    modal?.show();
+  }
+
+  function stepGalleryPreview(step){
+    const { items } = resolveGalleryPreviewCursor();
+    if (!items.length) return;
+    const total = items.length;
+    const base = Number.isFinite(galleryState.previewIndex) ? galleryState.previewIndex : 0;
+    const next = (base + step + total) % total;
+    galleryState.previewIndex = next;
+    galleryState.previewRel = items[next]?.rel || '';
+    renderGalleryPreviewModal();
+    setGalleryZoom(1);
   }
 
   function getWorkdirRoot(){
@@ -1586,20 +1769,37 @@
     const parts = (raw || '').split(";").map(p=>p.trim()).filter(Boolean);
     const newTags = [];
     const invalid = [];
+    let validCount = 0;
     parts.forEach(p=>{
       if (!p.includes("->")) return;
       const pair = p.split("->", 2);
+      const left = (pair[0] || "").trim();
       const right = (pair[1] || "").trim();
-      if (!right){
-        invalid.push(pair[0]?.trim() || "(empty)");
+      if (!left){
+        invalid.push('(empty source)');
         return;
       }
+      if (!right){
+        invalid.push(left || "(empty)");
+        return;
+      }
+      validCount += 1;
       right.split(",").forEach(tag=>{
         const t = tag.trim();
         if (t) newTags.push(t);
       });
     });
-    return { newTags, invalid };
+    return { newTags, invalid, validCount };
+  }
+
+  function hasRequiredTagsForMode(mode, raw, parsedReplace){
+    if (mode === 'replace'){
+      return Number(parsedReplace?.validCount || 0) > 0;
+    }
+    if (mode === 'insert' || mode === 'delete' || mode === 'move'){
+      return splitTagList(raw).length > 0;
+    }
+    return true;
   }
 
   function updateTagWarningsFromInput(){
@@ -1977,9 +2177,77 @@
     return output;
   }
 
+  function mergeGlossaryPayloads(...payloads){
+    const merged = normalizeGlossaryPayload(null);
+    payloads.forEach(payload=>{
+      const normalized = normalizeGlossaryPayload(payload);
+      merged.updated_at = Math.max(merged.updated_at || 0, normalized.updated_at || 0);
+      Object.entries(normalized.categories || {}).forEach(([catName, rawTags])=>{
+        const category = normalizeGlossaryCategory(catName);
+        if (!merged.categories[category]){
+          merged.categories[category] = [];
+        }
+        const existing = new Set(merged.categories[category] || []);
+        (Array.isArray(rawTags) ? rawTags : []).forEach(rawTag=>{
+          const tag = normalizeDanbooruTag(rawTag);
+          if (!tag || existing.has(tag)) return;
+          existing.add(tag);
+          merged.categories[category].push(tag);
+        });
+        merged.categories[category].sort((a,b)=> a.localeCompare(b));
+      });
+    });
+    return normalizeGlossaryPayload(merged);
+  }
+
+  function glossaryPayloadKey(payload){
+    return JSON.stringify(normalizeGlossaryPayload(payload));
+  }
+
+  async function fetchGlossaryFromServer(){
+    try{
+      const res = await fetch('/api/tags/glossary');
+      let data = null;
+      try{ data = await res.json(); }catch(_){}
+      if (!res.ok || !data || !data.ok){
+        const err = (data && data.error) ? data.error : `HTTP ${res.status}`;
+        return { ok: false, error: err };
+      }
+      return { ok: true, glossary: normalizeGlossaryPayload(data.glossary) };
+    } catch (err) {
+      return { ok: false, error: err && err.message ? err.message : 'Request failed' };
+    }
+  }
+
+  async function saveGlossaryToServer(glossary){
+    try{
+      const res = await fetch('/api/tags/glossary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ glossary: normalizeGlossaryPayload(glossary) })
+      });
+      let data = null;
+      try{ data = await res.json(); }catch(_){}
+      if (!res.ok || !data || !data.ok){
+        const err = (data && data.error) ? data.error : `HTTP ${res.status}`;
+        return { ok: false, error: err };
+      }
+      return { ok: true, glossary: normalizeGlossaryPayload(data.glossary) };
+    } catch (err) {
+      return { ok: false, error: err && err.message ? err.message : 'Request failed' };
+    }
+  }
+
   function saveGlossary(){
     danbooruState.glossary.updated_at = Date.now();
     try{ localStorage.setItem(DANBOORU_GLOSSARY_KEY, JSON.stringify(danbooruState.glossary)); }catch(_){}
+    void saveGlossaryToServer(danbooruState.glossary).then(result=>{
+      if (!result.ok) return;
+      danbooruState.glossary = normalizeGlossaryPayload(result.glossary);
+      try{ localStorage.setItem(DANBOORU_GLOSSARY_KEY, JSON.stringify(danbooruState.glossary)); }catch(_){}
+    }).catch(err=>{
+      console.error('Glossary save failed:', err);
+    });
   }
 
   function loadGlossary(){
@@ -1994,6 +2262,31 @@
     }catch(_){
       danbooruState.glossary = normalizeGlossaryPayload(null);
     }
+  }
+
+  async function syncGlossaryWithServer(){
+    const localGlossary = normalizeGlossaryPayload(danbooruState.glossary);
+    const server = await fetchGlossaryFromServer();
+    if (!server.ok){
+      console.error('Glossary sync failed:', server.error || 'Unknown error');
+      return false;
+    }
+    const merged = mergeGlossaryPayloads(server.glossary, localGlossary);
+    const mergedKey = glossaryPayloadKey(merged);
+    const serverKey = glossaryPayloadKey(server.glossary);
+    danbooruState.glossary = merged;
+    try{ localStorage.setItem(DANBOORU_GLOSSARY_KEY, JSON.stringify(merged)); }catch(_){}
+    if (mergedKey !== serverKey){
+      const saved = await saveGlossaryToServer(merged);
+      if (saved.ok){
+        danbooruState.glossary = normalizeGlossaryPayload(saved.glossary);
+        try{ localStorage.setItem(DANBOORU_GLOSSARY_KEY, JSON.stringify(danbooruState.glossary)); }catch(_){}
+      }
+    }
+    renderGlossarySelectors();
+    renderGlossaryList();
+    updateDanbooruActionState();
+    return true;
   }
 
   function glossaryCategoryNames(){
@@ -2500,6 +2793,47 @@
     return { ok: true, data };
   }
 
+  async function ensureEditTempFolderReady(mode){
+    if (!['insert', 'delete', 'replace', 'dedup'].includes(mode)) return true;
+    const root = stripTemp((get(IDS.folder)?.value||'').trim());
+    if (!root){
+      showWarning('Folder is required before running edit modes.', { level: 'error' });
+      return false;
+    }
+    const tempFolder = defaultTempFor(root);
+    if (!tempFolder){
+      showWarning('Could not resolve _temp folder from the selected root.', { level: 'error' });
+      return false;
+    }
+    const result = await fetchTagScan(tempFolder, true);
+    if (result.ok) return true;
+
+    const errText = (result.error || '').trim();
+    const missingTemp = /folder not found/i.test(errText);
+    const message = missingTemp
+      ? `_temp folder not found: ${tempFolder}. Use Move mode first to populate _temp.`
+      : `Cannot access _temp folder (${tempFolder}): ${errText || 'Unknown error'}`;
+    showWarning(message, {
+      level: 'error',
+      actions: [
+        {
+          label: 'Switch to Move mode',
+          className: 'btn btn-warning btn-sm',
+          onClick: () => {
+            clearWarning();
+            setMode('move', true);
+          }
+        },
+        {
+          label: 'Cancel',
+          className: 'btn btn-outline-light btn-sm',
+          onClick: clearWarning
+        }
+      ]
+    });
+    return false;
+  }
+
   async function checkInsertNeedsMissingTxtWarning(){
     const mode = getModeValue();
     if (mode !== 'insert') return { warn: false, createMissingTxt: false };
@@ -2521,43 +2855,62 @@
   }
 
   async function scanTagViz(){
+    if (tagScanBusy) return;
+    tagScanBusy = true;
+    setTagScanButtonBusy(true);
     const root = stripTemp((get(IDS.folder)?.value||'').trim());
-    if (!root){
-      setTagVizStatus('Folder not set.');
-      return;
-    }
-    setTagVizStatus('Scanning...');
-    let scanFolder = root;
-    let result = await fetchTagScan(scanFolder, true);
-
-    if (!result.ok){
-      setTagVizStatus(result.error || 'Scan failed.');
-      return;
-    }
-
-    const data = result.data;
-    tagVizState.items = data.tags || [];
-    tagVizState.meta = {
-      tag_files: data.tag_files || 0,
-      total_images: data.total_images || 0
-    };
-    const tempFolder = defaultTempFor(root);
-    tagVizState.tempTags = new Set();
-    if (tempFolder){
-      const tempResult = await fetchTagScan(tempFolder, true);
-      if (tempResult.ok && tempResult.data){
-        const tempItems = tempResult.data.tags || [];
-        tagVizState.tempTags = new Set(tempItems.map(it => it.tag));
+    try{
+      if (!root){
+        setTagVizStatus('Folder not set.');
+        return;
       }
+      const previousSelected = new Set(tagVizState.selected);
+      setTagVizStatus('Scanning...');
+      let scanFolder = root;
+      let result = await fetchTagScan(scanFolder, true);
+
+      if (!result.ok){
+        setTagVizStatus(result.error || 'Scan failed.');
+        return;
+      }
+
+      const data = result.data;
+      tagVizState.items = data.tags || [];
+      tagVizState.meta = {
+        tag_files: data.tag_files || 0,
+        total_images: data.total_images || 0
+      };
+      const tempFolder = defaultTempFor(root);
+      tagVizState.tempTags = new Set();
+      if (tempFolder){
+        const tempResult = await fetchTagScan(tempFolder, true);
+        if (tempResult.ok && tempResult.data){
+          const tempItems = tempResult.data.tags || [];
+          tagVizState.tempTags = new Set(tempItems.map(it => it.tag));
+        }
+      }
+
+      const available = new Set(tagVizState.items.map(it => it.tag));
+      tagVizState.selected = new Set(Array.from(previousSelected).filter(tag => available.has(tag)));
+      if (tagsSyncEnabled){
+        syncTagsFromSelection(true);
+      } else {
+        updateTagSyncStatus();
+      }
+      if (get(TAGVIZ.path)) get(TAGVIZ.path).textContent = scanFolder || '...';
+      updateTagWarningsFromInput();
+      updateTagHint();
+      clearWarning();
+      if (previousSelected.size){
+        setTagVizStatus(`Scan complete. Kept ${tagVizState.selected.size}/${previousSelected.size} selected tag(s).`);
+      } else {
+        setTagVizStatus('Scan complete.');
+      }
+      renderGalleryItems();
+    } finally {
+      tagScanBusy = false;
+      setTagScanButtonBusy(false);
     }
-    tagVizState.selected.clear();
-    clearTagsIfSynced();
-    if (get(TAGVIZ.path)) get(TAGVIZ.path).textContent = scanFolder || '...';
-    updateTagWarningsFromInput();
-    updateTagHint();
-    clearWarning();
-    setTagVizStatus('Scan complete.');
-    renderGalleryItems();
   }
 
 
@@ -2589,7 +2942,6 @@
   const FIELDS = [
     ['folder', IDS.folder],
     ['exts', IDS.exts],
-    ['tags', IDS.tags],
     ['backup', IDS.backup],
   ];
   function loadSaved(){
@@ -2618,6 +2970,7 @@
   }
   function clearSaved(){
     FIELDS.forEach(([k])=> localStorage.removeItem(LSKEY+k));
+    localStorage.removeItem(LSKEY + 'tags');
     localStorage.removeItem(MODE_STORAGE_KEY);
     localStorage.removeItem(LSKEY + 'mode');
     get(IDS.tags).value = '';
@@ -2633,6 +2986,23 @@
 
   // ---- AJAX helpers ----
   function showStatus(msg){ const s=get(IDS.status); if(s){ s.textContent=msg||''; } }
+  function setTagScanButtonBusy(isBusy){
+    const scanBtn = get(TAGVIZ.scan);
+    if (scanBtn) scanBtn.disabled = !!isBusy;
+  }
+  function setGalleryRefreshBusy(isBusy){
+    const refreshBtn = get(GALLERY.refresh);
+    if (refreshBtn) refreshBtn.disabled = !!isBusy;
+  }
+  function setFormBusy(isBusy){
+    formBusy = !!isBusy;
+    const runBtn = get('btn-run');
+    const undoBtn = get('btn-undo');
+    const clearBtn = get('btn-clear');
+    if (runBtn) runBtn.disabled = formBusy;
+    if (undoBtn) undoBtn.disabled = formBusy;
+    if (clearBtn) clearBtn.disabled = formBusy;
+  }
   function showLog(text){
     const wrap = get(IDS.logWrap), pre = get(IDS.logPre);
     if(!wrap||!pre) return;
@@ -2658,26 +3028,36 @@
       body: fd,
       headers: { 'X-Requested-With': 'fetch' }
     });
-    if (!res.ok) throw new Error('HTTP '+res.status);
-    let data=null;
+    let data = null;
     try{ data = await res.json(); }catch(_){}
-    return data || { ok:true, log:'' };
+    if (data && typeof data === 'object'){
+      if (typeof data.ok !== 'boolean'){
+        data.ok = res.ok;
+      }
+      return data;
+    }
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return { ok: true, log: '' };
   }
 
   async function apiRemoveTag(folder, rel, tag, backup=true){
     const payload = { folder, rel, tag, backup: !!backup };
-    const res = await fetch('/api/tags/tag-remove', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    let data = null;
-    try{ data = await res.json(); }catch(_){}
-    if (!res.ok || !data || !data.ok){
-      const err = (data && data.error) ? data.error : `HTTP ${res.status}`;
-      return { ok: false, error: err };
+    try{
+      const res = await fetch('/api/tags/tag-remove', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      let data = null;
+      try{ data = await res.json(); }catch(_){}
+      if (!res.ok || !data || !data.ok){
+        const err = (data && data.error) ? data.error : `HTTP ${res.status}`;
+        return { ok: false, error: err };
+      }
+      return { ok: true, data };
+    } catch (err) {
+      return { ok: false, error: err && err.message ? err.message : 'Request failed' };
     }
-    return { ok: true, data };
   }
 
   // Build proper params:
@@ -2690,6 +3070,122 @@
     fd.set('folder', root);
   }
 
+  async function runTagsForm(form, options={}){
+    const mode = getModeValue();
+    if (!mode){
+      showWarning('Select a mode before running.', { level: 'error' });
+      return;
+    }
+    const raw = get(IDS.tags)?.value || '';
+    const parsedReplace = mode === 'replace'
+      ? parseReplaceMappings(raw)
+      : { newTags: [], invalid: [], validCount: 0 };
+    if (mode === 'replace' && parsedReplace.invalid.length){
+      showWarning('Replace warning: some mappings have no value after "->". Fix these before running.', {
+        level: 'error',
+        list: parsedReplace.invalid
+      });
+      return;
+    }
+    if (!hasRequiredTagsForMode(mode, raw, parsedReplace)){
+      const modeLabel = mode.charAt(0).toUpperCase() + mode.slice(1);
+      const detail = mode === 'replace'
+        ? 'Provide at least one mapping like "old->new".'
+        : 'Provide at least one tag before running.';
+      showWarning(`${modeLabel} mode requires input. ${detail}`, { level: 'error' });
+      return;
+    }
+    const tempReady = await ensureEditTempFolderReady(mode);
+    if (!tempReady) return;
+    if (mode === 'delete'){
+      const ok = await showConfirm('Delete mode will remove tags from files in the target folder. Continue?', 'Delete tags');
+      if (!ok) return;
+    }
+
+    let createMissingTxt = !!options.createMissingTxt;
+    if (mode === 'insert' && !options.skipMissingTxtConfirm){
+      const missingTxtCheck = await checkInsertNeedsMissingTxtWarning();
+      if (missingTxtCheck.warn){
+        const ok = await showConfirm(
+          `_temp has ${missingTxtCheck.totalImages} image(s) and no paired .txt files. Continue and create new .txt files with the insert tags?`,
+          'Continue'
+        );
+        if (!ok) return;
+        createMissingTxt = true;
+      }
+    }
+
+    if ((mode === 'insert' || mode === 'replace') && !options.allowDuplicateTags){
+      const existing = new Set((tagVizState.items || []).map(it => it.tag));
+      const dupes = mode === 'insert'
+        ? splitTagList(raw).filter(tag => existing.has(tag))
+        : parsedReplace.newTags.filter(tag => existing.has(tag));
+      const uniqueDupes = Array.from(new Set(dupes));
+      if (uniqueDupes.length){
+        showWarning('These tags already exist in the dataset. You can still continue if that is intended.', {
+          list: uniqueDupes,
+          actions: [
+            {
+              label: 'Run anyway',
+              className: 'btn btn-warning btn-sm',
+              onClick: () => {
+                pendingRunOptions = {
+                  allowDuplicateTags: true,
+                  skipMissingTxtConfirm: true,
+                  createMissingTxt
+                };
+                clearWarning();
+                if (typeof form.requestSubmit === 'function'){
+                  form.requestSubmit();
+                } else {
+                  get('btn-run')?.click();
+                }
+              }
+            },
+            {
+              label: 'Cancel',
+              className: 'btn btn-outline-light btn-sm',
+              onClick: () => {
+                pendingRunOptions = null;
+                clearWarning();
+              }
+            }
+          ]
+        });
+        return;
+      }
+    }
+
+    setFormBusy(true);
+    showStatus('Running...');
+    const tagsInput = get(IDS.tags);
+    if (tagsInput && !tagsInput.value.trim() && tagVizState.selected.size) {
+      syncTagsFromSelection(true);
+    } else {
+      syncTagsFromSelection();
+    }
+    const fd = new FormData(form);
+    finalizeFormDataForMode(fd);
+    fd.set('create_missing_txt', createMissingTxt ? '1' : '0');
+    try{
+      const data = await postForm(fd);
+      if (data.ok){
+        showStatus('Done.');
+      } else {
+        const errText = (data.error || '').trim();
+        showStatus(errText ? `Finished with issues: ${errText}` : 'Finished with issues.');
+      }
+      showLog(data.log || '');
+      await scanTagViz();
+      await loadGallery();
+    }catch(err){
+      console.error(err);
+      showStatus(`Failed: ${err && err.message ? err.message : 'See console / server log.'}`);
+    }finally{
+      setFormBusy(false);
+    }
+  }
+
   document.addEventListener('DOMContentLoaded', ()=>{
     const form = get('tags-form');
 
@@ -2698,6 +3194,7 @@
     loadGlossary();
     renderGlossarySelectors();
     renderGlossaryList();
+    void syncGlossaryWithServer();
     loadDanbooruPreviewPrefs();
     clearDanbooruPanel();
     document.querySelectorAll('.mode-btn').forEach(btn=>{
@@ -2818,11 +3315,31 @@
     get(GALLERY.zoomIn)?.addEventListener('click', ()=> setGalleryZoom(galleryState.zoom + 0.2));
     get(GALLERY.zoomOut)?.addEventListener('click', ()=> setGalleryZoom(galleryState.zoom - 0.2));
     get(GALLERY.zoomReset)?.addEventListener('click', ()=> setGalleryZoom(1));
+    get(GALLERY.modalPrev)?.addEventListener('click', ()=> stepGalleryPreview(-1));
+    get(GALLERY.modalNext)?.addEventListener('click', ()=> stepGalleryPreview(1));
     get(GALLERY.modalImg)?.addEventListener('wheel', (e)=>{
       e.preventDefault();
       const delta = e.deltaY < 0 ? 0.15 : -0.15;
       setGalleryZoom(galleryState.zoom + delta);
     }, { passive: false });
+    get(GALLERY.modal)?.addEventListener('hidden.bs.modal', ()=>{
+      setGalleryPreviewError('');
+      galleryState.previewRel = '';
+      galleryState.previewIndex = -1;
+    });
+    document.addEventListener('keydown', (e)=>{
+      if (!isGalleryPreviewOpen()) return;
+      const target = e.target;
+      const tag = (target && target.tagName ? target.tagName.toLowerCase() : '');
+      if (tag === 'input' || tag === 'textarea' || (target && target.isContentEditable)) return;
+      if (e.key === 'ArrowLeft'){
+        e.preventDefault();
+        stepGalleryPreview(-1);
+      } else if (e.key === 'ArrowRight'){
+        e.preventDefault();
+        stepGalleryPreview(1);
+      }
+    });
     get(WORKDIR.refresh)?.addEventListener('click', loadWorkdirRoot);
     get(WORKDIR.create)?.addEventListener('click', createWorkdirFolder);
     get(WORKDIR.del)?.addEventListener('click', deleteWorkdirFolder);
@@ -2865,114 +3382,36 @@
     // Main Run → AJAX (no refresh)
     form.addEventListener('submit', async (e)=>{
       e.preventDefault();
-      const mode = getModeValue();
-      if (!mode){
-        showWarning('Select a mode before running.', { level: 'error' });
-        return;
-      }
-      const raw = get(IDS.tags)?.value || '';
-      const parsedReplace = mode === 'replace' ? parseReplaceMappings(raw) : { newTags: [], invalid: [] };
-      if (mode === 'replace' && parsedReplace.invalid.length){
-        showWarning('Replace warning: some mappings have no value after "->". Fix these before running.', {
-          level: 'error',
-          list: parsedReplace.invalid
-        });
-        return;
-      }
-      if (mode === 'delete'){
-        const ok = await showConfirm('Delete mode will remove tags from files in the target folder. Continue?', 'Delete tags');
-        if (!ok) return;
-      }
-      let createMissingTxt = false;
-      if (mode === 'insert'){
-        const missingTxtCheck = await checkInsertNeedsMissingTxtWarning();
-        if (missingTxtCheck.warn){
-          const ok = await showConfirm(
-            `_temp has ${missingTxtCheck.totalImages} image(s) and no paired .txt files. Continue and create new .txt files with the insert tags?`,
-            'Continue'
-          );
-          if (!ok) return;
-          createMissingTxt = true;
-        }
-      }
-      if (mode === 'insert' || mode === 'replace'){
-        const existing = new Set((tagVizState.items || []).map(it => it.tag));
-        let dupes = [];
-        if (mode === 'insert'){
-          dupes = splitTagList(raw).filter(tag => existing.has(tag));
-        } else {
-          dupes = parsedReplace.newTags.filter(tag => existing.has(tag));
-        }
-        const uniqueDupes = Array.from(new Set(dupes));
-        if (uniqueDupes.length && !bypassDupesOnce){
-          showWarning('These tags already exist in the dataset. You can still continue if that is intended.', {
-            list: uniqueDupes,
-            actions: [
-              {
-                label: 'Run anyway',
-                className: 'btn btn-warning btn-sm',
-                onClick: () => {
-                  bypassDupesOnce = true;
-                  clearWarning();
-                  get('btn-run')?.click();
-                }
-              },
-              {
-                label: 'Cancel',
-                className: 'btn btn-outline-light btn-sm',
-                onClick: clearWarning
-              }
-            ]
-          });
-          return;
-        }
-      }
-      bypassDupesOnce = false;
-      showStatus('Running...');
-      const tagsInput = get(IDS.tags);
-      if (tagsInput && !tagsInput.value.trim() && tagVizState.selected.size) {
-        syncTagsFromSelection(true);
-      } else {
-        syncTagsFromSelection();
-      }
-      const fd = new FormData(form);
-      finalizeFormDataForMode(fd);
-      if (createMissingTxt){
-        fd.set('create_missing_txt', '1');
-      } else {
-        fd.set('create_missing_txt', '0');
-      }
-      try{
-        const data = await postForm(fd);
-        showStatus(data.ok ? 'Done.' : 'Finished with issues.');
-        showLog(data.log || '');
-        if (data.ok){
-          scanTagViz();
-          loadGallery();
-        }
-      }catch(err){
-        console.error(err);
-        showStatus('Failed. See console / server log.');
-      }
+      if (formBusy) return;
+      const options = pendingRunOptions || {};
+      pendingRunOptions = null;
+      await runTagsForm(form, options);
     });
 
     // Undo button → restore from _temp to root
     get('btn-undo')?.addEventListener('click', async ()=>{
+      if (formBusy) return;
       const fd = new FormData(form);
       fd.set('mode','undo');
       finalizeFormDataForMode(fd);
+      setFormBusy(true);
       showStatus('Undo running…');
       try{
         const data = await postForm(fd);
-        showStatus(data.ok ? 'Undo done.' : 'Undo finished with issues.');
-        showLog(data.log || '');
         if (data.ok){
-          scanTagViz();
-          loadGallery();
+          showStatus('Undo done.');
+        } else {
+          const errText = (data.error || '').trim();
+          showStatus(errText ? `Undo finished with issues: ${errText}` : 'Undo finished with issues.');
         }
+        showLog(data.log || '');
+        await scanTagViz();
+        await loadGallery();
       }catch(err){
         console.error(err);
-        showStatus('Undo failed.');
+        showStatus(`Undo failed: ${err && err.message ? err.message : 'See console / server log.'}`);
+      }finally{
+        setFormBusy(false);
       }
     });
 

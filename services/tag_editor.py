@@ -1,9 +1,10 @@
 from collections import Counter, OrderedDict
 from pathlib import Path
 from typing import Tuple, List, Set, Optional
+import re
 from utils.io import readable_path
-from utils.dataset import split_tags, join_tags
-from utils.parse import parse_bool, parse_exts
+from utils.dataset import join_tags
+from utils.parse import parse_bool, parse_exts, parse_tag_list
 from utils.tool_result import build_tool_result
 from utils.text_io import read_text_best_effort
 import shutil
@@ -11,6 +12,30 @@ import shutil
 EDIT_MODES = {"insert", "delete", "replace", "dedup"}  # non-move, non-undo
 _TXT_TAG_CACHE: "OrderedDict[str, Tuple[Tuple[int, int], List[str]]]" = OrderedDict()
 _TXT_TAG_CACHE_MAX = 4096
+
+
+def _sanitize_tag(t: str) -> str:
+    t = (t or "").strip()
+    if not t:
+        return ""
+    return re.sub(r"\s+", "_", t)
+
+
+def _dedup_tags(tags: List[str]) -> List[str]:
+    out: List[str] = []
+    seen: Set[str] = set()
+    for raw in tags:
+        tag = _sanitize_tag(raw)
+        if not tag or tag in seen:
+            continue
+        seen.add(tag)
+        out.append(tag)
+    return out
+
+
+def _normalize_tags(raw_tags: List[str], dedupe: bool = False) -> List[str]:
+    tags = [tag for tag in (_sanitize_tag(x) for x in raw_tags) if tag]
+    return _dedup_tags(tags) if dedupe else tags
 
 
 def _cache_put(key: str, value: Tuple[Tuple[int, int], List[str]]):
@@ -25,7 +50,7 @@ def _read_text_tags(path: Path) -> List[str]:
         text, _, _ = read_text_best_effort(path)
     except Exception:
         return []
-    return split_tags(text)
+    return _normalize_tags(parse_tag_list(text, dedupe=False), dedupe=False)
 
 
 def _read_tags_cached(txt_path: Path) -> List[str]:
@@ -214,7 +239,8 @@ def remove_tag(txt_path: Path, tag: str, backup: bool = True) -> dict:
         src, _, _ = read_text_best_effort(txt_path)
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
-    taglist = split_tags(src)
+    tag = _sanitize_tag(tag)
+    taglist = _normalize_tags(parse_tag_list(src, dedupe=False), dedupe=False)
     newtags = [t for t in taglist if t != tag]
     removed = len(newtags) != len(taglist)
     if not removed:
@@ -260,8 +286,17 @@ def handle(form, ctx):
         base_folder = raw_folder
     temp_folder = base_folder / "_temp"
 
-    def _parse_tag_list(raw: str) -> List[str]:
-        return [t.strip() for t in (raw or "").split(",") if t.strip()]
+    def _parse_tag_input(raw: str) -> List[str]:
+        out: List[str] = []
+        seen: Set[str] = set()
+        for line in (raw or "").replace("\r", "\n").split("\n"):
+            for token in line.split(","):
+                tag = _sanitize_tag(token)
+                if not tag or tag in seen:
+                    continue
+                out.append(tag)
+                seen.add(tag)
+        return out
 
     def _parse_replace_mapping(raw: str) -> dict:
         mapping = {}
@@ -270,6 +305,8 @@ def handle(form, ctx):
             if "->" not in p:
                 continue
             old, new = [x.strip() for x in p.split("->", 1)]
+            old = _sanitize_tag(old)
+            new = _sanitize_tag(new)
             if old:
                 mapping[old] = new
         return mapping
@@ -278,9 +315,9 @@ def handle(form, ctx):
     deltags: Set[str] = set()
     mapping = {}
     if mode == "insert":
-        add = _parse_tag_list(tags_field)
+        add = _parse_tag_input(tags_field)
     elif mode == "delete":
-        deltags = set(_parse_tag_list(tags_field))
+        deltags = set(_parse_tag_input(tags_field))
     elif mode == "replace":
         mapping = _parse_replace_mapping(tags_field)
 
@@ -321,7 +358,7 @@ def handle(form, ctx):
         images = _list_images(scan_folder, exts, recursive=recursive_scan, exclude_dir=exclude_dir)
         processed = 0
         errors = 0
-        want: Set[str] = set([t.strip() for t in tags_field.split(",") if t.strip()])
+        want: Set[str] = set(_parse_tag_input(tags_field))
         if not want:
             lines.append("Move skipped: no tags provided.")
             return _done(False, "Move skipped: no tags provided.")
@@ -338,7 +375,7 @@ def handle(form, ctx):
             except Exception as exc:
                 lines.append(f"[ERROR] reading {txt.name}: {exc}")
                 continue
-            taglist = split_tags(src)
+            taglist = _normalize_tags(parse_tag_list(src, dedupe=False), dedupe=False)
 
             matches = sorted([t for t in taglist if t in want])
             if matches:
@@ -435,7 +472,7 @@ def handle(form, ctx):
             lines.append(f"[ERROR] reading {txt.name}: {exc}")
             errors += 1
             continue
-        taglist = split_tags(src)
+        taglist = _normalize_tags(parse_tag_list(src, dedupe=False), dedupe=False)
 
         newtags = list(taglist)
         action_desc = ""
@@ -451,12 +488,8 @@ def handle(form, ctx):
             newtags = [mapping.get(t, t) for t in taglist]
             action_desc = f"replace -> {mapping}"
         elif mode == "dedup":
-            seen: Set[str] = set(); out: List[str] = []
-            for t in taglist:
-                if t not in seen:
-                    out.append(t); seen.add(t)
-            newtags = out
-            action_desc = f"dedup -> {len(taglist)-len(out)} removed"
+            newtags = _dedup_tags(taglist)
+            action_desc = f"dedup -> {len(taglist)-len(newtags)} removed"
 
         content = join_tags(newtags)
         if content.strip() == src.strip():
