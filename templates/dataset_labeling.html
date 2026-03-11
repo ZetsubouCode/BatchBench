@@ -29,7 +29,7 @@
   .path-flag { font-size:.6rem; padding:.05rem .3rem; border-radius:.3rem; border:1px solid var(--bb-border); color:var(--bb-muted); }
   .path-flag.is-active { color:#e6f0ff; border-color:#2d4f86; background:#1b2b4a; }
   .tag-editor-layout { display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:1rem; align-items:start; position:relative; }
-  .tag-editor-layout.is-expanded .tag-editor-sidebar { width:640px; transform:translateX(-320px); box-shadow:-20px 0 30px rgba(0,0,0,0.35); }
+  .tag-editor-layout.is-expanded .tag-editor-sidebar { position:fixed; inset:1rem; width:auto; max-height:calc(100vh - 2rem); transform:none; box-shadow:0 24px 64px rgba(0,0,0,0.5); z-index:1040; }
   .tag-editor-main { min-width:0; }
   .mode-layout { display:grid; grid-template-columns:110px minmax(0,1fr); gap:1rem; align-items:start; }
   .mode-panel { position:sticky; top:1rem; align-self:start; display:flex; flex-direction:column; gap:.6rem; }
@@ -44,23 +44,40 @@
   .tag-editor-sidebar .sidebar-title { font-size:1rem; font-weight:600; }
   .tag-editor-sidebar .sidebar-body { overflow:auto; display:block; }
   .sidebar-split { display:grid; grid-template-columns:1fr; gap:.75rem; }
-  .tag-editor-layout.is-expanded .sidebar-split { grid-template-columns:1fr; }
+  .tag-editor-layout.is-expanded .sidebar-split { grid-template-columns:minmax(0,1fr) 310px; gap:1rem; align-items:start; }
   .sidebar-col { display:flex; flex-direction:column; gap:.75rem; min-width:0; }
+  .sidebar-col-dest { display:none; }
+  .tag-editor-layout.is-expanded .sidebar-col-dest { display:flex; align-self:start; position:sticky; top:0; }
+  .sidebar-col-dest .workdir-panel { position:sticky; top:0; max-height:calc(100vh - 6rem); overflow:auto; }
   .tag-editor-sidebar .input-group-text { background:var(--bb-card); color:var(--bb-text); border-color:var(--bb-border); }
   .tag-editor-sidebar .form-check-label { color:var(--bb-text); }
   .gallery-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:.4rem; }
+  .gallery-selection-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:.35rem; }
+  .gallery-selection-count { font-size:.75rem; color:var(--bb-muted); min-width:5rem; }
   .gallery-status { font-size:.75rem; color:var(--bb-muted); min-height:1rem; }
   .gallery-path { font-size:.75rem; color:var(--bb-muted); }
   .gallery-drop { border:1px dashed var(--bb-border); border-radius:.5rem; padding:.6rem; text-align:center; color:var(--bb-muted); background:rgba(12,18,36,.7); cursor:pointer; }
   .gallery-drop.is-dragging { border-color:var(--bb-link); color:var(--bb-link); background:rgba(18,30,56,.8); }
   .gallery-grid { display:grid; grid-template-columns:1fr; gap:.75rem; }
-  .gallery-card { border:1px solid var(--bb-border); border-radius:.5rem; padding:.5rem; background:var(--bb-input-bg); display:flex; flex-direction:column; gap:.35rem; }
+  .gallery-card { border:1px solid var(--bb-border); border-radius:.5rem; padding:.5rem; background:var(--bb-input-bg); display:flex; flex-direction:column; gap:.35rem; position:relative; }
   .gallery-card.is-match { outline:2px solid #2d4f86; box-shadow:0 0 0 1px rgba(45,79,134,.45); }
+  .gallery-card.is-temp { border-style:dashed; border-color:#b56a1f; }
+  .gallery-card.is-folder { box-shadow:inset 0 0 0 1px rgba(31,111,143,.55); }
+  .gallery-card.is-selected { border-color:#7aa2ff; box-shadow:0 0 0 2px rgba(122,162,255,.45); }
+  .gallery-card-head { display:flex; align-items:center; justify-content:space-between; gap:.5rem; }
+  .gallery-select { display:inline-flex; align-items:center; gap:.35rem; font-size:.72rem; color:var(--bb-muted); }
+  .gallery-drag-chip { font-size:.62rem; letter-spacing:.06em; text-transform:uppercase; border:1px solid var(--bb-border); border-radius:999px; padding:.08rem .35rem; color:var(--bb-muted); background:var(--bb-code-bg); }
+  .gallery-badges { display:flex; align-items:center; gap:.3rem; flex-wrap:wrap; min-height:1rem; }
+  .gallery-state-badge { font-size:.62rem; letter-spacing:.06em; text-transform:uppercase; border:1px solid var(--bb-border); border-radius:999px; padding:.08rem .38rem; background:var(--bb-code-bg); color:var(--bb-muted); }
+  .gallery-state-badge.is-temp { border-color:#b56a1f; color:#ffe0b2; background:#2a1a0a; }
+  .gallery-state-badge.is-folder { border-color:#1f6f8f; color:#d6f6ff; background:#0d2630; }
+  .gallery-meta { display:flex; align-items:center; justify-content:space-between; gap:.5rem; font-size:.7rem; color:var(--bb-muted); }
   .gallery-thumb { border:0; padding:0; background:transparent; display:block; width:100%; cursor:zoom-in; }
   .gallery-thumb img { width:100%; height:160px; object-fit:cover; border-radius:.4rem; border:1px solid var(--bb-border); background:#0b1220; }
   .gallery-thumb-fallback { width:100%; height:160px; border-radius:.4rem; border:1px dashed var(--bb-border); display:flex; align-items:center; justify-content:center; font-size:.78rem; color:var(--bb-muted); background:#0b1220; }
   .gallery-name { font-size:.85rem; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .gallery-subpath { font-size:.7rem; color:var(--bb-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .gallery-folder-detail { font-size:.7rem; color:#9cd9ea; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .gallery-tags { display:flex; flex-wrap:wrap; gap:.25rem; }
   .gallery-tag { font-size:.7rem; border:1px solid var(--bb-border); border-radius:.35rem; padding:.05rem .35rem; color:var(--bb-muted); background:var(--bb-code-bg); }
   .gallery-tag.is-removable { position:relative; padding-right:1.1rem; cursor:default; }
@@ -68,18 +85,64 @@
   .gallery-tag.is-removable:hover .tag-x { display:inline; opacity:1; }
   .gallery-tag.is-missing { border-color:#6f1f26; color:#ffe8ea; background:#2b1416; }
   .gallery-empty { font-size:.85rem; color:var(--bb-muted); border:1px dashed var(--bb-border); border-radius:.5rem; padding:.6rem; text-align:center; }
+  .gallery-cheatsheet { border:1px solid var(--bb-border); border-radius:.5rem; padding:.65rem; background:rgba(8,16,28,.7); display:flex; flex-direction:column; gap:.5rem; }
+  .tag-editor-layout:not(.is-expanded) .gallery-cheatsheet { display:none; }
+  .gallery-cheatsheet-head { display:flex; align-items:center; justify-content:space-between; gap:.5rem; flex-wrap:wrap; }
+  .gallery-cheatsheet-title { font-size:.75rem; letter-spacing:.08em; text-transform:uppercase; color:var(--bb-muted); }
+  .gallery-cheatsheet-trigger { border:1px solid #7a5b1f; border-radius:.45rem; background:#231a09; color:#ffe9b8; padding:.45rem .55rem; font-size:.75rem; }
+  .gallery-cheatsheet-trigger strong { color:#fff3d4; }
+  .gallery-cheatsheet-sections { display:flex; flex-direction:column; gap:.5rem; max-height:240px; overflow:auto; }
+  .gallery-cheatsheet-section { border:1px solid var(--bb-border); border-radius:.45rem; background:rgba(255,255,255,.03); padding:.5rem; display:flex; flex-direction:column; gap:.4rem; }
+  .gallery-cheatsheet-section-head { font-size:.74rem; letter-spacing:.08em; text-transform:uppercase; color:#9cd9ea; }
+  .gallery-cheatsheet-row-label { font-size:.68rem; color:var(--bb-muted); min-width:54px; }
+  .gallery-cheatsheet-row { display:flex; align-items:flex-start; gap:.4rem; }
+  .gallery-cheatsheet-cond-list { display:flex; flex-direction:column; gap:.3rem; }
+  .gallery-cheatsheet-cond-item { display:flex; align-items:flex-start; gap:.4rem; }
+  .gallery-cheatsheet-tags { display:flex; flex-wrap:wrap; gap:.3rem; max-height:140px; overflow:auto; }
+  .gallery-cheatsheet-chip { font-size:.72rem; border:1px solid #355d7a; border-radius:999px; padding:.08rem .4rem; background:#102335; color:#d5ebff; }
+  .gallery-cheatsheet-content { font-size:.74rem; color:var(--bb-muted); border:1px solid var(--bb-border); border-radius:.4rem; background:rgba(0,0,0,.18); padding:.5rem; max-height:130px; overflow:auto; white-space:pre-wrap; }
   .gallery-modal-img { max-width:100%; max-height:70vh; transform-origin:center; transition:transform .15s ease; }
-  .gallery-modal-nav { display:flex; align-items:center; justify-content:space-between; gap:.5rem; margin-bottom:.55rem; }
+  .gallery-modal-nav { display:flex; align-items:center; justify-content:space-between; gap:.75rem; margin-bottom:.55rem; }
   .gallery-modal-index { font-size:.8rem; color:var(--bb-muted); min-width:5.5rem; text-align:center; }
   .gallery-modal-error { font-size:.78rem; color:#ffc6ce; min-height:1.1rem; text-align:center; }
+  .gallery-modal-stage { position:relative; display:flex; align-items:center; justify-content:center; min-height:72vh; border:1px solid var(--bb-border); border-radius:.75rem; background:rgba(7,13,24,.9); overflow:hidden; }
+  .gallery-modal-stage-inner { display:flex; justify-content:center; align-items:center; width:100%; padding:1.5rem 4.5rem; }
+  .gallery-modal-arrow { position:absolute; top:50%; transform:translateY(-50%); width:56px; height:56px; border-radius:999px; border:1px solid rgba(255,255,255,.14); background:rgba(10,18,32,.88); color:#f5fbff; display:flex; align-items:center; justify-content:center; font-size:2rem; line-height:1; z-index:2; box-shadow:0 10px 28px rgba(0,0,0,.35); }
+  .gallery-modal-arrow:hover { background:rgba(18,30,56,.95); border-color:rgba(127,215,255,.5); }
+  .gallery-modal-arrow:disabled { opacity:.35; cursor:not-allowed; }
+  .gallery-modal-arrow.is-prev { left:1rem; }
+  .gallery-modal-arrow.is-next { right:1rem; }
+  .gallery-modal-select { min-width:120px; }
+  .gallery-modal-select.is-selected { border-color:#7aa2ff; color:#eaf3ff; background:#1b2b4a; }
+  .gallery-modal-shortcut { font-size:.74rem; color:var(--bb-muted); }
   .gallery-zoom { display:flex; align-items:center; gap:.5rem; }
   .gallery-zoom-label { font-size:.85rem; color:var(--bb-muted); min-width:4ch; text-align:right; }
-  .tag-editor-layout.is-expanded .gallery-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+  .gallery-manual-tags { border-top:1px solid var(--bb-border); padding-top:.75rem; }
+  .gallery-manual-note { font-size:.75rem; color:var(--bb-muted); min-height:1rem; }
+  .gallery-manual-note.is-warning { color:#ffb4bd; }
+  .gallery-manual-input:disabled { background:#22161a; border-color:#6f1f26; color:#ffb4bd; opacity:1; cursor:not-allowed; }
+  .gallery-manual-input:disabled::placeholder { color:#d98e98; }
+  .gallery-glossary-box { border:1px solid var(--bb-border); border-radius:.5rem; background:rgba(10,18,30,.6); padding:.65rem; display:flex; flex-direction:column; gap:.5rem; }
+  .gallery-glossary-top { display:flex; align-items:center; justify-content:space-between; gap:.5rem; flex-wrap:wrap; }
+  .gallery-glossary-title { font-size:.75rem; letter-spacing:.08em; text-transform:uppercase; color:var(--bb-muted); }
+  .gallery-glossary-controls { display:grid; grid-template-columns:minmax(0,1fr) 150px auto; gap:.45rem; }
+  .gallery-glossary-list { display:flex; flex-wrap:wrap; gap:.35rem; max-height:160px; overflow:auto; }
+  .gallery-glossary-chip { border:1px solid #1f6f8f; border-radius:999px; padding:.18rem .55rem; font-size:.76rem; background:#0d2630; color:#d6f6ff; cursor:pointer; }
+  .gallery-glossary-chip:hover { border-color:#7fd7ff; color:#f1fbff; }
+  .gallery-glossary-chip:disabled { opacity:.45; cursor:not-allowed; }
+  .gallery-glossary-empty { font-size:.75rem; color:var(--bb-muted); }
+  .tag-editor-layout.is-expanded .gallery-grid { grid-template-columns:repeat(4, minmax(0, 1fr)); }
   @media (hover: none), (pointer: coarse) {
     .gallery-tag.is-removable .tag-x { display:inline; opacity:1; }
   }
   .workdir-panel { border:1px solid var(--bb-border); border-radius:.5rem; padding:.6rem; background:var(--bb-input-bg); }
   .workdir-head { display:flex; align-items:center; justify-content:space-between; gap:.5rem; }
+  .workdir-quick-grid { display:grid; gap:.5rem; margin-top:.5rem; }
+  .workdir-quick-drop { border:1px dashed var(--bb-border); border-radius:.5rem; padding:.65rem; background:rgba(12,18,36,.55); color:var(--bb-text); min-height:76px; display:flex; flex-direction:column; justify-content:center; gap:.2rem; transition:border-color .15s ease, background .15s ease, transform .15s ease; }
+  .workdir-quick-drop.is-active { border-color:var(--bb-link); background:rgba(18,30,56,.85); transform:translateY(-1px); }
+  .workdir-quick-drop.is-temp { border-color:#b56a1f; background:rgba(42,26,10,.7); }
+  .workdir-quick-label { font-size:.75rem; letter-spacing:.08em; text-transform:uppercase; color:var(--bb-muted); }
+  .workdir-quick-path { font-size:.82rem; font-weight:600; }
   .workdir-actions { display:flex; align-items:center; gap:.4rem; flex-wrap:wrap; }
   .workdir-actions .form-control { flex:1 1 140px; min-width:110px; }
   .workdir-status { font-size:.75rem; color:var(--bb-muted); min-height:1rem; }
@@ -132,13 +195,20 @@
   .danbooru-preview-meta { font-size:.75rem; color:var(--bb-muted); margin-top:.35rem; min-height:1rem; display:flex; justify-content:space-between; gap:.35rem; }
   @media (max-width: 991.98px) {
     .tag-editor-layout { grid-template-columns:1fr; }
-    .tag-editor-layout.is-expanded .tag-editor-sidebar { width:100%; transform:none; }
+    .tag-editor-layout.is-expanded .tag-editor-sidebar { inset:.5rem; width:auto; transform:none; }
     .tag-editor-sidebar { position:static; max-height:none; width:100%; }
-    .tag-editor-layout.is-expanded .gallery-grid { grid-template-columns:1fr; }
+    .tag-editor-layout.is-expanded .gallery-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
     .mode-layout { grid-template-columns:1fr; }
     .mode-panel { position:static; flex-direction:row; flex-wrap:wrap; }
     .mode-buttons { flex-direction:row; flex-wrap:wrap; }
     .sidebar-split { grid-template-columns:1fr; }
+  }
+
+  @media (max-width: 767.98px) {
+    .tag-editor-layout.is-expanded .gallery-grid { grid-template-columns:1fr; }
+    .gallery-modal-stage { min-height:54vh; }
+    .gallery-modal-stage-inner { padding:1rem 3rem; }
+    .gallery-modal-arrow { width:48px; height:48px; font-size:1.7rem; }
   }
 </style>
 
@@ -327,17 +397,47 @@
         <div class="sidebar-col">
           <div class="gallery-toolbar">
             <div class="form-check form-switch">
-              <input class="form-check-input" type="checkbox" id="gallery-recursive">
+              <input class="form-check-input" type="checkbox" id="gallery-recursive" checked>
               <label class="form-check-label" for="gallery-recursive">Recursive</label>
             </div>
             <div class="input-group input-group-sm" style="width:130px;">
               <span class="input-group-text">Limit</span>
               <input class="form-control" type="number" id="gallery-limit" min="10" max="500" value="80">
             </div>
+            <div class="input-group input-group-sm" style="min-width:190px;max-width:220px;">
+              <span class="input-group-text">Sort</span>
+              <select class="form-select" id="gallery-sort">
+                <option value="match">Match priority</option>
+                <option value="name_asc">Name A-Z</option>
+                <option value="name_desc">Name Z-A</option>
+                <option value="created_asc">Created oldest</option>
+                <option value="created_desc">Created newest</option>
+              </select>
+            </div>
             <span class="small text-muted" id="gallery-count">0 images</span>
+          </div>
+          <div class="gallery-selection-toolbar">
+            <button type="button" class="btn btn-sm btn-outline-light" id="gallery-select-visible">Select visible</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="gallery-clear-selection">Clear selected</button>
+            <span class="gallery-selection-count" id="gallery-selection-count">0 selected</span>
           </div>
           <div class="gallery-path">
             Root: <span class="code-chip" id="gallery-path">...</span>
+          </div>
+          <div class="gallery-cheatsheet">
+            <div class="gallery-cheatsheet-head">
+              <div class="gallery-cheatsheet-title">Dataset tag cheat sheet (parent folder)</div>
+              <div class="input-group input-group-sm" style="min-width:220px;max-width:320px;">
+                <span class="input-group-text">TXT</span>
+                <input type="text" class="form-control" id="gallery-cheatsheet-file" placeholder="prompt.txt">
+                <button type="button" class="btn btn-outline-light" id="gallery-cheatsheet-load">Load</button>
+              </div>
+            </div>
+            <div class="gallery-status" id="gallery-cheatsheet-status"></div>
+            <div class="gallery-cheatsheet-trigger" id="gallery-cheatsheet-trigger">Trigger word not detected.</div>
+            <div class="gallery-cheatsheet-sections" id="gallery-cheatsheet-sections"></div>
+            <div class="gallery-cheatsheet-tags" id="gallery-cheatsheet-tags"></div>
+            <div class="gallery-cheatsheet-content" id="gallery-cheatsheet-content">Cheat sheet not loaded.</div>
           </div>
           <div class="gallery-drop" id="gallery-drop" data-bs-toggle="tooltip" data-bs-title="Drop files here to copy into the dataset folder">
             Drop files here, or <span class="text-decoration-underline">click to select</span>
@@ -347,6 +447,42 @@
           <div class="gallery-grid" id="gallery-grid"></div>
           <div class="mt-2 text-center">
             <button type="button" class="btn btn-sm btn-outline-light d-none" id="gallery-load-more">Load more</button>
+          </div>
+        </div>
+        <div class="sidebar-col sidebar-col-dest">
+          <div class="workdir-panel">
+            <div class="workdir-head">
+              <div>
+                <div class="fw-semibold">Destinations</div>
+                <div class="small text-muted">Drop one or many selected images here. The paired <span class="code-chip">.txt</span> moves together.</div>
+              </div>
+              <button type="button" class="btn btn-sm btn-outline-light" id="workdir-refresh">Refresh</button>
+            </div>
+            <div class="gallery-path mt-2">
+              Target root: <span class="code-chip" id="workdir-path">...</span>
+            </div>
+            <div class="workdir-quick-grid">
+              <div class="workdir-quick-drop" id="workdir-root-drop">
+                <div class="workdir-quick-label">Quick drop</div>
+                <div class="workdir-quick-path">Dataset root</div>
+                <div class="small text-muted">Return files from _temp or regroup into the root.</div>
+              </div>
+              <div class="workdir-quick-drop is-temp" id="workdir-temp-drop">
+                <div class="workdir-quick-label">Quick drop</div>
+                <div class="workdir-quick-path">_temp</div>
+                <div class="small text-muted">Stage selected files into _temp without scrolling.</div>
+              </div>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-warning mt-2 w-100" id="workdir-return-temp">
+              Return all files from _temp to root
+            </button>
+            <div class="workdir-status mt-2" id="workdir-status"></div>
+            <div class="workdir-tree" id="workdir-tree"></div>
+            <div class="workdir-actions mt-2">
+              <input class="form-control form-control-sm" type="text" id="workdir-new-name" placeholder="New folder name">
+              <button type="button" class="btn btn-sm btn-outline-light" id="workdir-create">New folder</button>
+              <button type="button" class="btn btn-sm btn-outline-danger" id="workdir-delete">Delete selected</button>
+            </div>
           </div>
         </div>
       </div>
@@ -379,12 +515,16 @@
       </div>
       <div class="modal-body">
         <div class="gallery-modal-nav">
-          <button type="button" class="btn btn-sm btn-outline-light" id="gallery-preview-prev" aria-label="Previous image">Prev</button>
           <span class="gallery-modal-index" id="gallery-preview-index">0 / 0</span>
-          <button type="button" class="btn btn-sm btn-outline-light" id="gallery-preview-next" aria-label="Next image">Next</button>
+          <button type="button" class="btn btn-sm btn-outline-light gallery-modal-select" id="gallery-preview-select">Select</button>
+          <span class="gallery-modal-shortcut">Shortcut: <span class="code-chip">S</span> to select</span>
         </div>
-        <div class="d-flex justify-content-center">
-          <img id="gallery-preview-img" class="gallery-modal-img" src="" alt="">
+        <div class="gallery-modal-stage">
+          <button type="button" class="gallery-modal-arrow is-prev" id="gallery-preview-prev" aria-label="Previous image">&#8249;</button>
+          <div class="gallery-modal-stage-inner">
+            <img id="gallery-preview-img" class="gallery-modal-img" src="" alt="">
+          </div>
+          <button type="button" class="gallery-modal-arrow is-next" id="gallery-preview-next" aria-label="Next image">&#8250;</button>
         </div>
         <div class="gallery-modal-error mt-2" id="gallery-preview-error"></div>
         <div class="d-flex align-items-center justify-content-between mt-3">
@@ -397,6 +537,29 @@
           </div>
         </div>
         <div class="gallery-tags mt-2" id="gallery-preview-tags"></div>
+        <div class="gallery-manual-tags mt-3">
+          <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap">
+            <div class="small fw-semibold">Manual tags</div>
+            <div class="small text-muted" id="gallery-preview-temp-note">Manual add is available for items inside _temp.</div>
+          </div>
+          <div class="input-group input-group-sm mt-2">
+            <input type="text" class="form-control gallery-manual-input" id="gallery-preview-add-tags" placeholder="Add tags, comma separated">
+            <button type="button" class="btn btn-outline-light" id="gallery-preview-add-btn">Add tags</button>
+          </div>
+          <div class="gallery-manual-note mt-2" id="gallery-preview-add-status"></div>
+          <div class="gallery-glossary-box mt-3">
+            <div class="gallery-glossary-top">
+              <div class="gallery-glossary-title">Glossary quick pick</div>
+              <button type="button" class="btn btn-sm btn-outline-secondary" id="gallery-preview-open-glossary">Open full glossary</button>
+            </div>
+            <div class="gallery-glossary-controls">
+              <input type="text" class="form-control form-control-sm" id="gallery-preview-glossary-search" placeholder="Search glossary tags">
+              <select class="form-select form-select-sm" id="gallery-preview-glossary-filter"></select>
+              <button type="button" class="btn btn-sm btn-outline-light" id="gallery-preview-glossary-clear">Clear</button>
+            </div>
+            <div class="gallery-glossary-list" id="gallery-preview-glossary-list"></div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -569,11 +732,22 @@
     status: 'gallery-status',
     count: 'gallery-count',
     path: 'gallery-path',
+    cheatFile: 'gallery-cheatsheet-file',
+    cheatLoad: 'gallery-cheatsheet-load',
+    cheatStatus: 'gallery-cheatsheet-status',
+    cheatTrigger: 'gallery-cheatsheet-trigger',
+    cheatSections: 'gallery-cheatsheet-sections',
+    cheatTags: 'gallery-cheatsheet-tags',
+    cheatContent: 'gallery-cheatsheet-content',
     drop: 'gallery-drop',
     input: 'gallery-upload-input',
     loadMore: 'gallery-load-more',
+    selectVisible: 'gallery-select-visible',
+    clearSelection: 'gallery-clear-selection',
+    selectionCount: 'gallery-selection-count',
     recursive: 'gallery-recursive',
     limit: 'gallery-limit',
+    sort: 'gallery-sort',
     modal: 'galleryPreviewModal',
     modalImg: 'gallery-preview-img',
     modalName: 'gallery-preview-name',
@@ -582,11 +756,21 @@
     modalPrev: 'gallery-preview-prev',
     modalNext: 'gallery-preview-next',
     modalIndex: 'gallery-preview-index',
+    modalSelect: 'gallery-preview-select',
     zoomIn: 'gallery-zoom-in',
     zoomOut: 'gallery-zoom-out',
     zoomReset: 'gallery-zoom-reset',
     zoomLabel: 'gallery-zoom-label',
-    modalTitle: 'gallery-preview-title'
+    modalTitle: 'gallery-preview-title',
+    modalAddInput: 'gallery-preview-add-tags',
+    modalAddBtn: 'gallery-preview-add-btn',
+    modalAddStatus: 'gallery-preview-add-status',
+    modalTempNote: 'gallery-preview-temp-note',
+    modalGlossarySearch: 'gallery-preview-glossary-search',
+    modalGlossaryFilter: 'gallery-preview-glossary-filter',
+    modalGlossaryList: 'gallery-preview-glossary-list',
+    modalGlossaryClear: 'gallery-preview-glossary-clear',
+    modalGlossaryOpen: 'gallery-preview-open-glossary'
   };
   const WORKDIR = {
     refresh: 'workdir-refresh',
@@ -596,7 +780,9 @@
     newName: 'workdir-new-name',
     create: 'workdir-create',
     del: 'workdir-delete',
-    rootDrop: 'workdir-root-drop'
+    rootDrop: 'workdir-root-drop',
+    tempDrop: 'workdir-temp-drop',
+    returnTemp: 'workdir-return-temp'
   };
   const tagVizState = {
     items: [],
@@ -616,7 +802,16 @@
     visibleCount: 120,
     previewRel: '',
     previewIndex: -1,
-    modalInstance: null
+    modalInstance: null,
+    sort: 'match',
+    selected: new Set(),
+    glossarySearch: '',
+    glossaryFilter: '__all__',
+    cheatsheetFile: 'prompt.txt',
+    cheatsheetTrigger: '',
+    cheatsheetSections: [],
+    cheatsheetTags: [],
+    cheatsheetContent: ''
   };
   const uiState = {
     sidebarExpanded: false
@@ -670,6 +865,7 @@
   const DANBOORU_GLOSSARY_KEY = 'batchbench_glossary_v1';
   const DANBOORU_LAST_CATEGORY_KEY = 'batchbench_glossary_last_category';
   const DANBOORU_PREVIEW_MIN_KEY = 'batchbench_danbooru_preview_minimized';
+  const GALLERY_CHEATSHEET_FILE_KEY = 'batchbench_gallery_cheatsheet_file';
 
   function getModeValue(){
     return (get(IDS.mode)?.value || '').trim();
@@ -845,8 +1041,23 @@
   }
 
   function getGalleryRoot(){
-    const root = stripTemp((get(IDS.folder)?.value||'').trim());
-    return defaultTempFor(root);
+    return stripTemp((get(IDS.folder)?.value||'').trim());
+  }
+
+  function getParentPath(pathValue){
+    let value = String(pathValue || '').trim();
+    if (!value) return '';
+    value = value.replace(/[\\\/]+$/g, '');
+    const lastSlash = Math.max(value.lastIndexOf('/'), value.lastIndexOf('\\'));
+    if (lastSlash < 0) return '';
+    if (lastSlash === 2 && /^[A-Za-z]:/.test(value.slice(0, 2))){
+      return value.slice(0, lastSlash + 1);
+    }
+    return value.slice(0, lastSlash);
+  }
+
+  function getCheatsheetRoot(){
+    return getParentPath(getGalleryRoot());
   }
 
   function setGalleryPath(root){
@@ -874,7 +1085,7 @@
     const layout = get(GALLERY.layout);
     if (layout) layout.classList.toggle('is-expanded', expanded);
     const btn = get(GALLERY.toggle);
-    if (btn) btn.textContent = expanded ? 'Minimize' : 'Expand';
+    if (btn) btn.textContent = expanded ? 'Close workspace' : 'Expand';
   }
 
   function toggleSidebarExpanded(){
@@ -892,15 +1103,277 @@
     return score;
   }
 
+  function getSelectedGalleryRels(){
+    return Array.from(galleryState.selected || []);
+  }
+
+  function updateGallerySelectionCount(){
+    const el = get(GALLERY.selectionCount);
+    if (!el) return;
+    const count = galleryState.selected?.size || 0;
+    el.textContent = `${count} selected`;
+  }
+
+  function pruneGallerySelection(){
+    const available = new Set((galleryState.items || []).map(item => item.rel).filter(Boolean));
+    const next = new Set();
+    getSelectedGalleryRels().forEach(rel=>{
+      if (available.has(rel)) next.add(rel);
+    });
+    galleryState.selected = next;
+    updateGallerySelectionCount();
+  }
+
+  function toggleGallerySelection(rel, forceValue=null){
+    if (!rel) return;
+    if (!(galleryState.selected instanceof Set)) galleryState.selected = new Set();
+    const next = new Set(galleryState.selected);
+    const shouldSelect = forceValue == null ? !next.has(rel) : !!forceValue;
+    if (shouldSelect) next.add(rel);
+    else next.delete(rel);
+    galleryState.selected = next;
+    updateGallerySelectionCount();
+    renderGalleryItems();
+  }
+
+  function clearGallerySelection(){
+    galleryState.selected = new Set();
+    updateGallerySelectionCount();
+    renderGalleryItems();
+  }
+
+  function selectVisibleGalleryItems(){
+    const next = new Set(galleryState.selected || []);
+    getVisibleGalleryItems().forEach(item=>{
+      if (item?.rel) next.add(item.rel);
+    });
+    galleryState.selected = next;
+    updateGallerySelectionCount();
+    renderGalleryItems();
+  }
+
+  function removeGallerySelection(rels){
+    if (!(galleryState.selected instanceof Set) || !rels || !rels.length) return;
+    const next = new Set(galleryState.selected);
+    rels.forEach(rel=> next.delete(rel));
+    galleryState.selected = next;
+    updateGallerySelectionCount();
+  }
+
+  function getDraggedGalleryRels(primaryRel){
+    const selected = getSelectedGalleryRels();
+    if (primaryRel && galleryState.selected?.has(primaryRel) && selected.length){
+      return selected;
+    }
+    return primaryRel ? [primaryRel] : [];
+  }
+
+  function setCheatsheetStatus(message){
+    const el = get(GALLERY.cheatStatus);
+    if (el) el.textContent = message || '';
+  }
+
+  function createCheatsheetChip(tag){
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'gallery-cheatsheet-chip';
+    chip.textContent = tag;
+    chip.addEventListener('click', ()=> addGlossaryTagToManualInput(tag));
+    return chip;
+  }
+
+  function renderCheatsheetPanel(){
+    const triggerEl = get(GALLERY.cheatTrigger);
+    const sectionsWrap = get(GALLERY.cheatSections);
+    const tagsWrap = get(GALLERY.cheatTags);
+    const contentEl = get(GALLERY.cheatContent);
+    const fileInput = get(GALLERY.cheatFile);
+    if (fileInput) fileInput.value = galleryState.cheatsheetFile || 'prompt.txt';
+    if (triggerEl){
+      if (galleryState.cheatsheetTrigger){
+        triggerEl.innerHTML = `<strong>Trigger:</strong> ${galleryState.cheatsheetTrigger}`;
+      } else {
+        triggerEl.textContent = 'Trigger word not detected.';
+      }
+    }
+    if (sectionsWrap){
+      sectionsWrap.innerHTML = '';
+      const sections = Array.isArray(galleryState.cheatsheetSections) ? galleryState.cheatsheetSections : [];
+      if (sections.length){
+        sections.forEach(section=>{
+          const card = document.createElement('div');
+          card.className = 'gallery-cheatsheet-section';
+
+          const head = document.createElement('div');
+          head.className = 'gallery-cheatsheet-section-head';
+          head.textContent = section.category || 'Unnamed';
+          card.appendChild(head);
+
+          const mainRow = document.createElement('div');
+          mainRow.className = 'gallery-cheatsheet-row';
+          const mainLabel = document.createElement('div');
+          mainLabel.className = 'gallery-cheatsheet-row-label';
+          mainLabel.textContent = 'Base';
+          mainRow.appendChild(mainLabel);
+          const mainTags = document.createElement('div');
+          mainTags.className = 'gallery-cheatsheet-tags';
+          (Array.isArray(section.tags) ? section.tags : []).forEach(tag=> mainTags.appendChild(createCheatsheetChip(tag)));
+          if (!mainTags.childElementCount){
+            const empty = document.createElement('div');
+            empty.className = 'gallery-glossary-empty';
+            empty.textContent = 'No base tags.';
+            mainTags.appendChild(empty);
+          }
+          mainRow.appendChild(mainTags);
+          card.appendChild(mainRow);
+
+          const conds = Array.isArray(section.conditionals) ? section.conditionals : [];
+          if (conds.length){
+            const condWrap = document.createElement('div');
+            condWrap.className = 'gallery-cheatsheet-cond-list';
+            conds.forEach((group, idx)=>{
+              const row = document.createElement('div');
+              row.className = 'gallery-cheatsheet-cond-item';
+              const label = document.createElement('div');
+              label.className = 'gallery-cheatsheet-row-label';
+              label.textContent = idx === 0 ? 'Cond' : `Cond ${idx + 1}`;
+              row.appendChild(label);
+              const chips = document.createElement('div');
+              chips.className = 'gallery-cheatsheet-tags';
+              (Array.isArray(group) ? group : []).forEach(tag=> chips.appendChild(createCheatsheetChip(tag)));
+              row.appendChild(chips);
+              condWrap.appendChild(row);
+            });
+            card.appendChild(condWrap);
+          }
+
+          sectionsWrap.appendChild(card);
+        });
+      } else {
+        const empty = document.createElement('div');
+        empty.className = 'gallery-glossary-empty';
+        empty.textContent = 'No category sections detected.';
+        sectionsWrap.appendChild(empty);
+      }
+    }
+    if (tagsWrap){
+      tagsWrap.innerHTML = '';
+      const tags = Array.isArray(galleryState.cheatsheetTags) ? galleryState.cheatsheetTags : [];
+      if (tags.length){
+        tags.forEach(tag=> tagsWrap.appendChild(createCheatsheetChip(tag)));
+      } else {
+        const empty = document.createElement('div');
+        empty.className = 'gallery-glossary-empty';
+        empty.textContent = 'No cheat sheet tags loaded.';
+        tagsWrap.appendChild(empty);
+      }
+    }
+    if (contentEl){
+      contentEl.textContent = galleryState.cheatsheetContent || 'Cheat sheet not loaded.';
+    }
+  }
+
+  async function loadCheatsheet(){
+    const root = getCheatsheetRoot();
+    const fileInput = get(GALLERY.cheatFile);
+    const rel = (fileInput?.value || galleryState.cheatsheetFile || 'prompt.txt').trim();
+    galleryState.cheatsheetFile = rel || 'prompt.txt';
+    try{ localStorage.setItem(GALLERY_CHEATSHEET_FILE_KEY, galleryState.cheatsheetFile); }catch(_){}
+    renderCheatsheetPanel();
+    if (!root){
+      galleryState.cheatsheetTrigger = '';
+      galleryState.cheatsheetSections = [];
+      galleryState.cheatsheetTags = [];
+      galleryState.cheatsheetContent = '';
+      renderCheatsheetPanel();
+      setCheatsheetStatus('Dataset folder not set.');
+      return;
+    }
+    if (!rel){
+      galleryState.cheatsheetTrigger = '';
+      galleryState.cheatsheetSections = [];
+      galleryState.cheatsheetTags = [];
+      galleryState.cheatsheetContent = '';
+      renderCheatsheetPanel();
+      setCheatsheetStatus('Enter a root-level .txt filename.');
+      return;
+    }
+    setCheatsheetStatus('Loading cheat sheet...');
+    try{
+      const res = await fetch('/api/tags/cheatsheet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folder: root, rel })
+      });
+      let data = null;
+      try{ data = await res.json(); }catch(_){}
+      if (!res.ok || !data || !data.ok){
+        const err = (data && data.error) ? data.error : `HTTP ${res.status}`;
+        galleryState.cheatsheetTrigger = '';
+        galleryState.cheatsheetSections = [];
+        galleryState.cheatsheetTags = [];
+        galleryState.cheatsheetContent = '';
+        renderCheatsheetPanel();
+        setCheatsheetStatus(err);
+        return;
+      }
+      galleryState.cheatsheetTrigger = String(data.trigger || '').trim();
+      galleryState.cheatsheetSections = Array.isArray(data.sections) ? data.sections : [];
+      galleryState.cheatsheetTags = Array.isArray(data.tags) ? data.tags : [];
+      galleryState.cheatsheetContent = String(data.content || '').trim();
+      renderCheatsheetPanel();
+      setCheatsheetStatus(`Loaded ${galleryState.cheatsheetSections.length} section(s) and ${galleryState.cheatsheetTags.length} tag(s) from the parent folder.`);
+    } catch (err) {
+      galleryState.cheatsheetTrigger = '';
+      galleryState.cheatsheetSections = [];
+      galleryState.cheatsheetTags = [];
+      galleryState.cheatsheetContent = '';
+      renderCheatsheetPanel();
+      setCheatsheetStatus(`Cheat sheet load failed: ${err && err.message ? err.message : 'Unknown error'}`);
+    }
+  }
+
+  function compareGalleryNames(a, b){
+    return String(a || '').localeCompare(String(b || ''), undefined, { numeric: true, sensitivity: 'base' });
+  }
+
+  function compareGalleryCreated(a, b){
+    const aTs = Number.isFinite(a) ? a : 0;
+    const bTs = Number.isFinite(b) ? b : 0;
+    if (aTs === bTs) return 0;
+    return aTs - bTs;
+  }
+
   function getSortedGalleryItems(){
     const items = galleryState.items || [];
-    if (!items.length || !tagVizState.selected.size) return items;
+    if (!items.length) return items;
     const selected = tagVizState.selected;
+    const sortMode = get(GALLERY.sort)?.value || galleryState.sort || 'match';
     return [...items].sort((a,b)=>{
       const sa = computeMatchScore(a.tags || [], selected);
       const sb = computeMatchScore(b.tags || [], selected);
-      if (sa === sb) return (a._idx || 0) - (b._idx || 0);
-      return sb - sa;
+      if (sortMode === 'match'){
+        if (sa !== sb) return sb - sa;
+        return compareGalleryNames(a.rel || a.name, b.rel || b.name) || ((a._idx || 0) - (b._idx || 0));
+      }
+      if (sortMode === 'name_asc'){
+        return compareGalleryNames(a.rel || a.name, b.rel || b.name) || ((a._idx || 0) - (b._idx || 0));
+      }
+      if (sortMode === 'name_desc'){
+        return compareGalleryNames(b.rel || b.name, a.rel || a.name) || ((a._idx || 0) - (b._idx || 0));
+      }
+      if (sortMode === 'created_asc'){
+        return compareGalleryCreated(a.created_ts, b.created_ts)
+          || compareGalleryNames(a.rel || a.name, b.rel || b.name)
+          || ((a._idx || 0) - (b._idx || 0));
+      }
+      if (sortMode === 'created_desc'){
+        return compareGalleryCreated(b.created_ts, a.created_ts)
+          || compareGalleryNames(a.rel || a.name, b.rel || b.name)
+          || ((a._idx || 0) - (b._idx || 0));
+      }
+      if (sa !== sb) return sb - sa;
+      return (a._idx || 0) - (b._idx || 0);
     });
   }
 
@@ -980,12 +1453,147 @@
     }
   }
 
+  function formatCreatedLabel(ts){
+    if (!Number.isFinite(ts) || ts <= 0) return '';
+    try{
+      return new Date(ts * 1000).toLocaleString();
+    }catch(_){
+      return '';
+    }
+  }
+
+  function getFolderCueLabel(item){
+    const parentRel = String(item?.parent_rel || '').replace(/\\/g, '/');
+    if (!parentRel || parentRel === '.'){
+      return '';
+    }
+    if (parentRel.toLowerCase() === '_temp'){
+      return '';
+    }
+    if (parentRel.toLowerCase().startsWith('_temp/')){
+      return parentRel.slice(6);
+    }
+    return parentRel;
+  }
+
+  function setGalleryManualStatus(message){
+    const el = get(GALLERY.modalAddStatus);
+    if (el) el.textContent = message || '';
+  }
+
+  function setGalleryManualDisabledReason(message=''){
+    const el = get(GALLERY.modalTempNote);
+    if (!el) return;
+    el.textContent = message || '';
+    el.classList.toggle('text-muted', !message);
+    el.classList.toggle('gallery-manual-note', true);
+    el.classList.toggle('is-warning', !!message);
+  }
+
+  function setGalleryManualControlsEnabled(enabled){
+    const input = get(GALLERY.modalAddInput);
+    const btn = get(GALLERY.modalAddBtn);
+    if (input) input.disabled = !enabled;
+    if (btn) btn.disabled = !enabled;
+  }
+
+  function addGlossaryTagToManualInput(rawTag){
+    const tag = normalizeDanbooruTag(rawTag);
+    const input = get(GALLERY.modalAddInput);
+    if (!tag || !input || input.disabled) return;
+    const current = splitTagList(input.value || '').map(normalizeDanbooruTag).filter(Boolean);
+    if (!current.includes(tag)) current.push(tag);
+    input.value = current.join(', ');
+    input.focus();
+    setGalleryManualStatus(`Prepared "${tag}" for insert.`);
+  }
+
+  function renderGalleryGlossaryQuick(){
+    const filter = get(GALLERY.modalGlossaryFilter);
+    const list = get(GALLERY.modalGlossaryList);
+    const searchInput = get(GALLERY.modalGlossarySearch);
+    const input = get(GALLERY.modalAddInput);
+    if (!filter || !list || !searchInput) return;
+
+    const names = glossaryCategoryNames();
+    const desired = galleryState.glossaryFilter || '__all__';
+    filter.innerHTML = '';
+    const allOpt = document.createElement('option');
+    allOpt.value = '__all__';
+    allOpt.textContent = 'All categories';
+    filter.appendChild(allOpt);
+    names.forEach(name=>{
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      filter.appendChild(opt);
+    });
+    filter.value = names.includes(desired) ? desired : '__all__';
+    galleryState.glossaryFilter = filter.value;
+    searchInput.value = galleryState.glossarySearch || '';
+
+    const categories = danbooruState.glossary.categories || {};
+    const search = (galleryState.glossarySearch || '').trim().toLowerCase();
+    const selectedFilter = filter.value || '__all__';
+    list.innerHTML = '';
+    let count = 0;
+    names.forEach(name=>{
+      if (selectedFilter !== '__all__' && name !== selectedFilter) return;
+      (categories[name] || []).forEach(tag=>{
+        const cleanTag = normalizeDanbooruTag(tag);
+        if (!cleanTag) return;
+        if (search && !cleanTag.toLowerCase().includes(search)) return;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'gallery-glossary-chip';
+        btn.textContent = cleanTag;
+        btn.title = `${name}: ${cleanTag}`;
+        btn.disabled = !!input?.disabled;
+        btn.addEventListener('click', ()=> addGlossaryTagToManualInput(cleanTag));
+        list.appendChild(btn);
+        count += 1;
+      });
+    });
+
+    if (!count){
+      const empty = document.createElement('div');
+      empty.className = 'gallery-glossary-empty';
+      empty.textContent = search
+        ? 'No glossary tags match this search.'
+        : 'No glossary tags available yet.';
+      list.appendChild(empty);
+    }
+  }
+
+  function resolveGalleryItem(rel){
+    if (!rel) return null;
+    return (galleryState.items || []).find(item => item.rel === rel) || null;
+  }
+
+  function renderGalleryModalSelectButton(item){
+    const btn = get(GALLERY.modalSelect);
+    if (!btn) return;
+    const isSelected = !!(item && galleryState.selected?.has(item.rel || ''));
+    btn.disabled = !item;
+    btn.textContent = isSelected ? 'Deselect' : 'Select';
+    btn.classList.toggle('is-selected', isSelected);
+    btn.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+  }
+
+  function toggleCurrentPreviewSelection(){
+    const item = resolveGalleryItem(galleryState.previewRel);
+    if (!item) return;
+    toggleGallerySelection(item.rel || '');
+    renderGalleryModalSelectButton(item);
+  }
+
   function renderGalleryItems(){
     const wrap = get(GALLERY.grid);
     const moreBtn = get(GALLERY.loadMore);
     if (!wrap) return;
     wrap.innerHTML = '';
     if (moreBtn) moreBtn.classList.add('d-none');
+    pruneGallerySelection();
     if (!galleryState.items || !galleryState.items.length){
       const empty = document.createElement('div');
       empty.className = 'gallery-empty';
@@ -1009,16 +1617,45 @@
     const visibleItems = items.slice(0, galleryState.visibleCount);
     visibleItems.forEach(item=>{
       const matchScore = computeMatchScore(item.tags || [], tagVizState.selected);
+      const isSelected = galleryState.selected?.has(item.rel || '');
+      const folderCue = getFolderCueLabel(item);
       const card = document.createElement('div');
       card.className = 'gallery-card';
       if (matchScore > 0) card.classList.add('is-match');
+      if (item.in_temp) card.classList.add('is-temp');
+      if (folderCue) card.classList.add('is-folder');
+      if (isSelected) card.classList.add('is-selected');
       card.draggable = true;
       card.addEventListener('dragstart', (e)=>{
-        const rel = item.rel || '';
-        e.dataTransfer.setData('application/x-bb-file', rel);
-        e.dataTransfer.setData('text/plain', `file:${rel}`);
+        const rels = getDraggedGalleryRels(item.rel || '');
+        const primaryRel = rels[0] || item.rel || '';
+        e.dataTransfer.setData('application/x-bb-files', JSON.stringify(rels));
+        e.dataTransfer.setData('application/x-bb-file', primaryRel);
+        e.dataTransfer.setData('text/plain', rels.map(rel => `file:${rel}`).join('\n'));
         e.dataTransfer.effectAllowed = 'move';
       });
+
+      const head = document.createElement('div');
+      head.className = 'gallery-card-head';
+      const selectLabel = document.createElement('label');
+      selectLabel.className = 'gallery-select';
+      const selectBox = document.createElement('input');
+      selectBox.type = 'checkbox';
+      selectBox.checked = !!isSelected;
+      selectBox.addEventListener('click', (e)=> e.stopPropagation());
+      selectBox.addEventListener('change', ()=> toggleGallerySelection(item.rel || '', selectBox.checked));
+      selectLabel.appendChild(selectBox);
+      const selectText = document.createElement('span');
+      selectText.textContent = 'Select';
+      selectLabel.appendChild(selectText);
+      head.appendChild(selectLabel);
+      const dragChip = document.createElement('span');
+      dragChip.className = 'gallery-drag-chip';
+      dragChip.textContent = isSelected && (galleryState.selected?.size || 0) > 1
+        ? `drag ${galleryState.selected.size}`
+        : 'drag';
+      head.appendChild(dragChip);
+      card.appendChild(head);
 
       const thumbBtn = document.createElement('button');
       thumbBtn.type = 'button';
@@ -1047,6 +1684,37 @@
       name.className = 'gallery-name';
       name.textContent = item.name || item.rel || '';
       card.appendChild(name);
+
+      const meta = document.createElement('div');
+      meta.className = 'gallery-meta';
+      const badges = document.createElement('div');
+      badges.className = 'gallery-badges';
+      if (item.in_temp){
+        const badge = document.createElement('span');
+        badge.className = 'gallery-state-badge is-temp';
+        badge.textContent = '_temp';
+        badges.appendChild(badge);
+      }
+      if (folderCue){
+        const badge = document.createElement('span');
+        badge.className = 'gallery-state-badge is-folder';
+        badge.textContent = 'folder';
+        badge.title = folderCue;
+        badges.appendChild(badge);
+      }
+      meta.appendChild(badges);
+      const created = document.createElement('span');
+      created.textContent = formatCreatedLabel(item.created_ts);
+      meta.appendChild(created);
+      card.appendChild(meta);
+
+      if (folderCue){
+        const folderDetail = document.createElement('div');
+        folderDetail.className = 'gallery-folder-detail';
+        folderDetail.textContent = `Folder: ${folderCue}`;
+        folderDetail.title = folderCue;
+        card.appendChild(folderDetail);
+      }
 
       if (item.rel && (item.rel.includes('/') || item.rel.includes('\\'))){
         const sub = document.createElement('div');
@@ -1130,6 +1798,7 @@
       }
       galleryState.items = data.images || [];
       galleryState.total = data.total || galleryState.items.length;
+      galleryState.sort = get(GALLERY.sort)?.value || galleryState.sort || 'match';
       galleryState.visibleCount = Math.min(galleryState.items.length, galleryState.pageSize);
       galleryState.items.forEach((item, idx)=>{
         if (item) item._idx = idx;
@@ -1253,6 +1922,8 @@
     const prevBtn = get(GALLERY.modalPrev);
     const nextBtn = get(GALLERY.modalNext);
     const idxEl = get(GALLERY.modalIndex);
+    const addInput = get(GALLERY.modalAddInput);
+    const tempNote = get(GALLERY.modalTempNote);
     if (!img || !name || !tags) return;
 
     const { items, item, index } = resolveGalleryPreviewCursor(preferredRel);
@@ -1269,6 +1940,12 @@
       name.textContent = 'No image selected.';
       fillGalleryTags(tags, [], false, 0);
       setGalleryPreviewError('');
+      if (addInput) addInput.value = '';
+      setGalleryManualDisabledReason('');
+      setGalleryManualStatus('');
+      setGalleryManualControlsEnabled(false);
+      renderGalleryGlossaryQuick();
+      renderGalleryModalSelectButton(null);
       return;
     }
 
@@ -1286,21 +1963,34 @@
     img.onerror = ()=> setGalleryPreviewError(`Failed to load preview: ${item.rel || item.name || 'file'}`);
     if (title) title.textContent = `Image preview (${index + 1}/${total})`;
     name.textContent = item.rel || item.name || '';
+    renderGalleryModalSelectButton(item);
+    if (addInput) addInput.value = '';
+    setGalleryManualStatus('');
+    setGalleryManualControlsEnabled(!!item.in_temp);
+    if (item.in_temp){
+      setGalleryManualDisabledReason('');
+      if (tempNote) tempNote.textContent = 'Adding and removing tags here edits the paired .txt inside _temp.';
+    } else {
+      setGalleryManualDisabledReason('Manual tag editing is disabled here because this image is outside _temp. Move it into _temp first.');
+    }
+    renderGalleryGlossaryQuick();
 
     const ctx = {
-      removable: true,
+      removable: !!item.in_temp,
       folder: root,
       rel: item.rel || '',
-      onRemoved: (updatedTags, info) => {
+      onRemoved: async (updatedTags, info) => {
         item.tags = Array.isArray(updatedTags) ? updatedTags : [];
+        item.has_txt = true;
         const srcItem = (galleryState.items || []).find(it => it.rel === item.rel);
         if (srcItem){
           srcItem.tags = [...item.tags];
           srcItem.tag_count = item.tags.length;
+          srcItem.has_txt = true;
         }
-        if (info && info.removed && info.tag) updateTagVizCount(info.tag, -1);
         fillGalleryTags(tags, item.tags || [], item.has_txt, 0, ctx);
         renderGalleryItems();
+        await scanTagViz();
       }
     };
     fillGalleryTags(tags, item.tags || [], item.has_txt, 0, ctx);
@@ -1313,6 +2003,50 @@
     setGalleryZoom(1);
     const modal = ensureGalleryPreviewModal();
     modal?.show();
+  }
+
+  async function handleGalleryManualAdd(){
+    const item = resolveGalleryItem(galleryState.previewRel);
+    if (!item){
+      setGalleryManualStatus('No image selected.');
+      return;
+    }
+    if (!item.in_temp){
+      setGalleryManualStatus('Manual tag editing is only available for items inside _temp.');
+      return;
+    }
+    const input = get(GALLERY.modalAddInput);
+    const raw = (input?.value || '').trim();
+    const tags = splitTagList(raw);
+    if (!tags.length){
+      setGalleryManualStatus('Enter at least one tag.');
+      return;
+    }
+    setGalleryManualStatus('Adding tags...');
+    setGalleryManualControlsEnabled(false);
+    const backup = !!get(IDS.backup)?.checked;
+    const result = await apiAddTags(galleryState.root || getGalleryRoot(), item.rel || '', raw, backup, true);
+    if (!result.ok){
+      setGalleryManualControlsEnabled(true);
+      setGalleryManualStatus(`Add failed: ${result.error || 'Unknown error'}`);
+      return;
+    }
+    const data = result.data || {};
+    item.tags = Array.isArray(data.tags) ? data.tags : [];
+    item.has_txt = true;
+    item.tag_count = item.tags.length;
+    const srcItem = resolveGalleryItem(item.rel || '');
+    if (srcItem){
+      srcItem.tags = [...item.tags];
+      srcItem.has_txt = true;
+      srcItem.tag_count = item.tags.length;
+    }
+    if (input) input.value = '';
+    setGalleryManualControlsEnabled(true);
+    setGalleryManualStatus(data.added && data.added.length ? `Added ${data.added.length} tag(s).` : 'No new tags added.');
+    renderGalleryPreviewModal(item.rel || '');
+    renderGalleryItems();
+    await scanTagViz();
   }
 
   function stepGalleryPreview(step){
@@ -1337,14 +2071,25 @@
   }
 
   function getDragPayload(e){
+    let fileRels = [];
+    const rawList = e.dataTransfer.getData('application/x-bb-files') || '';
+    if (rawList){
+      try{
+        const parsed = JSON.parse(rawList);
+        if (Array.isArray(parsed)){
+          fileRels = parsed.map(v => String(v || '').trim()).filter(Boolean);
+        }
+      }catch(_){}
+    }
     let fileRel = e.dataTransfer.getData('application/x-bb-file') || '';
     let dirRel = e.dataTransfer.getData('application/x-bb-dir') || '';
     if (!fileRel && !dirRel){
       const raw = e.dataTransfer.getData('text/plain') || '';
-      if (raw.startsWith('file:')) fileRel = raw.slice(5);
+      if (raw.startsWith('file:')) fileRel = raw.split(/\r?\n/, 1)[0].slice(5);
       else if (raw.startsWith('dir:')) dirRel = raw.slice(4);
     }
-    return { fileRel, dirRel };
+    if (!fileRels.length && fileRel) fileRels = [fileRel];
+    return { fileRel, fileRels, dirRel };
   }
 
   function setWorkdirPath(root){
@@ -1371,7 +2116,7 @@
     const res = await fetch('/api/tags/dirs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ folder: root, rel: rel || '', hide_temp: true })
+      body: JSON.stringify({ folder: root, rel: rel || '', hide_temp: false })
     });
     let data = null;
     try{ data = await res.json(); }catch(_){}
@@ -1450,8 +2195,8 @@
       e.preventDefault();
       row.classList.remove('is-drop');
       const payload = getDragPayload(e);
-      if (payload.fileRel){
-        moveFileToFolder(payload.fileRel, item.rel || '');
+      if (payload.fileRels && payload.fileRels.length){
+        moveFileToFolder(payload.fileRels, item.rel || '');
         return;
       }
       const srcRel = payload.dirRel;
@@ -1623,30 +2368,54 @@
     await loadWorkdirRoot();
   }
 
-  async function moveFileToFolder(fileRel, dstRel){
+  async function moveFileToFolder(fileRelOrList, dstRel){
     const root = getWorkdirRoot();
-    if (!root || !fileRel) return;
-    const cleaned = (fileRel || '').replace(/^_temp[\\/]/i, '');
-    const srcRel = `_temp/${cleaned}`.replace(/\\/g, '/');
-    setWorkdirStatus('Moving file...');
-    const res = await fetch('/api/tags/move-file', {
+    const srcRels = Array.isArray(fileRelOrList)
+      ? fileRelOrList.map(rel => String(rel || '').replace(/\\/g, '/')).filter(Boolean)
+      : [String(fileRelOrList || '').replace(/\\/g, '/')].filter(Boolean);
+    if (!root || !srcRels.length) return;
+    setWorkdirStatus(srcRels.length > 1 ? `Moving ${srcRels.length} files...` : 'Moving file...');
+    const endpoint = srcRels.length > 1 ? '/api/tags/move-files' : '/api/tags/move-file';
+    const body = srcRels.length > 1
+      ? { folder: root, srcs: srcRels, dst: dstRel || '' }
+      : { folder: root, src: srcRels[0], dst: dstRel || '' };
+    const res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ folder: root, src: srcRel, dst: dstRel || '' })
+      body: JSON.stringify(body)
     });
     let data = null;
     try{ data = await res.json(); }catch(_){}
-    if (!res.ok || !data || !data.ok){
+    if (!res.ok || !data){
       const err = (data && data.error) ? data.error : `HTTP ${res.status}`;
       setWorkdirStatus(`Move failed: ${err}`);
       return;
     }
-    const destRel = data.rel || (dstRel ? `${dstRel}/${cleaned}` : cleaned);
-    appendTagsLog(`Moved ${srcRel} -> ${destRel}`);
-    if (data.warnings && data.warnings.length){
-      data.warnings.forEach(warn => appendTagsLog(`[WARN] ${warn}`));
+
+    let movedItems = [];
+    let errors = [];
+    if (srcRels.length > 1){
+      movedItems = Array.isArray(data.moved) ? data.moved : [];
+      errors = Array.isArray(data.errors) ? data.errors : [];
+    } else if (data.ok) {
+      movedItems = [{ src: srcRels[0], rel: data.rel || srcRels[0], moved: !!data.moved, warnings: data.warnings || [] }];
+    } else {
+      errors = [{ src: srcRels[0], error: data.error || 'Unknown error' }];
     }
-    setWorkdirStatus(data.moved === false ? 'No move needed.' : 'File moved.');
+
+    movedItems.forEach(item=>{
+      appendTagsLog(`Moved ${item.src} -> ${item.rel || item.src}`);
+      (item.warnings || []).forEach(warn => appendTagsLog(`[WARN] ${warn}`));
+    });
+    if (errors.length){
+      errors.forEach(item => appendTagsLog(`[ERROR] ${item.src}: ${item.error}`));
+      setWorkdirStatus(movedItems.length
+        ? `Moved ${movedItems.length}/${srcRels.length} file(s).`
+        : `Move failed: ${errors[0]?.error || 'Unknown error'}`);
+    } else {
+      setWorkdirStatus(srcRels.length > 1 ? `Moved ${movedItems.length} file(s).` : (movedItems[0]?.moved === false ? 'No move needed.' : 'File moved.'));
+    }
+    removeGallerySelection(movedItems.map(item => item.src).filter(Boolean));
     await loadGallery();
     await loadWorkdirRoot();
   }
@@ -1673,6 +2442,73 @@
     }
     setWorkdirStatus(data.moved === false ? 'No move needed.' : 'Folder moved.');
     await loadWorkdirRoot();
+  }
+
+  async function returnAllTempToRoot(){
+    const root = getWorkdirRoot();
+    if (!root) return;
+    const confirmed = await showConfirm('Move every image from _temp back to dataset root?', 'Return all');
+    if (!confirmed) return;
+    setWorkdirStatus('Returning files from _temp...');
+    const res = await fetch('/api/tags/return-temp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ folder: root, exts: get(IDS.exts)?.value || '' })
+    });
+    let data = null;
+    try{ data = await res.json(); }catch(_){}
+    if (!res.ok || !data){
+      const err = (data && data.error) ? data.error : `HTTP ${res.status}`;
+      setWorkdirStatus(`Return failed: ${err}`);
+      return;
+    }
+
+    const movedItems = Array.isArray(data.moved) ? data.moved : [];
+    const errors = Array.isArray(data.errors) ? data.errors : [];
+    if (!movedItems.length && !errors.length){
+      setWorkdirStatus('_temp is already empty.');
+      await loadWorkdirRoot();
+      return;
+    }
+
+    movedItems.forEach(item=>{
+      appendTagsLog(`Moved ${item.src} -> ${item.rel || item.src}`);
+      (item.warnings || []).forEach(warn => appendTagsLog(`[WARN] ${warn}`));
+    });
+    errors.forEach(item => appendTagsLog(`[ERROR] ${item.src}: ${item.error}`));
+    removeGallerySelection(movedItems.map(item => item.src).filter(Boolean));
+    if (errors.length){
+      setWorkdirStatus(movedItems.length
+        ? `Returned ${movedItems.length}/${data.total || movedItems.length} file(s) from _temp.`
+        : `Return failed: ${errors[0]?.error || 'Unknown error'}`);
+    } else {
+      setWorkdirStatus(`Returned ${movedItems.length} file(s) from _temp.`);
+    }
+    await loadGallery();
+    await loadWorkdirRoot();
+  }
+
+  function bindWorkdirQuickDrop(elementId, dstRel){
+    const el = get(elementId);
+    if (!el) return;
+    el.addEventListener('dragover', (e)=>{
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      el.classList.add('is-active');
+    });
+    el.addEventListener('dragleave', ()=> el.classList.remove('is-active'));
+    el.addEventListener('drop', (e)=>{
+      e.preventDefault();
+      el.classList.remove('is-active');
+      const payload = getDragPayload(e);
+      if (payload.fileRels && payload.fileRels.length){
+        moveFileToFolder(payload.fileRels, dstRel);
+        return;
+      }
+      const srcRel = payload.dirRel;
+      if (!srcRel) return;
+      moveWorkdirFolder(srcRel, dstRel);
+    });
   }
 
   function updateTagSyncStatus(){
@@ -2390,6 +3226,7 @@
       filterSelect.value = prev === '__all__' || names.includes(prev) ? prev : '__all__';
       danbooruState.glossaryFilter = filterSelect.value;
     }
+    renderGalleryGlossaryQuick();
   }
 
   function renderGlossaryList(){
@@ -2458,6 +3295,7 @@
       empty.textContent = 'No starred tags yet.';
       wrap.appendChild(empty);
     }
+    renderGalleryGlossaryQuick();
   }
 
   function updateDanbooruActionState(){
@@ -3060,6 +3898,32 @@
     }
   }
 
+  async function apiAddTags(folder, rel, tags, backup=true, createMissingTxt=true){
+    const payload = {
+      folder,
+      rel,
+      tags,
+      backup: !!backup,
+      create_missing_txt: !!createMissingTxt
+    };
+    try{
+      const res = await fetch('/api/tags/tag-add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      let data = null;
+      try{ data = await res.json(); }catch(_){}
+      if (!res.ok || !data || !data.ok){
+        const err = (data && data.error) ? data.error : `HTTP ${res.status}`;
+        return { ok: false, error: err };
+      }
+      return { ok: true, data };
+    } catch (err) {
+      return { ok: false, error: err && err.message ? err.message : 'Request failed' };
+    }
+  }
+
   // Build proper params:
   // - always send base folder; server derives temp path from folder
   function finalizeFormDataForMode(fd){
@@ -3212,8 +4076,17 @@
     try{
       uiState.sidebarExpanded = localStorage.getItem('bb.tags.sidebar.expanded') === '1';
     }catch(_){}
+    try{
+      galleryState.cheatsheetFile = localStorage.getItem(GALLERY_CHEATSHEET_FILE_KEY) || 'prompt.txt';
+    }catch(_){
+      galleryState.cheatsheetFile = 'prompt.txt';
+    }
     applySidebarExpanded(uiState.sidebarExpanded);
+    galleryState.sort = get(GALLERY.sort)?.value || 'match';
+    updateGallerySelectionCount();
     setGalleryPath(getGalleryRoot());
+    renderCheatsheetPanel();
+    loadCheatsheet();
     loadGallery();
     setWorkdirPath(getWorkdirRoot());
     loadWorkdirRoot();
@@ -3291,10 +4164,23 @@
       );
       renderGalleryItems();
     });
+    get(GALLERY.selectVisible)?.addEventListener('click', selectVisibleGalleryItems);
+    get(GALLERY.clearSelection)?.addEventListener('click', clearGallerySelection);
     get(GALLERY.recursive)?.addEventListener('change', loadGallery);
     get(GALLERY.limit)?.addEventListener('change', loadGallery);
+    get(GALLERY.sort)?.addEventListener('change', ()=>{
+      galleryState.sort = get(GALLERY.sort)?.value || 'match';
+      renderGalleryItems();
+      if (isGalleryPreviewOpen()) renderGalleryPreviewModal();
+    });
     get(IDS.exts)?.addEventListener('change', scheduleGalleryRefresh);
     get(GALLERY.drop)?.addEventListener('click', ()=> get(GALLERY.input)?.click());
+    get(GALLERY.cheatLoad)?.addEventListener('click', loadCheatsheet);
+    get(GALLERY.cheatFile)?.addEventListener('keydown', (e)=>{
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      loadCheatsheet();
+    });
     get(GALLERY.input)?.addEventListener('change', (e)=>{
       uploadGalleryFiles(e.target.files);
       e.target.value = '';
@@ -3315,6 +4201,27 @@
     get(GALLERY.zoomIn)?.addEventListener('click', ()=> setGalleryZoom(galleryState.zoom + 0.2));
     get(GALLERY.zoomOut)?.addEventListener('click', ()=> setGalleryZoom(galleryState.zoom - 0.2));
     get(GALLERY.zoomReset)?.addEventListener('click', ()=> setGalleryZoom(1));
+    get(GALLERY.modalSelect)?.addEventListener('click', toggleCurrentPreviewSelection);
+    get(GALLERY.modalAddBtn)?.addEventListener('click', handleGalleryManualAdd);
+    get(GALLERY.modalAddInput)?.addEventListener('keydown', (e)=>{
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      handleGalleryManualAdd();
+    });
+    get(GALLERY.modalGlossarySearch)?.addEventListener('input', (e)=>{
+      galleryState.glossarySearch = e.target.value || '';
+      renderGalleryGlossaryQuick();
+    });
+    get(GALLERY.modalGlossaryFilter)?.addEventListener('change', (e)=>{
+      galleryState.glossaryFilter = e.target.value || '__all__';
+      renderGalleryGlossaryQuick();
+    });
+    get(GALLERY.modalGlossaryClear)?.addEventListener('click', ()=>{
+      galleryState.glossarySearch = '';
+      galleryState.glossaryFilter = '__all__';
+      renderGalleryGlossaryQuick();
+    });
+    get(GALLERY.modalGlossaryOpen)?.addEventListener('click', ()=> openDanbooruOffcanvas('glossary', true));
     get(GALLERY.modalPrev)?.addEventListener('click', ()=> stepGalleryPreview(-1));
     get(GALLERY.modalNext)?.addEventListener('click', ()=> stepGalleryPreview(1));
     get(GALLERY.modalImg)?.addEventListener('wheel', (e)=>{
@@ -3324,6 +4231,7 @@
     }, { passive: false });
     get(GALLERY.modal)?.addEventListener('hidden.bs.modal', ()=>{
       setGalleryPreviewError('');
+      setGalleryManualStatus('');
       galleryState.previewRel = '';
       galleryState.previewIndex = -1;
     });
@@ -3338,6 +4246,9 @@
       } else if (e.key === 'ArrowRight'){
         e.preventDefault();
         stepGalleryPreview(1);
+      } else if (e.key.toLowerCase() === 's'){
+        e.preventDefault();
+        toggleCurrentPreviewSelection();
       }
     });
     get(WORKDIR.refresh)?.addEventListener('click', loadWorkdirRoot);
@@ -3349,26 +4260,9 @@
         createWorkdirFolder();
       }
     });
-    get(WORKDIR.rootDrop)?.addEventListener('dragover', (e)=>{
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      get(WORKDIR.rootDrop)?.classList.add('is-active');
-    });
-    get(WORKDIR.rootDrop)?.addEventListener('dragleave', ()=>{
-      get(WORKDIR.rootDrop)?.classList.remove('is-active');
-    });
-    get(WORKDIR.rootDrop)?.addEventListener('drop', (e)=>{
-      e.preventDefault();
-      get(WORKDIR.rootDrop)?.classList.remove('is-active');
-      const payload = getDragPayload(e);
-      if (payload.fileRel){
-        moveFileToFolder(payload.fileRel, '');
-        return;
-      }
-      const srcRel = payload.dirRel;
-      if (!srcRel) return;
-      moveWorkdirFolder(srcRel, '');
-    });
+    bindWorkdirQuickDrop(WORKDIR.rootDrop, '');
+    bindWorkdirQuickDrop(WORKDIR.tempDrop, '_temp');
+    get(WORKDIR.returnTemp)?.addEventListener('click', returnAllTempToRoot);
     get(IDS.tags)?.addEventListener('input', ()=>{
       if (tagsSyncLocked) return;
       const raw = (get(IDS.tags)?.value || '').trim();
@@ -3434,6 +4328,7 @@
         }
       }
       refreshTempHints();
+      loadCheatsheet();
       scheduleGalleryRefresh();
       scheduleWorkdirRefresh();
     };

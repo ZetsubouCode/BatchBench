@@ -72,6 +72,7 @@ def _read_tags_cached(txt_path: Path) -> List[str]:
 def _invalidate_cache(txt_path: Path):
     _TXT_TAG_CACHE.pop(str(txt_path), None)
 
+
 def _normalize_exts(exts: List[str]) -> Set[str]:
     out: Set[str] = set()
     for raw in exts or []:
@@ -158,6 +159,46 @@ def _move_pair_transaction(
             message = f"{message} | rollback issues: {'; '.join(rollback_errors)}"
         return False, message
 
+
+def _created_ts(path: Path) -> float:
+    try:
+        return float(path.stat().st_ctime)
+    except Exception:
+        return 0.0
+
+
+def _is_temp_relative(rel: Path) -> bool:
+    parts = rel.parts
+    return bool(parts) and parts[0].lower() == "_temp"
+
+
+def _serialize_image_item(root_folder: Path, img: Path, tag_limit: int) -> dict:
+    txt = img.with_suffix(".txt")
+    tags: List[str] = []
+    has_txt = False
+    if txt.exists():
+        has_txt = True
+        tags = _read_tags_cached(txt)
+    tag_count = len(tags)
+    if tag_limit > 0 and len(tags) > tag_limit:
+        tags = tags[:tag_limit]
+
+    rel_path = img.relative_to(root_folder)
+    rel = rel_path.as_posix()
+    parent_rel = rel_path.parent.as_posix() if rel_path.parent != Path(".") else ""
+    return {
+        "name": img.name,
+        "rel": rel,
+        "parent_rel": parent_rel,
+        "tags": tags,
+        "tag_count": tag_count,
+        "tags_truncated": tag_count > len(tags),
+        "has_txt": has_txt,
+        "in_temp": _is_temp_relative(rel_path),
+        "created_ts": _created_ts(img),
+    }
+
+
 def scan_tags(folder: Path, exts: List[str], recursive: bool = False) -> dict:
     if not folder or not folder.exists() or not folder.is_dir():
         return {"ok": False, "error": f"Folder not found: {folder}"}
@@ -197,40 +238,71 @@ def list_images_with_tags(
     if not folder or not folder.exists() or not folder.is_dir():
         return {"ok": False, "error": f"Folder not found: {folder}"}
 
-    exclude_dir = None
-    if recursive and folder.name.lower() != "_temp":
-        temp = folder / "_temp"
-        if temp.exists():
-            exclude_dir = temp
-    images = _list_images(folder, exts, recursive=recursive, exclude_dir=exclude_dir)
+    images = _list_images(folder, exts, recursive=recursive, exclude_dir=None)
     total = len(images)
     if limit and limit > 0:
         images = images[:limit]
 
-    items = []
-    for img in images:
-        txt = img.with_suffix(".txt")
-        tags: List[str] = []
-        has_txt = False
-        if txt.exists():
-            has_txt = True
-            tags = _read_tags_cached(txt)
-        tag_count = len(tags)
-        if tag_limit > 0 and len(tags) > tag_limit:
-            tags = tags[:tag_limit]
-        rel = img.relative_to(folder).as_posix()
-        items.append(
-            {
-                "name": img.name,
-                "rel": rel,
-                "tags": tags,
-                "tag_count": tag_count,
-                "tags_truncated": tag_count > len(tags),
-                "has_txt": has_txt,
-            }
-        )
+    items = [_serialize_image_item(folder, img, tag_limit) for img in images]
 
     return {"ok": True, "folder": str(folder), "total": total, "images": items}
+
+
+def add_tags(
+    txt_path: Path,
+    raw_tags: List[str],
+    backup: bool = True,
+    create_missing_txt: bool = False,
+) -> dict:
+    tags_to_add = _dedup_tags(raw_tags or [])
+    if not tags_to_add:
+        return {"ok": False, "error": "No tags provided"}
+
+    had_txt = txt_path.exists()
+    src = ""
+    current_tags: List[str] = []
+    if had_txt:
+        try:
+            src, _, _ = read_text_best_effort(txt_path)
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+        current_tags = _normalize_tags(parse_tag_list(src, dedupe=False), dedupe=False)
+    elif not create_missing_txt:
+        return {"ok": False, "error": "Missing .txt"}
+
+    next_tags = list(current_tags)
+    added: List[str] = []
+    for tag in tags_to_add:
+        if tag in next_tags:
+            continue
+        next_tags.append(tag)
+        added.append(tag)
+
+    if not had_txt and not next_tags:
+        return {"ok": False, "error": "No tags to write"}
+
+    content = join_tags(next_tags)
+    changed = (not had_txt) or (content.strip() != src.strip())
+    if changed:
+        if backup and had_txt:
+            try:
+                txt_path.with_suffix(txt_path.suffix + ".bak").write_text(src, encoding="utf-8")
+            except Exception as exc:
+                return {"ok": False, "error": str(exc)}
+        try:
+            txt_path.write_text(content, encoding="utf-8")
+            _invalidate_cache(txt_path)
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    return {
+        "ok": True,
+        "created": not had_txt,
+        "changed": changed,
+        "added": added,
+        "tags": next_tags,
+    }
+
 
 def remove_tag(txt_path: Path, tag: str, backup: bool = True) -> dict:
     if not txt_path or not txt_path.exists() or not txt_path.is_file():

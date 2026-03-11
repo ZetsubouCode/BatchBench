@@ -130,6 +130,170 @@ def _safe_child_or_root(root: Path, rel: str) -> Optional[Path]:
     return _safe_child(root, rel)
 
 
+def _rel_to_root(root: Path, path: Path) -> str:
+    try:
+        return path.resolve().relative_to(root.resolve()).as_posix()
+    except Exception:
+        try:
+            return path.relative_to(root).as_posix()
+        except Exception:
+            return str(path)
+
+
+def _parse_cheatsheet_content(content: str) -> Dict[str, Any]:
+    raw_lines = str(content or "").replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    lines = [line.strip() for line in raw_lines]
+    trigger = ""
+    sections: List[Dict[str, Any]] = []
+    all_tags: List[str] = []
+
+    def _extend_unique(items: List[str]):
+        for item in items:
+            if item and item not in all_tags:
+                all_tags.append(item)
+
+    idx = 0
+    while idx < len(lines) and not lines[idx]:
+        idx += 1
+    if idx < len(lines) and ":" not in lines[idx]:
+        trigger = lines[idx]
+        idx += 1
+
+    current: Optional[Dict[str, Any]] = None
+    while idx < len(lines):
+        line = lines[idx]
+        idx += 1
+        if not line:
+            continue
+        if ":" in line:
+            left, right = line.split(":", 1)
+            category = left.strip()
+            if category:
+                base_tags = parse_tag_list(right or "")
+                current = {
+                    "category": category,
+                    "tags": base_tags,
+                    "conditionals": [],
+                }
+                sections.append(current)
+                _extend_unique(base_tags)
+                continue
+        conditional_tags = parse_tag_list(line)
+        if current and conditional_tags:
+            current["conditionals"].append(conditional_tags)
+            _extend_unique(conditional_tags)
+        elif conditional_tags:
+            _extend_unique(conditional_tags)
+
+    return {
+        "trigger": trigger,
+        "sections": sections,
+        "tags": all_tags,
+    }
+
+
+def _move_file_with_sidecars(root: Path, src_rel: str, dst_rel: str) -> Tuple[Dict[str, Any], int]:
+    src = _safe_child(root, src_rel)
+    dst_parent = _safe_child_or_root(root, dst_rel)
+    if not src or not src.exists() or not src.is_file():
+        return {"ok": False, "error": "Source file not found"}, 404
+    if not dst_parent or not dst_parent.exists() or not dst_parent.is_dir():
+        return {"ok": False, "error": "Target folder not found"}, 404
+
+    try:
+        src_parent_res = src.parent.resolve()
+        dst_parent_res = dst_parent.resolve()
+    except Exception:
+        return {"ok": False, "error": "Path resolution failed"}, 400
+
+    if dst_parent_res == src_parent_res:
+        return {"ok": True, "moved": False, "rel": src_rel, "warnings": []}, 200
+
+    src_txt = src.with_suffix(".txt")
+    src_txt_bak = Path(str(src_txt) + ".bak")
+    src_bak = src.with_suffix(".bak")
+    src_img_bak = Path(str(src) + ".bak")
+
+    sidecars = []
+    warnings = []
+    if src_txt.exists():
+        sidecars.append((src_txt, ".txt"))
+    else:
+        warnings.append(f"Missing sidecar: {src_txt.name}")
+    if src_txt_bak.exists():
+        sidecars.append((src_txt_bak, ".txt.bak"))
+    if src_bak.exists():
+        sidecars.append((src_bak, ".bak"))
+    if src_img_bak.exists() and src_img_bak != src_bak:
+        sidecars.append((src_img_bak, f"{src.suffix}.bak"))
+
+    stem = src.stem
+    suffix = src.suffix
+    bump = 1
+    while True:
+        candidate_stem = stem if bump == 1 else f"{stem}_{bump-1}"
+        dest_img = dst_parent / f"{candidate_stem}{suffix}"
+        conflicts = dest_img.exists()
+        if not conflicts:
+            for _, dest_suffix in sidecars:
+                if (dst_parent / f"{candidate_stem}{dest_suffix}").exists():
+                    conflicts = True
+                    break
+        if not conflicts:
+            break
+        bump += 1
+
+    moved_pairs = []
+    try:
+        move_plan = [(src, dest_img)]
+        for src_path, dest_suffix in sidecars:
+            move_plan.append((src_path, dst_parent / f"{dest_img.stem}{dest_suffix}"))
+
+        for src_path, dest_path in move_plan:
+            shutil.move(str(src_path), str(dest_path))
+            moved_pairs.append((src_path, dest_path))
+    except Exception as exc:
+        rollback_errors = []
+        for src_path, dest_path in reversed(moved_pairs):
+            try:
+                if dest_path.exists() and not src_path.exists():
+                    shutil.move(str(dest_path), str(src_path))
+            except Exception as rb_exc:
+                rollback_errors.append(f"{dest_path.name}: {rb_exc}")
+        error_msg = str(exc)
+        if rollback_errors:
+            error_msg = f"{error_msg} | rollback errors: {'; '.join(rollback_errors)}"
+        return {"ok": False, "error": error_msg}, 500
+    except BaseException:
+        raise
+
+    return {
+        "ok": True,
+        "moved": True,
+        "rel": _rel_to_root(root, dest_img),
+        "warnings": warnings,
+    }, 200
+
+
+def _remove_empty_dirs(root: Path, keep: Optional[Path] = None) -> None:
+    if not root.exists() or not root.is_dir():
+        return
+    try:
+        keep_res = keep.resolve() if keep else None
+    except Exception:
+        keep_res = None
+    for path in sorted((p for p in root.rglob("*") if p.is_dir()), key=lambda p: len(p.parts), reverse=True):
+        try:
+            if keep_res and path.resolve() == keep_res:
+                continue
+        except Exception:
+            pass
+        try:
+            path.rmdir()
+        except OSError:
+            continue
+
+
 def _bad_rel(rel: str) -> bool:
     rel_norm = str(rel).replace("\\", "/")
     parts = [p for p in Path(rel_norm).parts if p not in ("", ".", "./", ".\\")]
@@ -350,10 +514,90 @@ def api_tags_tag_remove():
     return jsonify(
         {
             "ok": True,
-            "rel": target.relative_to(root).as_posix(),
+            "rel": _rel_to_root(root, target),
             "tag": tag,
             "removed": bool(result.get("removed")),
             "tags": result.get("tags") or [],
+        }
+    )
+
+
+@app.post("/api/tags/tag-add")
+def api_tags_tag_add():
+    payload = request.get_json(silent=True) or {}
+    folder = (payload.get("folder") or "").strip()
+    rel = (payload.get("rel") or "").strip()
+    raw_tags = payload.get("tags")
+    backup = _parse_bool(payload.get("backup"), True)
+    create_missing_txt = _parse_bool(payload.get("create_missing_txt"), True)
+    if not folder or not rel:
+        return jsonify({"ok": False, "error": "folder and rel are required"}), 400
+    if _bad_rel(rel):
+        return jsonify({"ok": False, "error": "Invalid path"}), 400
+    root = readable_path(folder)
+    if not root.exists() or not root.is_dir():
+        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
+    target = _safe_child(root, rel)
+    if not target or not target.exists() or not target.is_file():
+        return jsonify({"ok": False, "error": "File not found"}), 404
+    txt_path = target if target.suffix.lower() == ".txt" else target.with_suffix(".txt")
+
+    tags = parse_tag_list(raw_tags) if raw_tags is not None else []
+    result = tag_editor.add_tags(
+        txt_path,
+        tags,
+        backup=backup,
+        create_missing_txt=create_missing_txt,
+    )
+    if not result.get("ok"):
+        return jsonify({"ok": False, "error": result.get("error") or "Add failed"}), 400
+    return jsonify(
+        {
+            "ok": True,
+            "rel": _rel_to_root(root, target),
+            "tags": result.get("tags") or [],
+            "added": result.get("added") or [],
+            "created": bool(result.get("created")),
+            "changed": bool(result.get("changed")),
+        }
+    )
+
+
+@app.post("/api/tags/cheatsheet")
+def api_tags_cheatsheet():
+    payload = request.get_json(silent=True) or {}
+    folder = (payload.get("folder") or "").strip()
+    rel = (payload.get("rel") or "").strip()
+    if not folder or not rel:
+        return jsonify({"ok": False, "error": "folder and rel are required"}), 400
+    if _bad_rel(rel):
+        return jsonify({"ok": False, "error": "Invalid path"}), 400
+    root = readable_path(folder)
+    if not root.exists() or not root.is_dir():
+        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
+    target = _safe_child(root, rel)
+    if not target or not target.exists() or not target.is_file():
+        return jsonify({"ok": False, "error": "Cheat sheet file not found"}), 404
+    if target.suffix.lower() != ".txt":
+        return jsonify({"ok": False, "error": "Cheat sheet must be a .txt file"}), 400
+    try:
+        content = target.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        try:
+            content = target.read_text(encoding="utf-8-sig")
+        except Exception as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 500
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    parsed = _parse_cheatsheet_content(content)
+    return jsonify(
+        {
+            "ok": True,
+            "rel": _rel_to_root(root, target),
+            "content": content,
+            "trigger": parsed.get("trigger") or "",
+            "sections": parsed.get("sections") or [],
+            "tags": parsed.get("tags") or [],
         }
     )
 
@@ -431,12 +675,12 @@ def api_blur_brush_apply():
     backup_rel = ""
     if isinstance(saved_path, Path):
         try:
-            saved_rel = saved_path.relative_to(root).as_posix()
+            saved_rel = _rel_to_root(root, saved_path)
         except Exception:
             saved_rel = str(saved_path)
     if isinstance(backup_path, Path):
         try:
-            backup_rel = backup_path.relative_to(root).as_posix()
+            backup_rel = _rel_to_root(root, backup_path)
         except Exception:
             backup_rel = str(backup_path)
 
@@ -593,7 +837,7 @@ def api_tags_dirs():
                 has_children = any(p.is_dir() for p in d.iterdir())
             except Exception:
                 has_children = False
-            dirs.append({"name": d.name, "rel": d.relative_to(root).as_posix(), "has_children": has_children})
+            dirs.append({"name": d.name, "rel": _rel_to_root(root, d), "has_children": has_children})
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500
     return jsonify({"ok": True, "root": str(root), "rel": rel, "dirs": dirs})
@@ -620,7 +864,7 @@ def api_tags_mkdir():
         target.mkdir(parents=True, exist_ok=False)
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500
-    return jsonify({"ok": True, "rel": target.relative_to(root).as_posix()})
+    return jsonify({"ok": True, "rel": _rel_to_root(root, target)})
 
 
 @app.post("/api/tags/rmdir")
@@ -700,7 +944,7 @@ def api_tags_move():
         shutil.move(str(src), str(target))
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500
-    return jsonify({"ok": True, "moved": True, "rel": target.relative_to(root).as_posix()})
+    return jsonify({"ok": True, "moved": True, "rel": _rel_to_root(root, target)})
 
 
 @app.post("/api/tags/move-file")
@@ -716,89 +960,111 @@ def api_tags_move_file():
     root = readable_path(folder)
     if not root.exists() or not root.is_dir():
         return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
+    result, code = _move_file_with_sidecars(root, src_rel, dst_rel)
+    return jsonify(result), code
 
-    src = _safe_child(root, src_rel)
-    dst_parent = _safe_child_or_root(root, dst_rel)
-    if not src or not src.exists() or not src.is_file():
-        return jsonify({"ok": False, "error": "Source file not found"}), 404
-    if not dst_parent or not dst_parent.exists() or not dst_parent.is_dir():
-        return jsonify({"ok": False, "error": "Target folder not found"}), 404
+@app.post("/api/tags/move-files")
+def api_tags_move_files():
+    payload = request.get_json(silent=True) or {}
+    folder = (payload.get("folder") or "").strip()
+    dst_rel = (payload.get("dst") or "").strip()
+    srcs_raw = payload.get("srcs")
+    if not folder:
+        return jsonify({"ok": False, "error": "folder is required"}), 400
+    if _bad_rel(dst_rel):
+        return jsonify({"ok": False, "error": "Invalid path"}), 400
+    if not isinstance(srcs_raw, list) or not srcs_raw:
+        return jsonify({"ok": False, "error": "srcs must be a non-empty list"}), 400
+    srcs = []
+    seen = set()
+    for raw in srcs_raw:
+        src_rel = (str(raw or "")).strip()
+        if not src_rel or src_rel in seen:
+            continue
+        if _bad_rel(src_rel):
+            return jsonify({"ok": False, "error": f"Invalid path: {src_rel}"}), 400
+        seen.add(src_rel)
+        srcs.append(src_rel)
+    if not srcs:
+        return jsonify({"ok": False, "error": "No valid source files provided"}), 400
+    root = readable_path(folder)
+    if not root.exists() or not root.is_dir():
+        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
 
-    try:
-        src_parent_res = src.parent.resolve()
-        dst_parent_res = dst_parent.resolve()
-    except Exception:
-        return jsonify({"ok": False, "error": "Path resolution failed"}), 400
-
-    if dst_parent_res == src_parent_res:
-        return jsonify({"ok": True, "moved": False, "rel": src_rel})
-
-    src_txt = src.with_suffix(".txt")
-    src_txt_bak = Path(str(src_txt) + ".bak")
-    src_bak = src.with_suffix(".bak")
-    src_img_bak = Path(str(src) + ".bak")
-
-    sidecars = []
-    warnings = []
-    if src_txt.exists():
-        sidecars.append((src_txt, ".txt"))
-    else:
-        warnings.append(f"Missing sidecar: {src_txt.name}")
-    if src_txt_bak.exists():
-        sidecars.append((src_txt_bak, ".txt.bak"))
-    if src_bak.exists():
-        sidecars.append((src_bak, ".bak"))
-    if src_img_bak.exists() and src_img_bak != src_bak:
-        sidecars.append((src_img_bak, f"{src.suffix}.bak"))
-
-    stem = src.stem
-    suffix = src.suffix
-    bump = 1
-    while True:
-        candidate_stem = stem if bump == 1 else f"{stem}_{bump-1}"
-        dest_img = dst_parent / f"{candidate_stem}{suffix}"
-        conflicts = dest_img.exists()
-        if not conflicts:
-            for _, dest_suffix in sidecars:
-                if (dst_parent / f"{candidate_stem}{dest_suffix}").exists():
-                    conflicts = True
-                    break
-        if not conflicts:
-            break
-        bump += 1
-
-    moved_pairs = []
-    try:
-        # Move image + sidecars as one transaction; rollback on failure.
-        move_plan = [(src, dest_img)]
-        for src_path, dest_suffix in sidecars:
-            move_plan.append((src_path, dst_parent / f"{dest_img.stem}{dest_suffix}"))
-
-        for src_path, dest_path in move_plan:
-            shutil.move(str(src_path), str(dest_path))
-            moved_pairs.append((src_path, dest_path))
-    except Exception as exc:
-        rollback_errors = []
-        for src_path, dest_path in reversed(moved_pairs):
-            try:
-                if dest_path.exists() and not src_path.exists():
-                    shutil.move(str(dest_path), str(src_path))
-            except Exception as rb_exc:
-                rollback_errors.append(f"{dest_path.name}: {rb_exc}")
-        error_msg = str(exc)
-        if rollback_errors:
-            error_msg = f"{error_msg} | rollback errors: {'; '.join(rollback_errors)}"
-        return jsonify({"ok": False, "error": error_msg}), 500
-    except BaseException:
-        # Keep default exception chain for non-Exception errors.
-        raise
+    moved = []
+    errors = []
+    for src_rel in srcs:
+        result, code = _move_file_with_sidecars(root, src_rel, dst_rel)
+        if code == 200 and result.get("ok"):
+            moved.append(
+                {
+                    "src": src_rel,
+                    "rel": result.get("rel") or src_rel,
+                    "moved": bool(result.get("moved")),
+                    "warnings": result.get("warnings") or [],
+                }
+            )
+        else:
+            errors.append({"src": src_rel, "error": result.get("error") or f"HTTP {code}"})
 
     return jsonify(
         {
-            "ok": True,
-            "moved": True,
-            "rel": dest_img.relative_to(root).as_posix(),
-            "warnings": warnings,
+            "ok": len(errors) == 0,
+            "moved": moved,
+            "errors": errors,
+        }
+    )
+
+
+@app.post("/api/tags/return-temp")
+def api_tags_return_temp():
+    payload = request.get_json(silent=True) or {}
+    folder = (payload.get("folder") or "").strip()
+    if not folder:
+        return jsonify({"ok": False, "error": "folder is required"}), 400
+    root = readable_path(folder)
+    if not root.exists() or not root.is_dir():
+        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
+
+    temp_dir = root / "_temp"
+    if not temp_dir.exists() or not temp_dir.is_dir():
+        return jsonify({"ok": False, "error": "_temp folder not found"}), 404
+
+    exts = _parse_exts(payload.get("exts"))
+    extset = {ext.lower() for ext in exts or []}
+    temp_images: List[Path] = []
+    for path in temp_dir.rglob("*"):
+        if not path.is_file():
+            continue
+        if extset and path.suffix.lower() not in extset:
+            continue
+        temp_images.append(path)
+    temp_images.sort(key=lambda p: _rel_to_root(root, p).lower())
+
+    moved = []
+    errors = []
+    for path in temp_images:
+        src_rel = _rel_to_root(root, path)
+        result, code = _move_file_with_sidecars(root, src_rel, "")
+        if code == 200 and result.get("ok"):
+            moved.append(
+                {
+                    "src": src_rel,
+                    "rel": result.get("rel") or src_rel,
+                    "moved": bool(result.get("moved", True)),
+                    "warnings": result.get("warnings") or [],
+                }
+            )
+        else:
+            errors.append({"src": src_rel, "error": result.get("error") or f"HTTP {code}"})
+
+    _remove_empty_dirs(temp_dir, keep=temp_dir)
+    return jsonify(
+        {
+            "ok": len(errors) == 0,
+            "moved": moved,
+            "errors": errors,
+            "total": len(temp_images),
         }
     )
 
@@ -973,7 +1239,7 @@ def api_pipeline_open_path():
 # -------- Main page (dispatch via registry) --------
 @app.route("/", methods=["GET", "POST"])
 def index():
-    active_tab = request.values.get("tab", "webp")
+    active_tab = request.values.get("tab", "guide")
     log = ""
 
     is_ajax = request.headers.get("X-Requested-With", "").lower() in ("xmlhttprequest", "fetch")

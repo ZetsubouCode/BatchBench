@@ -1,26 +1,31 @@
 {% extends "base.html" %}
 {% block content %}
-  {% set tab = active_tab or 'webp' %}
+  {% set tab = active_tab or 'guide' %}
 
   <ul class="nav nav-tabs mb-3" role="tablist">
-    <li class="nav-item"><button class="nav-link {{ 'active' if tab=='webp' }}" data-bs-toggle="tab" data-bs-target="#tab-webp" type="button">Image -> PNG Converter</button></li>
-    <li class="nav-item"><button class="nav-link {{ 'active' if tab=='batch' }}" data-bs-toggle="tab" data-bs-target="#tab-batch" type="button">Photo Adjust (preset)</button></li>
-    <li class="nav-item"><button class="nav-link {{ 'active' if tab=='tags' }}" data-bs-toggle="tab" data-bs-target="#tab-tags" type="button">Dataset Tag Editor</button></li>
-    <li class="nav-item"><button class="nav-link {{ 'active' if tab=='offline_tagger' }}" data-bs-toggle="tab" data-bs-target="#tab-offline-tagger" type="button">Offline Tagger (WD v3)</button></li>
-    <li class="nav-item"><button class="nav-link {{ 'active' if tab=='normalize' }}" data-bs-toggle="tab" data-bs-target="#tab-normalize" type="button">Dataset Normalization</button></li>
-    <li class="nav-item"><button class="nav-link {{ 'active' if tab=='combine' }}" data-bs-toggle="tab" data-bs-target="#tab-combine" type="button">Combine Dataset</button></li>
-    <li class="nav-item"><button class="nav-link {{ 'active' if tab=='rename' }}" data-bs-toggle="tab" data-bs-target="#tab-rename" type="button">Flatten & Renumber</button></li>
-    <li class="nav-item"><button class="nav-link {{ 'active' if tab=='merge' }}" data-bs-toggle="tab" data-bs-target="#tab-merge" type="button">Stitch Groups</button></li>
-    <li class="nav-item"><button class="nav-link {{ 'active' if tab=='webtoon' }}" data-bs-toggle="tab" data-bs-target="#tab-webtoon" type="button">Webtoon Panel Splitter</button></li>
-    <li class="nav-item"><button class="nav-link {{ 'active' if tab=='blur_brush' }}" data-bs-toggle="tab" data-bs-target="#tab-blur-brush" type="button">Brush Blur</button></li>
-    <li class="nav-item"><button class="nav-link {{ 'active' if tab=='clip_tokens' }}" data-bs-toggle="tab" data-bs-target="#tab-clip-tokens" type="button">CLIP Token Check</button></li>
-    <li class="nav-item"><button class="nav-link {{ 'active' if tab=='pipeline' }}" data-bs-toggle="tab" data-bs-target="#tab-pipeline" type="button">Pipeline (beta)</button></li>
+    <li class="nav-item"><button class="nav-link bb-tab-link {{ 'active' if tab=='guide' }}" data-bs-toggle="tab" data-bs-target="#tab-guide" type="button"><i class="bi bi-signpost-split" aria-hidden="true"></i><span>Workflow Guide</span></button></li>
+    <li class="nav-item"><button class="nav-link bb-tab-link {{ 'active' if tab=='webp' }}" data-bs-toggle="tab" data-bs-target="#tab-webp" type="button"><i class="bi bi-images" aria-hidden="true"></i><span>Image -&gt; PNG Converter</span></button></li>
+    <li class="nav-item"><button class="nav-link bb-tab-link {{ 'active' if tab=='batch' }}" data-bs-toggle="tab" data-bs-target="#tab-batch" type="button"><i class="bi bi-sliders2" aria-hidden="true"></i><span>Photo Adjust (preset)</span></button></li>
+    <li class="nav-item"><button class="nav-link bb-tab-link {{ 'active' if tab=='tags' }}" data-bs-toggle="tab" data-bs-target="#tab-tags" type="button"><i class="bi bi-tags" aria-hidden="true"></i><span>Dataset Tag Editor</span></button></li>
+    <li class="nav-item"><button class="nav-link bb-tab-link {{ 'active' if tab=='offline_tagger' }}" data-bs-toggle="tab" data-bs-target="#tab-offline-tagger" type="button"><i class="bi bi-cpu" aria-hidden="true"></i><span>Offline Tagger (WD v3)</span></button></li>
+    <li class="nav-item"><button class="nav-link bb-tab-link {{ 'active' if tab=='normalize' }}" data-bs-toggle="tab" data-bs-target="#tab-normalize" type="button"><i class="bi bi-funnel" aria-hidden="true"></i><span>Dataset Normalization</span></button></li>
+    <li class="nav-item"><button class="nav-link bb-tab-link {{ 'active' if tab=='combine' }}" data-bs-toggle="tab" data-bs-target="#tab-combine" type="button"><i class="bi bi-collection" aria-hidden="true"></i><span>Combine Dataset</span></button></li>
+    <li class="nav-item"><button class="nav-link bb-tab-link {{ 'active' if tab=='rename' }}" data-bs-toggle="tab" data-bs-target="#tab-rename" type="button"><i class="bi bi-sort-numeric-down" aria-hidden="true"></i><span>Flatten &amp; Renumber</span></button></li>
+    <li class="nav-item"><button class="nav-link bb-tab-link {{ 'active' if tab=='merge' }}" data-bs-toggle="tab" data-bs-target="#tab-merge" type="button"><i class="bi bi-columns-gap" aria-hidden="true"></i><span>Stitch Groups</span></button></li>
+    <li class="nav-item"><button class="nav-link bb-tab-link {{ 'active' if tab=='webtoon' }}" data-bs-toggle="tab" data-bs-target="#tab-webtoon" type="button"><i class="bi bi-scissors" aria-hidden="true"></i><span>Webtoon Panel Splitter</span></button></li>
+    <li class="nav-item"><button class="nav-link bb-tab-link {{ 'active' if tab=='blur_brush' }}" data-bs-toggle="tab" data-bs-target="#tab-blur-brush" type="button"><i class="bi bi-brush" aria-hidden="true"></i><span>Brush Blur</span></button></li>
+    <li class="nav-item"><button class="nav-link bb-tab-link {{ 'active' if tab=='clip_tokens' }}" data-bs-toggle="tab" data-bs-target="#tab-clip-tokens" type="button"><i class="bi bi-body-text" aria-hidden="true"></i><span>CLIP Token Check</span></button></li>
+    <li class="nav-item"><button class="nav-link bb-tab-link {{ 'active' if tab=='pipeline' }}" data-bs-toggle="tab" data-bs-target="#tab-pipeline" type="button"><i class="bi bi-diagram-3" aria-hidden="true"></i><span>Pipeline (beta)</span></button></li>
     <li class="nav-item ms-auto {{ '' if tab=='batch' else 'd-none' }}" id="batch-preset-info">
       <span class="nav-link disabled">Presets loaded: {{ preset_names|length }}</span>
     </li>
   </ul>
 
   <div class="tab-content">
+    <div class="tab-pane fade {{ 'show active' if tab=='guide' }}" id="tab-guide">
+      {% include "guide.html" %}
+    </div>
+
     <div class="tab-pane fade {{ 'show active' if tab=='webp' }}" id="tab-webp">
       {% include "webp_to_png.html" %}
       {% if log and tab=='webp' %}
@@ -74,7 +79,7 @@
         </div>
       {% endif %}
     </div>
-    
+
     <div class="tab-pane fade {{ 'show active' if tab=='rename' }}" id="tab-rename">
       {% include "group_renamer.html" %}
       {% if log and tab=='rename' %}
@@ -157,4 +162,3 @@
   </script>
 
 {% endblock %}
-
