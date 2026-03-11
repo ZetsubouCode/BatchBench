@@ -1,7 +1,20 @@
 {
   "version": 1,
   "categories": {
-    "Unsorted": []
+    "Unsorted": [],
+    "bangs": [
+      "wispy_bangs"
+    ],
+    "Lighting": [
+      "day",
+      "evening",
+      "sidelighting",
+      "warm_colored"
+    ],
+    "hand gesture": [
+      "clenched_hands",
+      "v_arms"
+    ]
   },
-  "updated_at": 0
+  "updated_at": 1773157791761
 }

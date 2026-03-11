@@ -13,6 +13,7 @@
     <li class="nav-item"><button class="nav-link {{ 'active' if tab=='merge' }}" data-bs-toggle="tab" data-bs-target="#tab-merge" type="button">Stitch Groups</button></li>
     <li class="nav-item"><button class="nav-link {{ 'active' if tab=='webtoon' }}" data-bs-toggle="tab" data-bs-target="#tab-webtoon" type="button">Webtoon Panel Splitter</button></li>
     <li class="nav-item"><button class="nav-link {{ 'active' if tab=='blur_brush' }}" data-bs-toggle="tab" data-bs-target="#tab-blur-brush" type="button">Brush Blur</button></li>
+    <li class="nav-item"><button class="nav-link {{ 'active' if tab=='clip_tokens' }}" data-bs-toggle="tab" data-bs-target="#tab-clip-tokens" type="button">CLIP Token Check</button></li>
     <li class="nav-item"><button class="nav-link {{ 'active' if tab=='pipeline' }}" data-bs-toggle="tab" data-bs-target="#tab-pipeline" type="button">Pipeline (beta)</button></li>
     <li class="nav-item ms-auto {{ '' if tab=='batch' else 'd-none' }}" id="batch-preset-info">
       <span class="nav-link disabled">Presets loaded: {{ preset_names|length }}</span>
@@ -107,6 +108,16 @@
     <div class="tab-pane fade {{ 'show active' if tab=='blur_brush' }}" id="tab-blur-brush">
       {% include "blur_brush.html" %}
       {% if log and tab=='blur_brush' %}
+        <div class="card p-3 mt-3">
+          <h5>Log</h5>
+          <pre class="monospace">{{ log }}</pre>
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="tab-pane fade {{ 'show active' if tab=='clip_tokens' }}" id="tab-clip-tokens">
+      {% include "clip_token_check.html" %}
+      {% if log and tab=='clip_tokens' %}
         <div class="card p-3 mt-3">
           <h5>Log</h5>
           <pre class="monospace">{{ log }}</pre>
