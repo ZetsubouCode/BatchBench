@@ -28,10 +28,65 @@
   .path-badge.badge-undo { color:#e6fff1; border-color:#1f6f4a; background:#0d2d1f; }
   .path-flag { font-size:.6rem; padding:.05rem .3rem; border-radius:.3rem; border:1px solid var(--bb-border); color:var(--bb-muted); }
   .path-flag.is-active { color:#e6f0ff; border-color:#2d4f86; background:#1b2b4a; }
-  .tag-editor-layout { display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:1rem; align-items:start; position:relative; }
-  .tag-editor-layout.is-expanded .tag-editor-sidebar { position:fixed; inset:1rem; width:auto; max-height:calc(100vh - 2rem); transform:none; box-shadow:0 24px 64px rgba(0,0,0,0.5); z-index:1040; }
-  .tag-editor-main { min-width:0; }
-  .mode-layout { display:grid; grid-template-columns:110px minmax(0,1fr); gap:1rem; align-items:start; }
+  .tag-editor-layout { position:relative; --bb-left-drawer-left:4.85rem; --bb-left-drawer-max:calc(100vw - 6rem); }
+  .tag-editor-shell { position:relative; }
+  .tag-editor-content { display:grid; grid-template-columns:minmax(0,1fr) minmax(420px, 540px); gap:1.1rem; align-items:start; }
+  .tag-editor-main { min-width:0; display:flex; flex-direction:column; gap:1rem; padding-bottom:1rem; }
+  .tag-editor-right { position:sticky; top:1rem; align-self:start; display:flex; flex-direction:column; gap:1rem; max-height:calc(100vh - 1.5rem); overflow:auto; padding-right:.25rem; }
+  .tag-editor-right .tag-explorer { background:rgba(10,16,28,.86); }
+  .tag-editor-left-rail { position:sticky; top:.65rem; z-index:25; display:flex; flex-wrap:wrap; gap:.55rem; margin:0 0 .35rem 0; padding:.45rem; border:1px solid var(--bb-border); border-radius:.7rem; background:rgba(10,18,34,.72); }
+  .left-rail-btn { border:1px solid var(--bb-border); color:var(--bb-text); border-radius:.65rem; padding:.5rem .8rem; font-size:.82rem; font-weight:600; line-height:1.2; min-width:152px; text-align:left; box-shadow:0 8px 18px rgba(0,0,0,.22); transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease; }
+  .left-rail-btn:hover { transform:translateY(-1px); box-shadow:0 10px 22px rgba(0,0,0,.28); }
+  .left-rail-btn .bi { margin-right:.4rem; }
+  .left-rail-btn-cheat { background:#1f2a10; border-color:#6f8f2f; color:#f2ffdb; }
+  .left-rail-btn-project { background:#10263f; border-color:#3b6ea5; color:#e6f1ff; }
+  .left-rail-btn-hotkeys { background:#2a1436; border-color:#a569cf; color:#f4e6ff; }
+  .tooltip.bb-hotkeys-tooltip {
+    --bs-tooltip-bg:#101b30;
+    --bs-tooltip-color:#eaf2ff;
+    --bs-tooltip-opacity:1;
+  }
+  .tooltip.bb-hotkeys-tooltip .tooltip-inner {
+    max-width:420px;
+    text-align:left;
+    border:1px solid #47679a;
+    border-radius:.65rem;
+    padding:.7rem .8rem;
+    box-shadow:0 12px 28px rgba(0,0,0,.35);
+    background:linear-gradient(145deg, #0f1b34 0%, #111326 100%);
+  }
+  .hotkeys-tip-title { font-size:.78rem; letter-spacing:.08em; text-transform:uppercase; color:#9fc8ff; margin-bottom:.45rem; }
+  .hotkeys-tip-list { display:flex; flex-direction:column; gap:.3rem; }
+  .hotkeys-tip-row { display:grid; grid-template-columns:auto 1fr; gap:.55rem; align-items:center; }
+  .hotkeys-tip-action { color:#dbe8ff; font-size:.8rem; line-height:1.2; }
+  .hotkeys-tip-key {
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    border:1px solid #6f8fcb;
+    border-radius:.35rem;
+    background:#18294a;
+    color:#f6f9ff;
+    font-size:.72rem;
+    font-weight:700;
+    letter-spacing:.02em;
+    padding:.15rem .42rem;
+    min-width:2.1rem;
+    box-shadow:inset 0 -1px 0 rgba(0,0,0,.25);
+  }
+  .hotkeys-tip-key-combo { display:inline-flex; flex-wrap:wrap; align-items:center; gap:.2rem; }
+  .hotkeys-tip-plus { color:#a9bfeb; font-size:.74rem; }
+  .left-rail-btn.is-active { border-color:#b9d6ff; box-shadow:0 0 0 1px rgba(185,214,255,.45), 0 10px 24px rgba(0,0,0,.3); }
+  .left-rail-btn:disabled { opacity:.45; cursor:not-allowed; }
+  .left-drawer-backdrop { position:fixed; inset:0; background:rgba(5,10,19,.5); opacity:0; pointer-events:none; transition:opacity .16s ease; z-index:92; }
+  .left-drawer-backdrop.is-open { opacity:1; pointer-events:auto; }
+  .left-drawer { position:fixed; left:var(--bb-left-drawer-left); top:1rem; bottom:1rem; width:min(620px, var(--bb-left-drawer-max)); border:1px solid var(--bb-border); border-radius:.9rem; background:rgba(8,15,28,.98); box-shadow:0 16px 42px rgba(0,0,0,.42); transform:translateX(calc(-100% - 1.25rem)); opacity:0; pointer-events:none; transition:transform .2s ease, opacity .2s ease; z-index:93; display:flex; flex-direction:column; overflow:hidden; }
+  .left-drawer.is-open { transform:translateX(0); opacity:1; pointer-events:auto; }
+  .left-drawer-head { display:flex; align-items:flex-start; justify-content:space-between; gap:.75rem; padding:1rem 1rem .8rem; border-bottom:1px solid var(--bb-border); }
+  .left-drawer-title { font-size:.84rem; letter-spacing:.08em; text-transform:uppercase; color:var(--bb-muted); }
+  .left-drawer-subtitle { font-size:.82rem; color:var(--bb-muted); }
+  .left-drawer-body { padding:1rem; overflow:auto; display:flex; flex-direction:column; gap:1rem; }
+  .mode-layout { display:grid; grid-template-columns:96px minmax(0,1fr); gap:.9rem; align-items:start; }
   .mode-panel { position:sticky; top:1rem; align-self:start; display:flex; flex-direction:column; gap:.6rem; }
   .mode-title { font-size:.85rem; letter-spacing:.08em; text-transform:uppercase; color:var(--bb-muted); }
   .mode-buttons { display:flex; flex-direction:column; gap:.4rem; }
@@ -39,26 +94,86 @@
   .mode-btn .mode-icon { width:1.2rem; text-align:center; font-weight:600; }
   .mode-btn.is-active { background:#1b2b4a; border-color:#2d4f86; color:#e6f0ff; box-shadow:0 0 0 1px rgba(45,79,134,.45); }
   .mode-btn:focus-visible { outline:2px solid var(--bb-link); outline-offset:2px; }
-  .tag-editor-sidebar { display:flex; flex-direction:column; gap:.5rem; position:sticky; top:1rem; max-height:calc(100vh - 190px); width:320px; transition:transform .2s ease, width .2s ease; z-index:5; }
-  .tag-editor-sidebar .sidebar-head { display:flex; align-items:center; justify-content:space-between; gap:.5rem; }
-  .tag-editor-sidebar .sidebar-title { font-size:1rem; font-weight:600; }
-  .tag-editor-sidebar .sidebar-body { overflow:auto; display:block; }
-  .sidebar-split { display:grid; grid-template-columns:1fr; gap:.75rem; }
-  .tag-editor-layout.is-expanded .sidebar-split { grid-template-columns:minmax(0,1fr) 310px; gap:1rem; align-items:start; }
-  .sidebar-col { display:flex; flex-direction:column; gap:.75rem; min-width:0; }
-  .sidebar-col-dest { display:none; }
-  .tag-editor-layout.is-expanded .sidebar-col-dest { display:flex; align-self:start; position:sticky; top:0; }
-  .sidebar-col-dest .workdir-panel { position:sticky; top:0; max-height:calc(100vh - 6rem); overflow:auto; }
-  .tag-editor-sidebar .input-group-text { background:var(--bb-card); color:var(--bb-text); border-color:var(--bb-border); }
-  .tag-editor-sidebar .form-check-label { color:var(--bb-text); }
+  .tag-composer-stick { position:sticky; bottom:.85rem; z-index:20; background:rgba(10,16,28,.94); }
+  .tag-composer-stick .mode-panel { top:.25rem; }
+  .gallery-selection-toggle { min-width:138px; }
+  .gallery-selection-note { font-size:.75rem; color:var(--bb-muted); }
+  .project-hub-card { padding:0 !important; overflow:hidden; }
+  .project-hub-card .row { margin-left:0; margin-right:0; }
+  .project-hub-card .row > * { padding-left:0; padding-right:0; }
+  .project-setup-card { border:0; background:transparent; }
+  .project-setup-card summary { list-style:none; cursor:pointer; padding:1rem 1.1rem; border-bottom:1px solid var(--bb-border); }
+  .project-setup-card summary::-webkit-details-marker { display:none; }
+  .project-setup-summary { display:flex; align-items:flex-start; justify-content:space-between; gap:.85rem; flex-wrap:wrap; }
+  .project-setup-title { font-size:.78rem; letter-spacing:.08em; text-transform:uppercase; color:var(--bb-muted); margin-bottom:.2rem; }
+  .project-setup-compact { font-size:1rem; font-weight:600; color:var(--bb-text); }
+  .project-setup-compact-note { font-size:.78rem; color:var(--bb-muted); margin-top:.15rem; }
+  .project-setup-body { padding:1rem 1.1rem 1.15rem; display:flex; flex-direction:column; gap:1rem; }
+  .project-setup-body > [class*="col-"] { width:auto; padding:0; }
+  .project-inline-host { border:1px solid var(--bb-border); border-radius:.55rem; background:rgba(10,16,28,.8); padding:.35rem; }
+  .project-inline-host .project-setup-card { background:transparent; }
+  .workspace-lock-banner { border:1px solid #b56a1f; border-radius:.55rem; background:#2a1a0a; color:#ffe0b2; padding:.65rem .8rem; font-size:.84rem; }
+  .workspace-locked .workspace-lock-target { pointer-events:none; opacity:.5; filter:saturate(.8); user-select:none; }
+  .workspace-locked .tag-composer-stick { position:static; bottom:auto; z-index:auto; background:transparent; }
+  .workspace-locked .tag-composer-stick .mode-panel { position:static; }
+  .project-setup-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:.75rem; }
+  .project-setup-grid > * { min-width:0; }
+  .project-setup-grid > [class*="col-"],
+  .workflow-top-grid > [class*="col-"] { width:auto; padding:0; }
+  .project-cue-wrap { display:flex; flex-direction:column; gap:.55rem; }
+  .project-cue-list { display:flex; flex-wrap:wrap; gap:.4rem; }
+  .project-cue { font-size:.72rem; letter-spacing:.04em; border:1px solid var(--bb-border); border-radius:999px; padding:.2rem .5rem; background:var(--bb-code-bg); color:var(--bb-muted); }
+  .project-cue.is-warning { border-color:#b56a1f; background:#2a1a0a; color:#ffe0b2; }
+  .project-cue.is-missing { border-color:#6f1f26; background:#2b1416; color:#ffe8ea; }
+  .project-cue.is-ready { border-color:#1f6f4a; background:#0d2d1f; color:#d7ffe6; }
+  .project-info-list { display:flex; flex-direction:column; gap:.35rem; font-size:.78rem; color:var(--bb-muted); }
+  .workflow-stage { display:flex; flex-direction:column; gap:1rem; }
+  .workflow-top-grid { display:grid; grid-template-columns:minmax(320px, .88fr) minmax(460px, 1.22fr); gap:1rem; align-items:start; }
+  .workflow-bottom-grid { display:grid; grid-template-columns:minmax(320px, .92fr) minmax(360px, 1.08fr); gap:1rem; align-items:start; }
+  .workflow-top-grid > *,
+  .workflow-bottom-grid > * { min-width:0; }
+  .workflow-editor,
+  .workflow-workspace { height:100%; }
+  .workflow-log-card { border:1px solid var(--bb-border); border-radius:.55rem; background:rgba(10,16,28,.76); }
+  .workflow-log-card h6 { margin-bottom:.5rem; }
+  .editor-heading { display:flex; align-items:center; justify-content:space-between; gap:.5rem; }
+  .composer-inline-tools { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; margin-top:.55rem; }
+  .composer-inline-actions { display:flex; gap:.45rem; flex-wrap:wrap; }
+  .composer-inline-backup { margin-left:auto; }
+  .composer-inline-backup.form-check { display:flex; align-items:center; gap:.45rem; margin-bottom:0; }
+  .composer-inline-backup .form-check-input { margin-top:0; }
+  .tag-editor-sidebar.is-cheatsheet .sidebar-body { overflow:visible; }
+  .cheatsheet-dock { border:1px solid var(--bb-border); border-radius:.55rem; background:rgba(8,16,28,.82); overflow:hidden; }
+  .cheatsheet-dock summary { list-style:none; cursor:pointer; padding:.9rem 1rem; display:flex; align-items:flex-start; justify-content:space-between; gap:.75rem; }
+  .cheatsheet-dock summary::-webkit-details-marker { display:none; }
+  .cheatsheet-dock[open] summary { border-bottom:1px solid var(--bb-border); }
+  .cheatsheet-dock .gallery-cheatsheet { border:0; background:transparent; padding:1rem; }
+  .cheatsheet-dock .gallery-cheatsheet-head { align-items:flex-start; }
+  .cheatsheet-dock-title { font-size:.82rem; font-weight:600; }
+  .cheatsheet-dock-note { font-size:.74rem; color:var(--bb-muted); }
+  .gallery-section { min-width:0; }
+  .editor-panel { border:1px solid var(--bb-border); border-radius:.55rem; background:rgba(10,16,28,.86); padding:.85rem; display:flex; flex-direction:column; gap:.85rem; }
+  .editor-panel .form-label { margin-bottom:.35rem; }
+  .sidebar-runbar { display:flex; gap:.5rem; flex-wrap:wrap; }
+  .tag-editor-right .input-group-text { background:var(--bb-card); color:var(--bb-text); border-color:var(--bb-border); }
+  .tag-editor-right .form-check-label { color:var(--bb-text); }
+  .info-tip-btn { width:1.55rem; height:1.55rem; padding:0; display:inline-flex; align-items:center; justify-content:center; border-radius:999px; }
+  .info-tip-btn .bi { font-size:.82rem; line-height:1; }
   .gallery-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:.4rem; }
+  .gallery-toolbar .input-group-text { background:#1a2743; color:#eaf3ff; border-color:#334a76; font-weight:600; }
+  .gallery-toolbar .form-control,
+  .gallery-toolbar .form-select { background:#0f1a30; color:#f2f7ff; border-color:#334a76; }
+  .gallery-toolbar .form-control:focus,
+  .gallery-toolbar .form-select:focus { border-color:#79c0ff; box-shadow:0 0 0 .2rem rgba(121,192,255,.2); }
   .gallery-selection-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:.35rem; }
   .gallery-selection-count { font-size:.75rem; color:var(--bb-muted); min-width:5rem; }
   .gallery-status { font-size:.75rem; color:var(--bb-muted); min-height:1rem; }
   .gallery-path { font-size:.75rem; color:var(--bb-muted); }
   .gallery-drop { border:1px dashed var(--bb-border); border-radius:.5rem; padding:.6rem; text-align:center; color:var(--bb-muted); background:rgba(12,18,36,.7); cursor:pointer; }
   .gallery-drop.is-dragging { border-color:var(--bb-link); color:var(--bb-link); background:rgba(18,30,56,.8); }
-  .gallery-grid { display:grid; grid-template-columns:1fr; gap:.75rem; }
+  .gallery-grid { display:grid; grid-template-columns:repeat(var(--gallery-cols, 2), minmax(0, 1fr)); gap:.75rem; position:relative; }
+  .gallery-marquee { position:absolute; left:0; top:0; width:0; height:0; border:1px solid rgba(122,162,255,.95); background:rgba(122,162,255,.2); box-shadow:0 0 0 1px rgba(122,162,255,.25); pointer-events:none; z-index:15; display:none; }
+  .gallery-marquee.is-active { display:block; }
   .gallery-card { border:1px solid var(--bb-border); border-radius:.5rem; padding:.5rem; background:var(--bb-input-bg); display:flex; flex-direction:column; gap:.35rem; position:relative; }
   .gallery-card.is-match { outline:2px solid #2d4f86; box-shadow:0 0 0 1px rgba(45,79,134,.45); }
   .gallery-card.is-temp { border-style:dashed; border-color:#b56a1f; }
@@ -86,7 +201,7 @@
   .gallery-tag.is-missing { border-color:#6f1f26; color:#ffe8ea; background:#2b1416; }
   .gallery-empty { font-size:.85rem; color:var(--bb-muted); border:1px dashed var(--bb-border); border-radius:.5rem; padding:.6rem; text-align:center; }
   .gallery-cheatsheet { border:1px solid var(--bb-border); border-radius:.5rem; padding:.65rem; background:rgba(8,16,28,.7); display:flex; flex-direction:column; gap:.5rem; }
-  .tag-editor-layout:not(.is-expanded) .gallery-cheatsheet { display:none; }
+  .gallery-cheatsheet { display:flex; }
   .gallery-cheatsheet-head { display:flex; align-items:center; justify-content:space-between; gap:.5rem; flex-wrap:wrap; }
   .gallery-cheatsheet-title { font-size:.75rem; letter-spacing:.08em; text-transform:uppercase; color:var(--bb-muted); }
   .gallery-cheatsheet-trigger { border:1px solid #7a5b1f; border-radius:.45rem; background:#231a09; color:#ffe9b8; padding:.45rem .55rem; font-size:.75rem; }
@@ -99,8 +214,22 @@
   .gallery-cheatsheet-cond-list { display:flex; flex-direction:column; gap:.3rem; }
   .gallery-cheatsheet-cond-item { display:flex; align-items:flex-start; gap:.4rem; }
   .gallery-cheatsheet-tags { display:flex; flex-wrap:wrap; gap:.3rem; max-height:140px; overflow:auto; }
-  .gallery-cheatsheet-chip { font-size:.72rem; border:1px solid #355d7a; border-radius:999px; padding:.08rem .4rem; background:#102335; color:#d5ebff; }
+  .gallery-cheatsheet-chip { font-size:.72rem; border:1px solid #355d7a; border-radius:999px; padding:.08rem .4rem; background:#102335; color:#d5ebff; cursor:pointer; transition:background .12s ease, border-color .12s ease, color .12s ease, box-shadow .12s ease; }
+  .gallery-cheatsheet-chip:hover { border-color:#69b6ec; color:#ecf8ff; }
+  .gallery-cheatsheet-chip.is-existing { border-color:#9f7a2d; background:#261d09; color:#ffe8b8; box-shadow:0 0 0 1px rgba(159,122,45,.35); }
+  .gallery-cheatsheet-chip.is-existing::after { content:"DB"; display:inline-flex; align-items:center; justify-content:center; margin-left:.3rem; padding:.02rem .26rem; border-radius:999px; border:1px solid #b18936; font-size:.58rem; line-height:1; letter-spacing:.05em; font-weight:700; color:#ffe7b3; background:rgba(0,0,0,.18); }
+  .gallery-cheatsheet-chip.is-active { background:#1f3f1f; border-color:#5ab46f; color:#e4ffe8; box-shadow:0 0 0 1px rgba(90,180,111,.35); }
+  .gallery-cheatsheet-chip.is-active.is-existing { border-color:#79ca8d; background:#173322; color:#e8fff0; box-shadow:0 0 0 1px rgba(121,202,141,.45); }
+  .gallery-cheatsheet-chip.is-active.is-existing::after { border-color:#93ddb0; color:#ddffea; background:rgba(14,44,29,.55); }
   .gallery-cheatsheet-content { font-size:.74rem; color:var(--bb-muted); border:1px solid var(--bb-border); border-radius:.4rem; background:rgba(0,0,0,.18); padding:.5rem; max-height:130px; overflow:auto; white-space:pre-wrap; }
+  .left-drawer .gallery-cheatsheet-title { font-size:.9rem; }
+  .left-drawer .gallery-cheatsheet-trigger { font-size:.88rem; padding:.6rem .7rem; }
+  .left-drawer .gallery-cheatsheet-section-head { font-size:.82rem; }
+  .left-drawer .gallery-cheatsheet-row-label { font-size:.8rem; min-width:62px; }
+  .left-drawer .gallery-cheatsheet-chip { font-size:.86rem; padding:.2rem .65rem; }
+  .left-drawer .gallery-cheatsheet-sections { max-height:360px; }
+  .left-drawer .gallery-cheatsheet-tags { max-height:220px; }
+  .left-drawer .gallery-cheatsheet-content { font-size:.9rem; line-height:1.5; max-height:280px; padding:.7rem .75rem; }
   .gallery-modal-img { max-width:100%; max-height:70vh; transform-origin:center; transition:transform .15s ease; }
   .gallery-modal-nav { display:flex; align-items:center; justify-content:space-between; gap:.75rem; margin-bottom:.55rem; }
   .gallery-modal-index { font-size:.8rem; color:var(--bb-muted); min-width:5.5rem; text-align:center; }
@@ -131,21 +260,36 @@
   .gallery-glossary-chip:hover { border-color:#7fd7ff; color:#f1fbff; }
   .gallery-glossary-chip:disabled { opacity:.45; cursor:not-allowed; }
   .gallery-glossary-empty { font-size:.75rem; color:var(--bb-muted); }
-  .tag-editor-layout.is-expanded .gallery-grid { grid-template-columns:repeat(4, minmax(0, 1fr)); }
+  .gallery-grid { grid-template-columns:repeat(var(--gallery-cols, 2), minmax(0, 1fr)); }
   @media (hover: none), (pointer: coarse) {
     .gallery-tag.is-removable .tag-x { display:inline; opacity:1; }
   }
   .workdir-panel { border:1px solid var(--bb-border); border-radius:.5rem; padding:.6rem; background:var(--bb-input-bg); }
   .workdir-head { display:flex; align-items:center; justify-content:space-between; gap:.5rem; }
+  .workdir-head > div { min-width:0; }
   .workdir-quick-grid { display:grid; gap:.5rem; margin-top:.5rem; }
-  .workdir-quick-drop { border:1px dashed var(--bb-border); border-radius:.5rem; padding:.65rem; background:rgba(12,18,36,.55); color:var(--bb-text); min-height:76px; display:flex; flex-direction:column; justify-content:center; gap:.2rem; transition:border-color .15s ease, background .15s ease, transform .15s ease; }
+  .workdir-quick-drop { border:1px dashed var(--bb-border); border-radius:.7rem; padding:.8rem; background:rgba(12,18,36,.55); color:var(--bb-text); min-height:92px; display:flex; flex-direction:column; justify-content:center; gap:.25rem; transition:border-color .15s ease, background .15s ease, transform .15s ease; }
   .workdir-quick-drop.is-active { border-color:var(--bb-link); background:rgba(18,30,56,.85); transform:translateY(-1px); }
   .workdir-quick-drop.is-temp { border-color:#b56a1f; background:rgba(42,26,10,.7); }
   .workdir-quick-label { font-size:.75rem; letter-spacing:.08em; text-transform:uppercase; color:var(--bb-muted); }
-  .workdir-quick-path { font-size:.82rem; font-weight:600; }
+  .workdir-quick-path { font-size:.92rem; font-weight:700; }
   .workdir-actions { display:flex; align-items:center; gap:.4rem; flex-wrap:wrap; }
   .workdir-actions .form-control { flex:1 1 140px; min-width:110px; }
   .workdir-status { font-size:.75rem; color:var(--bb-muted); min-height:1rem; }
+  .workdir-temp-meta { display:flex; align-items:center; justify-content:space-between; gap:.5rem; margin-top:.75rem; }
+  .workdir-temp-list { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:.45rem; max-height:260px; overflow:auto; margin-top:.45rem; }
+  .workdir-temp-list > .workdir-empty { grid-column:1 / -1; }
+  .workdir-temp-card { border:1px solid var(--bb-border); border-radius:.55rem; background:rgba(8,14,24,.92); padding:.5rem; display:grid; grid-template-columns:72px minmax(0,1fr); gap:.6rem; }
+  .workdir-temp-thumb { width:72px; height:72px; border-radius:.45rem; object-fit:cover; border:1px solid var(--bb-border); background:#0b1220; }
+  .workdir-temp-fallback { width:72px; height:72px; border-radius:.45rem; border:1px dashed var(--bb-border); display:flex; align-items:center; justify-content:center; font-size:.68rem; color:var(--bb-muted); background:#0b1220; }
+  .workdir-temp-body { min-width:0; display:flex; flex-direction:column; gap:.25rem; }
+  .workdir-temp-name { font-size:.82rem; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .workdir-temp-path { font-size:.7rem; color:var(--bb-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .project-status-ribbon { display:flex; align-items:center; gap:.45rem; flex-wrap:wrap; margin-top:.35rem; }
+  .project-status-pill { font-size:.72rem; letter-spacing:.06em; text-transform:uppercase; border:1px solid var(--bb-border); border-radius:999px; padding:.15rem .45rem; background:var(--bb-code-bg); color:var(--bb-muted); }
+  .project-status-pill.is-ready { border-color:#1f6f4a; background:#0d2d1f; color:#d7ffe6; }
+  .project-status-pill.is-partial { border-color:#b56a1f; background:#2a1a0a; color:#ffe0b2; }
+  .project-status-pill.is-missing { border-color:#6f1f26; background:#2b1416; color:#ffe8ea; }
   .workdir-tree { display:flex; flex-direction:column; gap:.15rem; margin-top:.4rem; }
   .workdir-row { display:flex; align-items:center; gap:.35rem; padding:.2rem .35rem; border-radius:.35rem; cursor:pointer; user-select:none; }
   .workdir-row.is-selected { background:#1b2b4a; border:1px solid #2d4f86; }
@@ -154,6 +298,9 @@
   .workdir-toggle { width:1.2rem; height:1.2rem; display:inline-flex; align-items:center; justify-content:center; border:1px solid var(--bb-border); background:var(--bb-card); color:var(--bb-muted); border-radius:.25rem; font-size:.7rem; padding:0; }
   .workdir-toggle.is-placeholder { border-color:transparent; background:transparent; }
   .workdir-name { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:.85rem; }
+  .truncate-1 { min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block; }
+  .truncate-2 { min-width:0; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .workdir-panel .gallery-path .code-chip { display:inline-block; max-width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; vertical-align:bottom; }
   .workdir-children { margin-left:1.15rem; border-left:1px dashed var(--bb-border); padding-left:.5rem; display:none; }
   .workdir-children.is-open { display:block; }
   .workdir-empty { font-size:.75rem; color:var(--bb-muted); padding:.2rem .35rem; }
@@ -194,18 +341,24 @@
   .danbooru-carousel-empty { color:var(--bb-muted); font-size:.78rem; text-align:center; padding:.5rem; }
   .danbooru-preview-meta { font-size:.75rem; color:var(--bb-muted); margin-top:.35rem; min-height:1rem; display:flex; justify-content:space-between; gap:.35rem; }
   @media (max-width: 991.98px) {
-    .tag-editor-layout { grid-template-columns:1fr; }
-    .tag-editor-layout.is-expanded .tag-editor-sidebar { inset:.5rem; width:auto; transform:none; }
-    .tag-editor-sidebar { position:static; max-height:none; width:100%; }
-    .tag-editor-layout.is-expanded .gallery-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+    .tag-editor-content { grid-template-columns:1fr; }
+    .tag-editor-main { padding-bottom:1rem; }
+    .tag-editor-right { position:static; max-height:none; padding-right:0; }
+    .gallery-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+    .project-setup-grid,
+    .workflow-top-grid,
+    .workflow-bottom-grid { grid-template-columns:1fr; }
     .mode-layout { grid-template-columns:1fr; }
     .mode-panel { position:static; flex-direction:row; flex-wrap:wrap; }
     .mode-buttons { flex-direction:row; flex-wrap:wrap; }
-    .sidebar-split { grid-template-columns:1fr; }
+    .tag-editor-left-rail { position:static; margin-bottom:.65rem; }
+    .left-drawer { left:.75rem; right:.75rem; width:auto; top:1rem; bottom:1rem; }
+    .workdir-temp-list { grid-template-columns:1fr; }
   }
 
   @media (max-width: 767.98px) {
-    .tag-editor-layout.is-expanded .gallery-grid { grid-template-columns:1fr; }
+    .gallery-grid { grid-template-columns:1fr; }
+    .left-rail-btn { min-width:auto; }
     .gallery-modal-stage { min-height:54vh; }
     .gallery-modal-stage-inner { padding:1rem 3rem; }
     .gallery-modal-arrow { width:48px; height:48px; font-size:1.7rem; }
@@ -213,9 +366,10 @@
 </style>
 
 <div class="tag-editor-layout" id="tag-editor-layout">
+  <div class="tag-editor-form">
   <div class="tag-editor-main">
     <div class="card p-4">
-  <div class="mode-layout">
+    <!-- Duplicate mode selector moved to sidebar.
     <div class="mode-panel" id="mode-panel">
       <div class="mode-title">Mode</div>
       <div class="mode-buttons" id="mode-buttons">
@@ -228,32 +382,23 @@
         <button type="button" class="mode-btn" data-mode="replace" data-bs-toggle="tooltip" data-bs-title="Replace: mapping old->new in _temp.">
           <span class="mode-icon">⇄</span><span>Replace</span>
         </button>
-        <button type="button" class="mode-btn" data-mode="move" data-bs-toggle="tooltip" data-bs-title="Move: move matching files from root to _temp.">
-          <span class="mode-icon">→</span><span>Move</span>
-        </button>
         <button type="button" class="mode-btn" data-mode="dedup" data-bs-toggle="tooltip" data-bs-title="Dedup: remove duplicate tags in _temp.">
           <span class="mode-icon">≡</span><span>Dedup</span>
         </button>
       </div>
     </div>
-    <div class="mode-body">
-      <div id="mode-banner" class="mode-banner">
-        <strong>Mode help:</strong>
-        <span id="mode-desc">Select a mode to continue.</span>
-      </div>
-      <div class="small text-muted mb-3">Workdir: edits run on <span class="code-chip">_temp</span>. Move fills <span class="code-chip">_temp</span>. Undo restores to root.</div>
-
+    -->
   <form id="tags-form" method="post" data-no-busy="true" data-no-persist="true" data-tool-label="Dataset Tag Editor">
     <input type="hidden" name="tool" value="tags">
     <input type="hidden" name="active_tab" value="tags">
 
     <div class="row g-3">
       <div class="col-md-4">
-        <label class="form-label">Folder</label>
+        <label class="form-label">Project Root</label>
         <div class="input-group">
           <input id="folder_tags" name="folder" type="text" class="form-control" data-root-sync="1"
-                 placeholder="D:\path\to\dataset" data-bs-toggle="tooltip"
-                 data-bs-title="Base dataset folder (images + .txt)">
+                 placeholder="H:\_Training DATA\No mans land\unnamed B" data-bs-toggle="tooltip"
+                 data-bs-title="Project root that contains database/, dataset/, dataset/_temp, and prompt.txt">
           <button class="btn btn-outline-light btn-browse" type="button" data-target="folder_tags"
                   data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
         </div>
@@ -268,21 +413,58 @@
       </div>
 
       <div class="col-md-4">
-        <label class="form-label">Workdir</label>
+        <label class="form-label">Editing Target</label>
         <div class="small text-muted">
-          Workdir is fixed: <span class="code-chip" id="fixed-workdir">...</span>
+          Fixed to: <span class="code-chip" id="fixed-workdir">...</span>
         </div>
         <input type="hidden" name="edit_target" value="recursive">
       </div>
 
       <div class="col-md-12">
         <div class="tag-explorer">
+          <div class="d-flex align-items-start justify-content-between flex-wrap gap-3">
+            <div>
+              <label class="form-label mb-1">Project Status</label>
+              <div class="small text-muted" id="project-status-summary">Project root not checked yet.</div>
+              <div class="small text-muted" id="project-status-note"></div>
+              <div class="project-status-ribbon" id="project-status-ribbon">
+                <span class="project-status-pill" id="project-status-pill">Unchecked</span>
+                <span class="project-status-pill" id="project-trigger-pill">Trigger not detected</span>
+              </div>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+              <button type="button" class="btn btn-outline-light btn-sm" id="project-refresh">Refresh status</button>
+              <button type="button" class="btn btn-warning btn-sm d-none" id="project-init-preview">Initialize Project</button>
+            </div>
+          </div>
+          <div class="row g-2 mt-2 small">
+            <div class="col-md-3">Root: <span class="code-chip" id="project-root-chip">...</span></div>
+            <div class="col-md-3">Database: <span class="code-chip" id="project-database-chip">...</span></div>
+            <div class="col-md-3">Dataset: <span class="code-chip" id="project-dataset-chip">...</span></div>
+            <div class="col-md-3">_temp: <span class="code-chip" id="project-temp-chip">...</span></div>
+            <div class="col-md-12">Prompt: <span class="code-chip" id="project-prompt-chip">...</span></div>
+            <div class="col-md-12 d-none" id="project-init-plan-wrap">
+              <div class="small text-muted" id="project-init-plan"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-12">
+        <div class="tag-explorer">
           <div class="d-flex align-items-start justify-content-between flex-wrap gap-2">
             <div>
-              <label class="form-label mb-1">Tag Explorer</label>
-              <div class="small text-muted" id="tagviz-hint">Select tags -> choose mode -> Run. Tags sync automatically to Tags / mapping.</div>
-              <div class="tag-sync-status" id="tagviz-sync-status">Auto-sync ON</div>
-              <div class="small text-muted">Glow = tags present in _temp.</div>
+              <div class="d-flex align-items-center gap-2 mb-1">
+                <label class="form-label mb-0">Tag Explorer</label>
+                <button type="button" class="btn btn-outline-secondary btn-sm info-tip-btn" id="tagviz-info-tip"
+                        data-bs-toggle="tooltip" data-bs-html="true"
+                        data-bs-title="Select tags -&gt; choose mode -&gt; Run. Edits run on dataset/_temp only; send items there from the Dataset Browser first.&lt;br&gt;Auto-sync ON&lt;br&gt;Glow = tags present in _temp.">
+                  <i class="bi bi-info-circle"></i>
+                </button>
+              </div>
+              <div class="small text-muted d-none" id="tagviz-hint">Select tags -> choose mode -> Run. Edits run on dataset/_temp only; send items there from the Dataset Browser first.</div>
+              <div class="tag-sync-status d-none" id="tagviz-sync-status">Auto-sync ON</div>
+              <div class="small text-muted d-none" id="tagviz-glow-note">Glow = tags present in _temp.</div>
             </div>
             <div class="d-flex gap-2">
               <button type="button" class="btn btn-outline-light btn-sm" id="tagviz-scan">Scan tags</button>
@@ -317,84 +499,17 @@
           <div class="tag-cloud mt-2" id="tagviz-cloud"></div>
         </div>
       </div>
-      <div class="col-md-9">
-        <label class="form-label">Tags / mapping</label>
-        <input class="form-control" id="tags" name="tags"
-               placeholder="insert/delete/move: tag1, tag2   •   replace: old->new; old2->new2"
-               data-bs-toggle="tooltip"
-               data-bs-title="insert/delete/move use a comma list. replace uses mappings like old->new; old2->new2">
-      </div>
-
-      <div class="col-md-3 d-flex align-items-end">
-        <div class="form-check" data-bs-toggle="tooltip" data-bs-title="Create .bak backup of original .txt (not used for move/undo)">
-          <input class="form-check-input" type="checkbox" id="backup" name="backup">
-          <label class="form-check-label" for="backup">Create .bak backups</label>
-        </div>
-      </div>
-
-      <!-- Effective paths preview -->
       <div class="col-md-12">
-        <label class="form-label">Effective paths preview</label>
-        <div class="p-2" style="background:var(--bb-card); border:1px solid var(--bb-border); border-radius:.5rem;">
-          <div class="path-preview">
-            <div class="path-line">
-              <div class="path-badge badge-move">MOVE</div>
-              <span class="code-chip path-text" id="eff-move-from" title="...">...</span>
-              <span class="path-sep">-></span>
-              <span class="code-chip path-text" id="eff-move-to" title="...">...</span>
+        <div class="card p-4 gallery-section">
+          <div class="d-flex align-items-start justify-content-between gap-2 flex-wrap mb-3">
+            <div>
+              <h5 class="mb-1">Dataset Browser</h5>
+              <div class="small text-muted">Browse source files from <span class="code-chip">dataset/</span> (excluding <span class="code-chip">dataset/_temp</span>) in the main flow, preview, then stage selected files via the right-side Dataset Workspace.</div>
             </div>
-            <div class="path-line">
-              <div class="path-badge badge-edit">EDIT</div>
-              <span class="path-flag" id="eff-edit-flag"></span>
-              <span class="code-chip path-text" id="eff-edit-path" title="...">...</span>
-            </div>
-            <div class="path-line">
-              <div class="path-badge badge-undo">UNDO</div>
-              <span class="code-chip path-text" id="eff-undo-from" title="...">...</span>
-              <span class="path-sep">-></span>
-              <span class="code-chip path-text" id="eff-undo-to" title="...">...</span>
+            <div class="d-flex gap-1">
+              <button type="button" class="btn btn-sm btn-outline-light" id="gallery-refresh">Refresh</button>
             </div>
           </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="mt-3 d-flex gap-2 flex-wrap">
-      <button class="btn btn-primary" id="btn-run">Run</button>
-      <button type="button" class="btn btn-outline-warning" id="btn-undo"
-              data-bs-toggle="tooltip" data-bs-title="Restore files from Temp folder back to Folder">↶</button>
-      <button type="button" class="btn btn-outline-secondary" id="btn-clear"
-              data-bs-toggle="tooltip" data-bs-title="Clear remembered inputs for this tool">Clear saved</button>
-    </div>
-
-    <div id="tags-warning" class="alert alert-warning d-none mt-3" role="alert">
-      <div id="tags-warning-msg"></div>
-      <div class="mt-2 d-flex gap-2 flex-wrap" id="tags-warning-actions"></div>
-    </div>
-
-    <!-- Inline status + log (no page reload) -->
-    <div class="mt-3 small text-muted" id="tags-status" style="min-height:1.25rem;"></div>
-    <div id="tags-log" class="card p-3 mt-2 d-none">
-      <h6 class="mb-2">Log</h6>
-      <pre class="monospace mb-0" id="tags-log-pre"></pre>
-    </div>
-  </form>
-    </div>
-  </div>
-    </div>
-  </div>
-
-  <aside class="card tag-editor-sidebar" id="tag-editor-sidebar">
-    <div class="sidebar-head">
-      <div class="sidebar-title">Preview</div>
-      <div class="d-flex gap-1">
-        <button type="button" class="btn btn-sm btn-outline-light" id="gallery-refresh">Refresh</button>
-        <button type="button" class="btn btn-sm btn-outline-secondary" id="gallery-toggle">Minimize</button>
-      </div>
-    </div>
-    <div class="sidebar-body">
-      <div class="sidebar-split">
-        <div class="sidebar-col">
           <div class="gallery-toolbar">
             <div class="form-check form-switch">
               <input class="form-check-input" type="checkbox" id="gallery-recursive" checked>
@@ -414,19 +529,24 @@
                 <option value="created_desc">Created newest</option>
               </select>
             </div>
+            <div class="input-group input-group-sm" style="width:130px;">
+              <span class="input-group-text">Grid</span>
+              <select class="form-select" id="gallery-grid-cols">
+                <option value="2">2 / row</option>
+                <option value="3">3 / row</option>
+                <option value="4">4 / row</option>
+              </select>
+            </div>
             <span class="small text-muted" id="gallery-count">0 images</span>
           </div>
-          <div class="gallery-selection-toolbar">
-            <button type="button" class="btn btn-sm btn-outline-light" id="gallery-select-visible">Select visible</button>
-            <button type="button" class="btn btn-sm btn-outline-secondary" id="gallery-clear-selection">Clear selected</button>
+          <div class="gallery-selection-toolbar mt-2">
+            <button type="button" class="btn btn-sm btn-outline-light gallery-selection-toggle" id="gallery-select-toggle">Select All</button>
             <span class="gallery-selection-count" id="gallery-selection-count">0 selected</span>
+            <span class="gallery-selection-note">Drag selected cards to any folder in Dataset Workspace.</span>
           </div>
-          <div class="gallery-path">
-            Root: <span class="code-chip" id="gallery-path">...</span>
-          </div>
-          <div class="gallery-cheatsheet">
+          <div class="gallery-cheatsheet mt-3">
             <div class="gallery-cheatsheet-head">
-              <div class="gallery-cheatsheet-title">Dataset tag cheat sheet (parent folder)</div>
+              <div class="gallery-cheatsheet-title">Dataset tag cheat sheet (project root)</div>
               <div class="input-group input-group-sm" style="min-width:220px;max-width:320px;">
                 <span class="input-group-text">TXT</span>
                 <input type="text" class="form-control" id="gallery-cheatsheet-file" placeholder="prompt.txt">
@@ -439,55 +559,157 @@
             <div class="gallery-cheatsheet-tags" id="gallery-cheatsheet-tags"></div>
             <div class="gallery-cheatsheet-content" id="gallery-cheatsheet-content">Cheat sheet not loaded.</div>
           </div>
-          <div class="gallery-drop" id="gallery-drop" data-bs-toggle="tooltip" data-bs-title="Drop files here to copy into the dataset folder">
-            Drop files here, or <span class="text-decoration-underline">click to select</span>
+          <div class="gallery-drop mt-3" id="gallery-drop" data-bs-toggle="tooltip" data-bs-title="Drop files here to copy into dataset/">
+            Drop files here, or <span class="text-decoration-underline">click to select</span> for dataset/
             <input type="file" id="gallery-upload-input" multiple class="d-none">
           </div>
-          <div class="gallery-status" id="gallery-status"></div>
-          <div class="gallery-grid" id="gallery-grid"></div>
+          <div class="gallery-status mt-2" id="gallery-status"></div>
+          <div class="gallery-grid mt-2" id="gallery-grid"></div>
           <div class="mt-2 text-center">
             <button type="button" class="btn btn-sm btn-outline-light d-none" id="gallery-load-more">Load more</button>
           </div>
         </div>
-        <div class="sidebar-col sidebar-col-dest">
-          <div class="workdir-panel">
-            <div class="workdir-head">
-              <div>
-                <div class="fw-semibold">Destinations</div>
-                <div class="small text-muted">Drop one or many selected images here. The paired <span class="code-chip">.txt</span> moves together.</div>
-              </div>
-              <button type="button" class="btn btn-sm btn-outline-light" id="workdir-refresh">Refresh</button>
-            </div>
-            <div class="gallery-path mt-2">
-              Target root: <span class="code-chip" id="workdir-path">...</span>
-            </div>
-            <div class="workdir-quick-grid">
-              <div class="workdir-quick-drop" id="workdir-root-drop">
-                <div class="workdir-quick-label">Quick drop</div>
-                <div class="workdir-quick-path">Dataset root</div>
-                <div class="small text-muted">Return files from _temp or regroup into the root.</div>
-              </div>
-              <div class="workdir-quick-drop is-temp" id="workdir-temp-drop">
-                <div class="workdir-quick-label">Quick drop</div>
-                <div class="workdir-quick-path">_temp</div>
-                <div class="small text-muted">Stage selected files into _temp without scrolling.</div>
-              </div>
-            </div>
-            <button type="button" class="btn btn-sm btn-outline-warning mt-2 w-100" id="workdir-return-temp">
-              Return all files from _temp to root
-            </button>
-            <div class="workdir-status mt-2" id="workdir-status"></div>
-            <div class="workdir-tree" id="workdir-tree"></div>
-            <div class="workdir-actions mt-2">
-              <input class="form-control form-control-sm" type="text" id="workdir-new-name" placeholder="New folder name">
-              <button type="button" class="btn btn-sm btn-outline-light" id="workdir-create">New folder</button>
-              <button type="button" class="btn btn-sm btn-outline-danger" id="workdir-delete">Delete selected</button>
+      </div>
+    </div>
+  </form>
+    </div>
+  </div>
+
+  <aside class="card tag-editor-sidebar" id="tag-editor-sidebar">
+    <div class="sidebar-head">
+      <div class="sidebar-title">Editor + Workspace</div>
+      <button type="button" class="btn btn-sm btn-outline-light" id="workdir-refresh">Refresh</button>
+    </div>
+    <div class="sidebar-body">
+      <div class="editor-panel">
+        <div class="mode-layout">
+          <div class="mode-panel" id="mode-panel">
+            <div class="mode-title">Mode</div>
+            <div class="mode-buttons" id="mode-buttons">
+              <button type="button" class="mode-btn" data-mode="insert" data-bs-toggle="tooltip" data-bs-title="Insert: add missing tags into .txt in _temp.">
+                <span class="mode-icon">+</span><span>Insert</span>
+              </button>
+              <button type="button" class="mode-btn" data-mode="delete" data-bs-toggle="tooltip" data-bs-title="Delete: remove tags from .txt in _temp.">
+                <span class="mode-icon">-</span><span>Delete</span>
+              </button>
+              <button type="button" class="mode-btn" data-mode="replace" data-bs-toggle="tooltip" data-bs-title="Replace: mapping old->new in _temp.">
+                <span class="mode-icon">&lt;&gt;</span><span>Replace</span>
+              </button>
+              <button type="button" class="mode-btn" data-mode="dedup" data-bs-toggle="tooltip" data-bs-title="Dedup: remove duplicate tags in _temp.">
+                <span class="mode-icon">=</span><span>Dedup</span>
+              </button>
             </div>
           </div>
+          <div>
+            <div id="mode-banner" class="mode-banner mb-2">
+              <strong>Mode help:</strong>
+              <span id="mode-desc">Select a mode to continue.</span>
+            </div>
+            <label class="form-label">Tags / mapping</label>
+            <input class="form-control" id="tags" name="tags" form="tags-form"
+                   placeholder="insert/delete: tag1, tag2   •   replace: old->new; old2->new2"
+                   data-bs-toggle="tooltip"
+                   data-bs-title="insert/delete use a comma list. replace uses mappings like old->new; old2->new2">
+            <div class="form-check mt-2" data-bs-toggle="tooltip" data-bs-title="Create .bak backup of original .txt during edit operations">
+              <input class="form-check-input" type="checkbox" id="backup" name="backup" form="tags-form">
+              <label class="form-check-label" for="backup">Create .bak backups</label>
+            </div>
+          </div>
+        </div>
+        <div>
+          <label class="form-label d-none">Effective paths preview</label>
+          <div class="p-2 d-none" style="background:var(--bb-card); border:1px solid var(--bb-border); border-radius:.5rem;">
+            <div class="path-preview">
+              <div class="path-line">
+                <div class="path-badge badge-move">SOURCE</div>
+                <span class="code-chip path-text" id="eff-move-from" title="...">...</span>
+                <span class="path-sep">-></span>
+                <span class="code-chip path-text" id="eff-move-to" title="...">...</span>
+              </div>
+              <div class="path-line">
+                <div class="path-badge badge-edit">EDIT</div>
+                <span class="path-flag" id="eff-edit-flag"></span>
+                <span class="code-chip path-text" id="eff-edit-path" title="...">...</span>
+              </div>
+              <div class="path-line">
+                <div class="path-badge badge-undo">UNDO</div>
+                <span class="code-chip path-text" id="eff-undo-from" title="...">...</span>
+                <span class="path-sep">-></span>
+                <span class="code-chip path-text" id="eff-undo-to" title="...">...</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="sidebar-runbar">
+          <button class="btn btn-primary" id="btn-run" type="submit" form="tags-form">Run</button>
+          <button type="button" class="btn btn-outline-warning d-none" id="btn-undo"
+                  data-bs-toggle="tooltip" data-bs-title="Restore files from dataset/_temp back to dataset/">â†¶</button>
+          <button type="button" class="btn btn-outline-secondary" id="btn-clear"
+                  data-bs-toggle="tooltip" data-bs-title="Clear remembered inputs for this tool">Clear saved</button>
+        </div>
+        <div id="tags-warning" class="alert alert-warning d-none mb-0" role="alert">
+          <div id="tags-warning-msg"></div>
+          <div class="mt-2 d-flex gap-2 flex-wrap" id="tags-warning-actions"></div>
+        </div>
+        <div class="small text-muted" id="tags-status" style="min-height:1.25rem;"></div>
+        <div id="tags-log" class="card p-3 d-none">
+          <h6 class="mb-2">Log</h6>
+          <pre class="monospace mb-0" id="tags-log-pre"></pre>
+        </div>
+      </div>
+      <div class="workdir-panel">
+        <div class="workdir-head">
+          <div>
+            <div class="d-flex align-items-center gap-2">
+              <div class="fw-semibold">Dataset Workspace</div>
+              <button type="button" class="btn btn-outline-secondary btn-sm info-tip-btn" id="workdir-info-tip"
+                      data-bs-toggle="tooltip"
+                      data-bs-title="Use this side panel for staging and return flow while the browser stays in the main reading path after Tag Explorer.">
+                <i class="bi bi-info-circle"></i>
+              </button>
+            </div>
+            <div class="small text-muted d-none">Use this side panel for staging and return flow while the browser stays in the main reading path after Tag Explorer.</div>
+          </div>
+        </div>
+        <div class="gallery-path mt-2">
+          dataset/: <span class="code-chip" id="workdir-path">...</span>
+        </div>
+        <div class="workdir-quick-grid">
+          <div class="workdir-quick-drop" id="workdir-root-drop">
+            <div class="workdir-quick-label">Quick drop</div>
+            <div class="workdir-quick-path truncate-1">Dataset root</div>
+            <div class="small text-muted truncate-2">Return files from any subfolder or regroup into root.</div>
+          </div>
+          <div class="workdir-quick-drop is-temp" id="workdir-temp-drop">
+            <div class="workdir-quick-label">Primary drop target</div>
+            <div class="workdir-quick-path truncate-1">dataset/_temp</div>
+            <div class="small text-muted truncate-2">Stage selected dataset files here. Image + paired <span class="code-chip">.txt</span> move together.</div>
+          </div>
+        </div>
+        <button type="button" class="btn btn-sm btn-warning mt-2 w-100" id="workdir-send-selected">
+          Send selected dataset items to _temp
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-warning mt-2 w-100" id="workdir-return-temp">
+          Return all files from subfolders to dataset root
+        </button>
+        <div class="workdir-status mt-2" id="workdir-status"></div>
+        <div class="workdir-temp-meta">
+          <div class="small text-muted">Active _temp items</div>
+          <div class="small text-muted" id="workdir-temp-count">0 items</div>
+        </div>
+        <div class="workdir-temp-list" id="workdir-temp-list">
+          <div class="workdir-empty">No staged items in _temp.</div>
+        </div>
+        <div class="workdir-tree" id="workdir-tree"></div>
+        <div class="workdir-actions mt-2">
+          <input class="form-control form-control-sm" type="text" id="workdir-new-name" placeholder="New folder name">
+          <button type="button" class="btn btn-sm btn-outline-light" id="workdir-create">New folder</button>
+          <button type="button" class="btn btn-sm btn-outline-danger" id="workdir-delete">Delete selected</button>
         </div>
       </div>
     </div>
   </aside>
+  </div>
 </div>
 
 <div class="modal fade" id="tagsConfirmModal" tabindex="-1" aria-hidden="true">
@@ -517,7 +739,7 @@
         <div class="gallery-modal-nav">
           <span class="gallery-modal-index" id="gallery-preview-index">0 / 0</span>
           <button type="button" class="btn btn-sm btn-outline-light gallery-modal-select" id="gallery-preview-select">Select</button>
-          <span class="gallery-modal-shortcut">Shortcut: <span class="code-chip">S</span> to select</span>
+          <span class="gallery-modal-shortcut">Shortcuts: <span class="code-chip">Space</span> select, <span class="code-chip">A</span>/<span class="code-chip">D</span> navigate</span>
         </div>
         <div class="gallery-modal-stage">
           <button type="button" class="gallery-modal-arrow is-prev" id="gallery-preview-prev" aria-label="Previous image">&#8249;</button>
@@ -692,7 +914,9 @@
     path: 'tagviz-path',
     status: 'tagviz-status',
     hint: 'tagviz-hint',
-    syncStatus: 'tagviz-sync-status'
+    syncStatus: 'tagviz-sync-status',
+    glowNote: 'tagviz-glow-note',
+    infoTip: 'tagviz-info-tip'
   };
   const DANBOORU = {
     offcanvas: 'danbooruOffcanvas',
@@ -724,9 +948,6 @@
     glossaryList: 'danbooru-glossary-list'
   };
   const GALLERY = {
-    layout: 'tag-editor-layout',
-    sidebar: 'tag-editor-sidebar',
-    toggle: 'gallery-toggle',
     refresh: 'gallery-refresh',
     grid: 'gallery-grid',
     status: 'gallery-status',
@@ -742,12 +963,12 @@
     drop: 'gallery-drop',
     input: 'gallery-upload-input',
     loadMore: 'gallery-load-more',
-    selectVisible: 'gallery-select-visible',
-    clearSelection: 'gallery-clear-selection',
+    selectToggle: 'gallery-select-toggle',
     selectionCount: 'gallery-selection-count',
     recursive: 'gallery-recursive',
     limit: 'gallery-limit',
     sort: 'gallery-sort',
+    gridCols: 'gallery-grid-cols',
     modal: 'galleryPreviewModal',
     modalImg: 'gallery-preview-img',
     modalName: 'gallery-preview-name',
@@ -777,12 +998,51 @@
     path: 'workdir-path',
     tree: 'workdir-tree',
     status: 'workdir-status',
+    tempCount: 'workdir-temp-count',
+    tempList: 'workdir-temp-list',
     newName: 'workdir-new-name',
     create: 'workdir-create',
     del: 'workdir-delete',
     rootDrop: 'workdir-root-drop',
     tempDrop: 'workdir-temp-drop',
+    sendSelected: 'workdir-send-selected',
     returnTemp: 'workdir-return-temp'
+  };
+  const LEFT = {
+    cheatBtn: 'left-drawer-cheatsheet-toggle',
+    projectBtn: 'left-drawer-project-toggle',
+    hotkeysBtn: 'left-rail-hotkeys-tip',
+    cheatPanel: 'left-drawer-cheatsheet',
+    projectPanel: 'left-drawer-project',
+    cheatClose: 'left-drawer-cheatsheet-close',
+    projectClose: 'left-drawer-project-close',
+    backdrop: 'left-drawer-backdrop'
+  };
+  const LAYOUT = {
+    projectInlineHost: 'project-setup-inline-host',
+    lockBanner: 'workspace-lock-banner'
+  };
+  const PROJECT = {
+    refresh: 'project-refresh',
+    initPreview: 'project-init-preview',
+    panel: 'project-setup-panel',
+    summary: 'project-status-summary',
+    note: 'project-status-note',
+    compactSummary: 'project-status-compact',
+    compactNote: 'project-status-compact-note',
+    statusPill: 'project-status-pill',
+    compactStatusPill: 'project-status-pill-compact',
+    triggerPill: 'project-trigger-pill',
+    compactTriggerPill: 'project-trigger-pill-compact',
+    rootChip: 'project-root-chip',
+    databaseChip: 'project-database-chip',
+    datasetChip: 'project-dataset-chip',
+    tempChip: 'project-temp-chip',
+    promptChip: 'project-prompt-chip',
+    cues: 'project-status-cues',
+    infoList: 'project-status-info',
+    planWrap: 'project-init-plan-wrap',
+    plan: 'project-init-plan'
   };
   const tagVizState = {
     items: [],
@@ -811,15 +1071,39 @@
     cheatsheetTrigger: '',
     cheatsheetSections: [],
     cheatsheetTags: [],
-    cheatsheetContent: ''
+    cheatsheetContent: '',
+    previewSource: 'dataset',
+    selectionAnchorRel: '',
+    marqueeActive: false,
+    marqueeStartX: 0,
+    marqueeStartY: 0,
+    marqueeCurrentX: 0,
+    marqueeCurrentY: 0,
+    marqueePointerId: null,
+    marqueeAdditive: false,
+    marqueeElement: null
   };
-  const uiState = {
-    sidebarExpanded: false
+  const projectState = {
+    root: '',
+    databaseRoot: '',
+    datasetRoot: '',
+    tempRoot: '',
+    promptPath: '',
+    ready: false,
+    needsInit: false,
+    status: '',
+    missing: [],
+    warnings: [],
+    info: [],
+    normalizedFromLegacy: false,
+    triggerWord: '',
+    initPreview: null
   };
   const workdirState = {
     root: '',
     selected: '',
-    expanded: new Set()
+    expanded: new Set(),
+    tempItems: []
   };
   const danbooruState = {
     offcanvas: null,
@@ -848,24 +1132,26 @@
   let tagScanBusy = false;
   let galleryLoadBusy = false;
   let galleryLoadQueued = false;
-  const TAGS_PLACEHOLDER_DEFAULT = get(IDS.tags)?.getAttribute('placeholder') || '';
+  let leftPanel = null;
+  const TAGS_PLACEHOLDER_DEFAULT = 'insert/delete: tag1, tag2   |   replace: old->new; old2->new2';
 
   const MODE_HELP = {
-    insert:"Insert: add missing tags to each .txt (comma-separated).",
-    delete:"Delete: remove specific tags if present (comma-separated).",
-    replace:"Replace: map old->new; multiple mappings separated by semicolons (e.g., old->new; old2->new2).",
-    move:"Move: if ANY listed tags exist in .txt, move image+.txt to Temp.",
-    dedup:"Dedup: remove duplicate tags, keep the first occurrence."
+    insert:"Insert: add missing tags to each .txt in dataset/_temp (comma-separated).",
+    delete:"Delete: remove specific tags from .txt in dataset/_temp.",
+    replace:"Replace: map old->new inside dataset/_temp.",
+    dedup:"Dedup: remove duplicate tags in dataset/_temp, keep the first occurrence."
   };
+  const MODE_CYCLE_ORDER = ['insert', 'delete', 'replace', 'dedup'];
   const MODE_CLASS = {
-    insert:"mode-insert", delete:"mode-delete", replace:"mode-replace",
-    move:"mode-move", dedup:"mode-dedup"
+    insert:"mode-insert", delete:"mode-delete", replace:"mode-replace", dedup:"mode-dedup"
   };
   const MODE_STORAGE_KEY = 'bb.tags.mode';
   const DANBOORU_GLOSSARY_KEY = 'batchbench_glossary_v1';
   const DANBOORU_LAST_CATEGORY_KEY = 'batchbench_glossary_last_category';
   const DANBOORU_PREVIEW_MIN_KEY = 'batchbench_danbooru_preview_minimized';
   const GALLERY_CHEATSHEET_FILE_KEY = 'batchbench_gallery_cheatsheet_file';
+  const GALLERY_GRID_COLS_KEY = 'batchbench_gallery_grid_cols';
+  const GALLERY_MARQUEE_DRAG_THRESHOLD = 7;
 
   function getModeValue(){
     return (get(IDS.mode)?.value || '').trim();
@@ -873,6 +1159,62 @@
 
   function getModeOrDefault(){
     return getModeValue() || 'insert';
+  }
+
+  function cycleMode(step){
+    const size = MODE_CYCLE_ORDER.length;
+    if (!size) return;
+    const current = getModeOrDefault();
+    const currentIndex = MODE_CYCLE_ORDER.indexOf(current);
+    const base = currentIndex >= 0 ? currentIndex : 0;
+    const nextIndex = (base + step + size) % size;
+    setMode(MODE_CYCLE_ORDER[nextIndex], true);
+  }
+
+  function isEditableTarget(target){
+    if (!target) return false;
+    const tag = target.tagName ? target.tagName.toLowerCase() : '';
+    return tag === 'input' || tag === 'textarea' || !!target.isContentEditable;
+  }
+
+  function keyMatches(event, letter){
+    const want = String(letter || '').toLowerCase();
+    if (!want) return false;
+    const key = String(event?.key || '').toLowerCase();
+    if (key === want) return true;
+    const code = String(event?.code || '').toLowerCase();
+    return code === `key${want}`;
+  }
+
+  function isSpaceKey(event){
+    const key = String(event?.key || '').toLowerCase();
+    if (key === ' ' || key === 'spacebar') return true;
+    return String(event?.code || '').toLowerCase() === 'space';
+  }
+
+  function getAltNumberPosition(event){
+    if (!event || !event.altKey || event.ctrlKey || event.metaKey || event.shiftKey){
+      return 0;
+    }
+    const code = String(event.code || '');
+    if (/^Digit[1-9]$/.test(code)) return parseInt(code.slice(5), 10);
+    if (/^Numpad[1-9]$/.test(code)) return parseInt(code.slice(6), 10);
+    const key = String(event.key || '');
+    if (/^[1-9]$/.test(key)) return parseInt(key, 10);
+    return 0;
+  }
+
+  function openGalleryPreviewByPosition(position){
+    const idx = parseInt(String(position || ''), 10) - 1;
+    if (!Number.isFinite(idx) || idx < 0) return false;
+    const items = getVisibleGalleryItems().filter(item => item?.rel);
+    const item = items[idx];
+    if (!item){
+      setGalleryStatus(`No image at position ${position}.`);
+      return false;
+    }
+    openGalleryPreviewByRel(item.rel || '', 'dataset');
+    return true;
   }
 
   function syncModeButtons(){
@@ -903,16 +1245,62 @@
   const sepFor = p => (p && p.includes('\\') && !p.includes('/')) ? '\\' : '/';
   const defaultTempFor = root => root ? (stripTemp(root) + sepFor(root) + '_temp') : '';
 
+  function getProjectRootInput(){
+    return (get(IDS.folder)?.value || '').trim();
+  }
+
+  function getResolvedProjectRoot(){
+    return (projectState.root || getProjectRootInput() || '').trim();
+  }
+
+  function getDatabaseRoot(){
+    return (projectState.databaseRoot || (getResolvedProjectRoot() ? `${getResolvedProjectRoot()}${sepFor(getResolvedProjectRoot())}database` : '')).trim();
+  }
+
+  function getDatasetRoot(){
+    return (projectState.datasetRoot || (getResolvedProjectRoot() ? `${getResolvedProjectRoot()}${sepFor(getResolvedProjectRoot())}dataset` : '')).trim();
+  }
+
+  function getTempRoot(){
+    return (projectState.tempRoot || (getResolvedProjectRoot() ? `${getDatasetRoot()}${sepFor(getDatasetRoot())}_temp` : '')).trim();
+  }
+
   function getEffectiveFolders(){
     const mode = getModeValue();
-    const root = stripTemp((get(IDS.folder)?.value||'').trim());
-    const def = defaultTempFor(root);
-    const temp = def;
-    const editTarget = 'recursive';
-    const editPref = temp;
-    let scan = root;
-    const scanRecursive = true;
-    return { mode, root, def, temp, scan, editTarget, editPref, scanRecursive };
+    const root = getResolvedProjectRoot();
+    const database = getDatabaseRoot();
+    const dataset = getDatasetRoot();
+    const temp = getTempRoot() || defaultTempFor(root);
+    return {
+      mode,
+      root,
+      database,
+      dataset,
+      temp,
+      def: temp,
+      scan: temp,
+      editTarget: 'recursive',
+      editPref: temp,
+      scanRecursive: true
+    };
+  }
+
+  function updateTagExplorerTooltip(){
+    const trigger = get(TAGVIZ.infoTip);
+    if (!trigger || typeof bootstrap === 'undefined' || !bootstrap.Tooltip) return;
+    const hint = (get(TAGVIZ.hint)?.textContent || '').trim();
+    const sync = (get(TAGVIZ.syncStatus)?.textContent || '').trim();
+    const glow = (get(TAGVIZ.glowNote)?.textContent || 'Glow = tags present in _temp.').trim();
+    const plain = [hint, sync, glow].filter(Boolean).join('\n');
+    const html = [hint, sync, glow].filter(Boolean).join('<br>');
+    trigger.setAttribute('title', plain);
+    trigger.setAttribute('data-bs-title', html);
+    let tip = bootstrap.Tooltip.getInstance(trigger);
+    if (!tip){
+      tip = new bootstrap.Tooltip(trigger);
+    } else if (typeof tip.setContent === 'function'){
+      tip.setContent({ '.tooltip-inner': html });
+    }
   }
 
   function updateTagHint(){
@@ -928,19 +1316,19 @@
           : ' Auto-sync paused; click Sync to Tags to resume.';
       }
       hint.textContent = msg;
+      hint.title = msg;
+      updateTagExplorerTooltip();
       return;
     }
     if (mode === 'replace') {
       msg = 'Replace mode: selection formats as "tag->" entries.';
-    } else if (mode === 'move') {
-      msg = 'Move mode: tags are matched in the base folder.';
     } else if (mode === 'dedup') {
       msg = 'Dedup mode removes duplicates; Tags input is ignored.';
     } else {
       msg = 'Select tags -> choose mode -> Run.';
     }
     if (mode === 'insert' || mode === 'delete' || mode === 'replace' || mode === 'dedup'){
-      msg += ' Edits run on _temp only; use Move mode to populate _temp first.';
+      msg += ' Edits run on dataset/_temp only; send items there from the Dataset Browser first.';
     }
     if (tagVizState.selected.size){
       msg += tagsSyncEnabled
@@ -948,6 +1336,8 @@
         : ' Auto-sync paused; click Sync to Tags to resume.';
     }
     hint.textContent = msg;
+    hint.title = msg;
+    updateTagExplorerTooltip();
   }
 
   function updateModeHelp(){
@@ -974,6 +1364,7 @@
     if (!getModeValue()){
       updateModeHelp();
       refreshTempHints();
+      refreshCheatsheetChipSelectionCue();
       return;
     }
     updateModeHelp();
@@ -989,6 +1380,7 @@
       updateTagHint();
       updateTagWarningsFromInput();
       clearWarning();
+      refreshCheatsheetChipSelectionCue();
       return;
     }
 
@@ -1005,12 +1397,14 @@
     }
     updateTagWarningsFromInput();
     clearWarning();
+    refreshCheatsheetChipSelectionCue();
   }
 
   function refreshTempHints(){
     const info = getEffectiveFolders();
     const root = info.root;
-    const def = info.def;
+    const database = info.database;
+    const dataset = info.dataset;
     const temp = info.temp;
     const editTarget = info.editTarget;
     const editPath = temp;
@@ -1023,12 +1417,12 @@
       el.title = value || '';
     };
 
-    setPath(IDS.effMoveFrom, root);
+    setPath(IDS.effMoveFrom, database);
     setPath(IDS.effMoveTo, temp);
     setPath(IDS.effEditPath, editPath);
     setPath(IDS.effUndoFrom, temp);
-    setPath(IDS.effUndoTo, root);
-    if (get(TAGVIZ.path))     get(TAGVIZ.path).textContent     = root || '...';
+    setPath(IDS.effUndoTo, dataset);
+    if (get(TAGVIZ.path)) get(TAGVIZ.path).textContent = dataset || '...';
 
     const flag = get(IDS.effEditFlag);
     if (flag){
@@ -1037,11 +1431,11 @@
     }
 
     const fixed = get(IDS.fixedWorkdir);
-    if (fixed) fixed.textContent = def || '...';
+    if (fixed) fixed.textContent = temp || '...';
   }
 
   function getGalleryRoot(){
-    return stripTemp((get(IDS.folder)?.value||'').trim());
+    return getDatasetRoot();
   }
 
   function getParentPath(pathValue){
@@ -1057,7 +1451,688 @@
   }
 
   function getCheatsheetRoot(){
-    return getParentPath(getGalleryRoot());
+    return getResolvedProjectRoot();
+  }
+
+  function setProjectChip(id, value){
+    const el = get(id);
+    if (!el) return;
+    el.textContent = value || '...';
+    el.title = value || '';
+  }
+
+  function renderProjectPillState(id, label, tone=''){
+    const el = get(id);
+    if (!el) return;
+    el.className = 'project-status-pill';
+    el.textContent = label;
+    if (tone) el.classList.add(tone);
+  }
+
+  function renderProjectCueList(items){
+    const wrap = get(PROJECT.cues);
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    if (!Array.isArray(items) || !items.length) return;
+    items.forEach(item=>{
+      const chip = document.createElement('span');
+      chip.className = `project-cue ${item.tone || ''}`.trim();
+      chip.textContent = item.label;
+      wrap.appendChild(chip);
+    });
+  }
+
+  function renderProjectInfoList(messages){
+    const wrap = get(PROJECT.infoList);
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    (messages || []).forEach(message=>{
+      if (!message) return;
+      const row = document.createElement('div');
+      row.textContent = message;
+      wrap.appendChild(row);
+    });
+  }
+
+  function setLeftDrawer(panel){
+    const next = (panel === 'cheatsheet' || panel === 'project') ? panel : null;
+    const cheat = get(LEFT.cheatPanel);
+    const project = get(LEFT.projectPanel);
+    const cheatBtn = get(LEFT.cheatBtn);
+    const projectBtn = get(LEFT.projectBtn);
+    const backdrop = get(LEFT.backdrop);
+    const open = !!next;
+    leftPanel = next;
+    if (cheat){
+      const isOpen = next === 'cheatsheet';
+      cheat.classList.toggle('is-open', isOpen);
+      cheat.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+    }
+    if (project){
+      const isOpen = next === 'project';
+      project.classList.toggle('is-open', isOpen);
+      project.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+    }
+    if (cheatBtn){
+      const active = next === 'cheatsheet';
+      cheatBtn.classList.toggle('is-active', active);
+      cheatBtn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    }
+    if (projectBtn){
+      const active = next === 'project';
+      projectBtn.classList.toggle('is-active', active);
+      projectBtn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    }
+    if (backdrop){
+      backdrop.classList.toggle('is-open', open);
+    }
+  }
+
+  function toggleLeftDrawer(panel){
+    setLeftDrawer(leftPanel === panel ? null : panel);
+  }
+
+  function bindLeftDrawerControls(){
+    const layout = get('tag-editor-layout');
+    if (!layout || layout.dataset.leftDrawerBound === '1') return;
+    layout.dataset.leftDrawerBound = '1';
+    get(LEFT.cheatBtn)?.addEventListener('click', ()=> toggleLeftDrawer('cheatsheet'));
+    get(LEFT.projectBtn)?.addEventListener('click', ()=> toggleLeftDrawer('project'));
+    get(LEFT.cheatClose)?.addEventListener('click', ()=> setLeftDrawer(null));
+    get(LEFT.projectClose)?.addEventListener('click', ()=> setLeftDrawer(null));
+    get(LEFT.backdrop)?.addEventListener('click', ()=> setLeftDrawer(null));
+    document.addEventListener('keydown', (e)=>{
+      if (e.key === 'Escape' && leftPanel){
+        setLeftDrawer(null);
+      }
+    });
+  }
+
+  function syncLeftDockPosition(){
+    const layout = get('tag-editor-layout');
+    const shell = layout?.querySelector('.tag-editor-shell');
+    if (!layout || !shell) return;
+    const shellRect = shell.getBoundingClientRect();
+    const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+    const drawerLeft = Math.max(12, Math.min(shellRect.left + 2, viewportWidth - 340));
+    const drawerMax = Math.max(340, viewportWidth - drawerLeft - 16);
+    layout.style.setProperty('--bb-left-drawer-left', `${Math.round(drawerLeft)}px`);
+    layout.style.setProperty('--bb-left-drawer-max', `${Math.round(drawerMax)}px`);
+  }
+
+  function isWorkspaceReady(){
+    return !!projectState.ready;
+  }
+
+  function syncProjectSetupPlacement(){
+    const panel = get(PROJECT.panel);
+    const drawerBody = get(LEFT.projectPanel)?.querySelector('.left-drawer-body');
+    const inlineHost = get(LAYOUT.projectInlineHost);
+    const projectBtn = get(LEFT.projectBtn);
+    if (!panel || !drawerBody || !inlineHost) return;
+    const shouldInline = !isWorkspaceReady();
+    if (shouldInline){
+      if (!inlineHost.contains(panel)) inlineHost.appendChild(panel);
+      inlineHost.classList.remove('d-none');
+      panel.open = true;
+      if (projectBtn){
+        projectBtn.classList.add('d-none');
+        projectBtn.disabled = true;
+      }
+      if (leftPanel === 'project') setLeftDrawer(null);
+    } else {
+      if (!drawerBody.contains(panel)) drawerBody.appendChild(panel);
+      inlineHost.classList.add('d-none');
+      if (projectBtn){
+        projectBtn.classList.remove('d-none');
+        projectBtn.disabled = false;
+      }
+    }
+  }
+
+  function setWorkspaceLockState(locked){
+    const layout = get('tag-editor-layout');
+    if (!layout) return;
+    layout.classList.toggle('workspace-locked', !!locked);
+    const banner = get(LAYOUT.lockBanner);
+    if (banner){
+      banner.classList.toggle('d-none', !locked);
+      banner.textContent = locked
+        ? 'Workspace is locked until project setup is complete. Finish Project Setup first.'
+        : '';
+    }
+    layout.querySelectorAll('.workspace-lock-target').forEach(el=>{
+      el.inert = !!locked;
+      el.setAttribute('aria-hidden', locked ? 'true' : 'false');
+    });
+    const cheatBtn = get(LEFT.cheatBtn);
+    if (cheatBtn) cheatBtn.disabled = !!locked;
+  }
+
+  function refreshWorkspaceGating(){
+    syncProjectSetupPlacement();
+    setWorkspaceLockState(!isWorkspaceReady());
+  }
+
+  function arrangeWorkspaceLayout(){
+    const layout = get('tag-editor-layout');
+    const form = get('tags-form');
+    const topCard = form?.closest('.card.p-4');
+    const legacyMain = topCard?.parentElement;
+    const row = form?.querySelector('.row.g-3');
+    const sidebar = get('tag-editor-sidebar');
+    const sidebarBody = sidebar?.querySelector('.sidebar-body');
+    const editorPanel = sidebarBody?.querySelector('.editor-panel');
+    const workdirPanel = sidebarBody?.querySelector('.workdir-panel');
+    const workdirRefresh = get(WORKDIR.refresh);
+    const folderCol = get(IDS.folder)?.closest('.col-md-4');
+    const extsCol = get(IDS.exts)?.closest('.col-md-4');
+    const editCol = get(IDS.fixedWorkdir)?.closest('.col-md-4');
+    const projectStatusCol = get(PROJECT.summary)?.closest('.col-md-12');
+    const tagExplorerCol = get(TAGVIZ.cloud)?.closest('.col-md-12');
+    const gallerySection = row?.querySelector('.gallery-section');
+    const galleryCol = gallerySection?.closest('.col-md-12');
+    const cheatsheet = gallerySection?.querySelector('.gallery-cheatsheet');
+
+    if (!layout || !form || !row || !gallerySection || !sidebar || !editorPanel || !workdirPanel || !folderCol || !extsCol || !editCol || !projectStatusCol || !tagExplorerCol || layout.dataset.workflowReady === '1'){
+      return;
+    }
+    layout.dataset.workflowReady = '1';
+
+    const selectionToolbar = gallerySection.querySelector('.gallery-selection-toolbar');
+    if (selectionToolbar){
+      let toggleBtn = get(GALLERY.selectToggle);
+      if (!toggleBtn){
+        toggleBtn = document.createElement('button');
+        toggleBtn.type = 'button';
+        toggleBtn.className = 'btn btn-sm btn-outline-light gallery-selection-toggle';
+        toggleBtn.id = GALLERY.selectToggle;
+        toggleBtn.textContent = 'Select All';
+        selectionToolbar.prepend(toggleBtn);
+      }
+      const noteExists = selectionToolbar.querySelector('.gallery-selection-note');
+      if (!noteExists){
+        const note = document.createElement('span');
+        note.className = 'gallery-selection-note';
+        note.innerHTML = 'Drag selected cards to any folder in Dataset Workspace.';
+        selectionToolbar.appendChild(note);
+      }
+    }
+
+    const galleryRootInfo = gallerySection.querySelector('.gallery-path');
+    if (galleryRootInfo) galleryRootInfo.remove();
+
+    if (cheatsheet){
+      cheatsheet.classList.remove('mt-3');
+    }
+
+    const hiddenFields = Array.from(form.querySelectorAll('input[type="hidden"]'))
+      .filter(el => ['tool', 'active_tab', 'mode', 'edit_target'].includes(el.name));
+
+    const leftRail = document.createElement('div');
+    leftRail.className = 'tag-editor-left-rail';
+    leftRail.innerHTML = `
+      <button type="button" class="left-rail-btn left-rail-btn-cheat" id="${LEFT.cheatBtn}"><i class="bi bi-lightbulb"></i>Cheat Sheet</button>
+      <button type="button" class="left-rail-btn left-rail-btn-project" id="${LEFT.projectBtn}"><i class="bi bi-tools"></i>Project Setup</button>
+      <button type="button" class="left-rail-btn left-rail-btn-hotkeys" id="${LEFT.hotkeysBtn}"
+              data-bs-toggle="tooltip" data-bs-html="true" data-bs-custom-class="bb-hotkeys-tooltip"
+              data-bs-title="<div class='hotkeys-tip-title'>Keyboard Hotkeys</div><div class='hotkeys-tip-list'><div class='hotkeys-tip-row'><span class='hotkeys-tip-key'>Space</span><span class='hotkeys-tip-action'>Select or deselect image in preview</span></div><div class='hotkeys-tip-row'><span class='hotkeys-tip-key-combo'><span class='hotkeys-tip-key'>A</span><span class='hotkeys-tip-plus'>/</span><span class='hotkeys-tip-key'>D</span></span><span class='hotkeys-tip-action'>Previous or next image in preview</span></div><div class='hotkeys-tip-row'><span class='hotkeys-tip-key-combo'><span class='hotkeys-tip-key'>Alt</span><span class='hotkeys-tip-plus'>+</span><span class='hotkeys-tip-key'>1..9</span></span><span class='hotkeys-tip-action'>Open image by visible position in Dataset Browser</span></div><div class='hotkeys-tip-row'><span class='hotkeys-tip-key-combo'><span class='hotkeys-tip-key'>Ctrl</span><span class='hotkeys-tip-plus'>+</span><span class='hotkeys-tip-key'>Shift</span><span class='hotkeys-tip-plus'>+</span><span class='hotkeys-tip-key'>Space</span></span><span class='hotkeys-tip-action'>Execute Run</span></div><div class='hotkeys-tip-row'><span class='hotkeys-tip-key-combo'><span class='hotkeys-tip-key'>Ctrl</span><span class='hotkeys-tip-plus'>+</span><span class='hotkeys-tip-key'>Alt</span><span class='hotkeys-tip-plus'>+</span><span class='hotkeys-tip-key'>S</span></span><span class='hotkeys-tip-action'>Send selected dataset items to _temp</span></div><div class='hotkeys-tip-row'><span class='hotkeys-tip-key-combo'><span class='hotkeys-tip-key'>Ctrl</span><span class='hotkeys-tip-plus'>+</span><span class='hotkeys-tip-key'>Alt</span><span class='hotkeys-tip-plus'>+</span><span class='hotkeys-tip-key'>C</span></span><span class='hotkeys-tip-action'>Open or close Cheat Sheet</span></div><div class='hotkeys-tip-row'><span class='hotkeys-tip-key-combo'><span class='hotkeys-tip-key'>Ctrl</span><span class='hotkeys-tip-plus'>+</span><span class='hotkeys-tip-key'>Q</span><span class='hotkeys-tip-plus'>/</span><span class='hotkeys-tip-key'>E</span></span><span class='hotkeys-tip-action'>Cycle mode (insert, delete, replace, dedup)</span></div><div class='hotkeys-tip-row'><span class='hotkeys-tip-key-combo'><span class='hotkeys-tip-key'>Ctrl</span><span class='hotkeys-tip-plus'>+</span><span class='hotkeys-tip-key'>Alt</span><span class='hotkeys-tip-plus'>+</span><span class='hotkeys-tip-key'>F</span></span><span class='hotkeys-tip-action'>Return all subfolder files to dataset root</span></div></div>">
+        <i class="bi bi-keyboard"></i>Hotkeys
+      </button>
+    `;
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'left-drawer-backdrop';
+    backdrop.id = LEFT.backdrop;
+
+    const cheatDrawer = document.createElement('aside');
+    cheatDrawer.className = 'left-drawer';
+    cheatDrawer.id = LEFT.cheatPanel;
+    cheatDrawer.setAttribute('aria-hidden', 'true');
+    cheatDrawer.innerHTML = `
+      <div class="left-drawer-head">
+        <div>
+          <div class="left-drawer-title">Cheat Sheet</div>
+          <div class="left-drawer-subtitle">Load prompt hints without taking center workspace area.</div>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-light" id="${LEFT.cheatClose}">Close</button>
+      </div>
+      <div class="left-drawer-body"></div>
+    `;
+    if (cheatsheet){
+      cheatDrawer.querySelector('.left-drawer-body')?.appendChild(cheatsheet);
+    }
+
+    const projectDrawer = document.createElement('aside');
+    projectDrawer.className = 'left-drawer';
+    projectDrawer.id = LEFT.projectPanel;
+    projectDrawer.setAttribute('aria-hidden', 'true');
+    projectDrawer.innerHTML = `
+      <div class="left-drawer-head">
+        <div>
+          <div class="left-drawer-title">Project Setup</div>
+          <div class="left-drawer-subtitle">Project readiness, root input, and initialization controls.</div>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-light" id="${LEFT.projectClose}">Close</button>
+      </div>
+      <div class="left-drawer-body"></div>
+    `;
+
+    const setupPanel = document.createElement('details');
+    setupPanel.id = PROJECT.panel;
+    setupPanel.className = 'project-setup-card';
+    setupPanel.open = true;
+    setupPanel.innerHTML = `
+      <summary>
+        <div class="project-setup-summary">
+          <div>
+            <div class="project-setup-title">Project Setup</div>
+            <div class="project-setup-compact" id="${PROJECT.compactSummary}">Project root not checked yet.</div>
+            <div class="project-setup-compact-note" id="${PROJECT.compactNote}"></div>
+          </div>
+          <div class="project-status-ribbon">
+            <span class="project-status-pill" id="${PROJECT.compactStatusPill}">Unchecked</span>
+            <span class="project-status-pill" id="${PROJECT.compactTriggerPill}">Trigger not detected</span>
+          </div>
+        </div>
+      </summary>
+    `;
+    const setupBody = document.createElement('div');
+    setupBody.className = 'project-setup-body';
+    const metaGrid = document.createElement('div');
+    metaGrid.className = 'project-setup-grid';
+    metaGrid.append(folderCol, extsCol, editCol);
+    const cueWrap = document.createElement('div');
+    cueWrap.className = 'project-cue-wrap';
+    cueWrap.innerHTML = `
+      <div class="project-cue-list" id="${PROJECT.cues}"></div>
+      <div class="project-info-list" id="${PROJECT.infoList}"></div>
+    `;
+    setupBody.append(metaGrid, projectStatusCol, cueWrap);
+    setupPanel.appendChild(setupBody);
+    projectDrawer.querySelector('.left-drawer-body')?.appendChild(setupPanel);
+
+    const rightCol = sidebar;
+    rightCol.className = 'tag-editor-right';
+    rightCol.classList.add('workspace-lock-target');
+    const tagExplorerPanel = tagExplorerCol.querySelector('.tag-explorer');
+    rightCol.innerHTML = '';
+    if (workdirRefresh){
+      const workdirHead = workdirPanel.querySelector('.workdir-head');
+      if (workdirHead) workdirHead.appendChild(workdirRefresh);
+    }
+    if (!workdirPanel.querySelector(`#${WORKDIR.sendSelected}`)){
+      const workspaceSend = document.createElement('button');
+      workspaceSend.type = 'button';
+      workspaceSend.id = WORKDIR.sendSelected;
+      workspaceSend.className = 'btn btn-sm btn-warning mt-2 w-100';
+      workspaceSend.textContent = 'Send selected dataset items to _temp';
+      const returnBtn = workdirPanel.querySelector(`#${WORKDIR.returnTemp}`);
+      if (returnBtn && returnBtn.parentElement){
+        returnBtn.parentElement.insertBefore(workspaceSend, returnBtn);
+      } else {
+        workdirPanel.appendChild(workspaceSend);
+      }
+    }
+    if (tagExplorerPanel) rightCol.appendChild(tagExplorerPanel);
+    rightCol.appendChild(workdirPanel);
+
+    workdirPanel.querySelectorAll('.workdir-head .small.text-muted, .workdir-quick-drop .small.text-muted').forEach(el=>{
+      el.classList.add('truncate-2');
+      const text = (el.textContent || '').trim();
+      if (text) el.title = text;
+    });
+    workdirPanel.querySelectorAll('.workdir-quick-path').forEach(el=>{
+      el.classList.add('truncate-1');
+      const text = (el.textContent || '').trim();
+      if (text) el.title = text;
+    });
+    rightCol.querySelectorAll('.truncate-1, .truncate-2').forEach(el=>{
+      if (!el.title){
+        const text = (el.textContent || '').trim();
+        if (text) el.title = text;
+      }
+    });
+
+    editorPanel.classList.add('tag-composer-stick');
+    editorPanel.classList.add('workspace-lock-target');
+    const logWrap = editorPanel.querySelector(`#${IDS.logWrap}`) || get(IDS.logWrap);
+    if (logWrap){
+      logWrap.classList.remove('mt-2');
+      logWrap.classList.add('mt-0', 'workflow-log-card');
+    }
+    let editorHeading = editorPanel.querySelector('.editor-heading');
+    if (!editorHeading){
+      editorHeading = document.createElement('div');
+      editorHeading.className = 'editor-heading';
+      editorPanel.insertBefore(editorHeading, editorPanel.firstChild);
+    }
+    editorHeading.innerHTML = `
+      <div class="d-flex align-items-center gap-2">
+        <div class="fw-semibold">Tag Action Composer</div>
+        <button type="button" class="btn btn-outline-secondary btn-sm info-tip-btn" id="composer-info-tip"
+                data-bs-toggle="tooltip"
+                data-bs-title="Pick mode, sync tags from Tag Explorer, then run edits for staged files in dataset/_temp.">
+          <i class="bi bi-info-circle"></i>
+        </button>
+      </div>
+    `;
+    const composerInfoTip = editorHeading.querySelector('#composer-info-tip');
+    if (composerInfoTip && typeof bootstrap !== 'undefined' && bootstrap.Tooltip){
+      if (!bootstrap.Tooltip.getInstance(composerInfoTip)){
+        new bootstrap.Tooltip(composerInfoTip);
+      }
+    }
+    const previewLabel = Array.from(editorPanel.querySelectorAll('.form-label'))
+      .find(el => /effective paths preview/i.test(el.textContent || ''));
+    previewLabel?.closest('div')?.remove();
+    editorPanel.querySelector('#btn-undo')?.remove();
+    const runBar = editorPanel.querySelector('.sidebar-runbar');
+    const runBtn = editorPanel.querySelector('#btn-run');
+    const clearBtn = editorPanel.querySelector('#btn-clear');
+    const backupWrap = editorPanel.querySelector('#backup')?.closest('.form-check');
+    if (runBtn && clearBtn && backupWrap){
+      let inlineTools = editorPanel.querySelector('.composer-inline-tools');
+      if (!inlineTools){
+        inlineTools = document.createElement('div');
+        inlineTools.className = 'composer-inline-tools';
+      }
+      let inlineActions = inlineTools.querySelector('.composer-inline-actions');
+      if (!inlineActions){
+        inlineActions = document.createElement('div');
+        inlineActions.className = 'composer-inline-actions';
+        inlineTools.appendChild(inlineActions);
+      }
+      inlineActions.append(runBtn, clearBtn);
+      backupWrap.classList.remove('mt-2');
+      backupWrap.classList.add('composer-inline-backup');
+      inlineTools.appendChild(backupWrap);
+      const tagsInput = editorPanel.querySelector('#tags');
+      if (tagsInput){
+        tagsInput.insertAdjacentElement('afterend', inlineTools);
+      } else if (!inlineTools.parentElement){
+        editorPanel.insertBefore(inlineTools, runBar || editorPanel.firstChild);
+      }
+      runBar?.remove();
+    }
+
+    const lockBanner = document.createElement('div');
+    lockBanner.id = LAYOUT.lockBanner;
+    lockBanner.className = 'workspace-lock-banner d-none';
+
+    const inlineProjectHost = document.createElement('div');
+    inlineProjectHost.id = LAYOUT.projectInlineHost;
+    inlineProjectHost.className = 'project-inline-host d-none';
+
+    gallerySection.classList.add('workspace-lock-target');
+
+    const mainCol = document.createElement('div');
+    mainCol.className = 'tag-editor-main';
+    mainCol.append(lockBanner, inlineProjectHost, gallerySection, editorPanel);
+    if (logWrap){
+      mainCol.appendChild(logWrap);
+    }
+
+    const content = document.createElement('div');
+    content.className = 'tag-editor-content';
+    content.append(mainCol, rightCol);
+
+    const shell = document.createElement('div');
+    shell.className = 'tag-editor-shell';
+    shell.appendChild(content);
+
+    if (topCard && topCard.parentElement){
+      topCard.parentElement.insertBefore(form, topCard);
+      topCard.remove();
+    }
+    if (legacyMain){
+      legacyMain.className = '';
+    }
+
+    if (galleryCol) galleryCol.remove();
+    if (tagExplorerCol) tagExplorerCol.remove();
+    row.remove();
+
+    form.innerHTML = '';
+    hiddenFields.forEach(field=> form.appendChild(field));
+    form.append(leftRail, backdrop, cheatDrawer, projectDrawer, shell);
+    const hotkeysTipBtn = get(LEFT.hotkeysBtn);
+    if (hotkeysTipBtn && typeof bootstrap !== 'undefined' && bootstrap.Tooltip){
+      if (!bootstrap.Tooltip.getInstance(hotkeysTipBtn)){
+        new bootstrap.Tooltip(hotkeysTipBtn);
+      }
+    }
+    bindLeftDrawerControls();
+    setLeftDrawer(null);
+    refreshWorkspaceGating();
+    syncLeftDockPosition();
+    requestAnimationFrame(syncLeftDockPosition);
+    if (layout.dataset.leftDockBound !== '1'){
+      layout.dataset.leftDockBound = '1';
+      window.addEventListener('resize', syncLeftDockPosition);
+    }
+  }
+
+  function renderProjectState(){
+    setProjectChip(PROJECT.rootChip, getResolvedProjectRoot());
+    setProjectChip(PROJECT.databaseChip, getDatabaseRoot());
+    setProjectChip(PROJECT.datasetChip, getDatasetRoot());
+    setProjectChip(PROJECT.tempChip, getTempRoot());
+    setProjectChip(PROJECT.promptChip, projectState.promptPath || '');
+    const projectPanel = get(PROJECT.panel);
+    const summary = get(PROJECT.summary);
+    const note = get(PROJECT.note);
+    const compactSummary = get(PROJECT.compactSummary);
+    const compactNote = get(PROJECT.compactNote);
+    const initBtn = get(PROJECT.initPreview);
+    const planWrap = get(PROJECT.planWrap);
+    const plan = get(PROJECT.plan);
+    const missingItems = Array.isArray(projectState.missing) ? projectState.missing : [];
+    const preview = projectState.initPreview || null;
+    const warnings = Array.isArray(projectState.warnings) ? projectState.warnings : [];
+    const info = Array.isArray(projectState.info) ? projectState.info : [];
+    let summaryText = 'Checking project state...';
+    let compactText = 'Project root not checked yet.';
+    if (!getProjectRootInput()){
+      summaryText = 'Project root not set.';
+      compactText = 'Set a project root to begin.';
+    } else if (projectState.ready){
+      summaryText = 'Ready: database/, dataset/, dataset/_temp, and prompt.txt detected.';
+      compactText = 'Workspace ready. Open this panel only when you need to change paths or re-check structure.';
+    } else if (projectState.needsInit){
+      summaryText = missingItems.length
+        ? `Needs initialization. Missing: ${missingItems.join(', ')}.`
+        : 'Needs initialization or structure is incomplete.';
+      compactText = missingItems.length
+        ? `Needs init: ${missingItems.join(', ')}`
+        : 'Needs initialization.';
+    }
+    if (summary) summary.textContent = summaryText;
+    if (compactSummary) compactSummary.textContent = compactText;
+
+    const noteParts = [];
+    if (projectState.normalizedFromLegacy) noteParts.push('Legacy path normalized to project root.');
+    if (projectState.triggerWord) noteParts.push(`Trigger: ${projectState.triggerWord}`);
+    if (!projectState.ready && preview){
+      const previewParts = [];
+      if ((preview.create_dirs || []).length) previewParts.push(`create ${(preview.create_dirs || []).join(', ')}`);
+      if ((preview.copy_images || 0) > 0) previewParts.push(`copy ${preview.copy_images} root image(s)`);
+      if ((preview.generate_txt || 0) > 0) previewParts.push(`generate ${preview.generate_txt} txt file(s)`);
+      if ((preview.conflict_rename || 0) > 0) previewParts.push(`${preview.conflict_rename} rename conflict(s)`);
+      if (previewParts.length) noteParts.push(`Init will ${previewParts.join(', ')}.`);
+    }
+    const noteText = noteParts.join(' ');
+    if (note) note.textContent = noteText;
+    if (compactNote) compactNote.textContent = noteText;
+
+    if (!getProjectRootInput()){
+      renderProjectPillState(PROJECT.statusPill, 'Unchecked');
+      renderProjectPillState(PROJECT.compactStatusPill, 'Unchecked');
+    } else if (projectState.ready){
+      renderProjectPillState(PROJECT.statusPill, 'Ready', 'is-ready');
+      renderProjectPillState(PROJECT.compactStatusPill, 'Ready', 'is-ready');
+    } else if (projectState.needsInit){
+      renderProjectPillState(PROJECT.statusPill, 'Needs init', 'is-partial');
+      renderProjectPillState(PROJECT.compactStatusPill, 'Needs init', 'is-partial');
+    } else {
+      renderProjectPillState(PROJECT.statusPill, 'Missing', 'is-missing');
+      renderProjectPillState(PROJECT.compactStatusPill, 'Missing', 'is-missing');
+    }
+
+    if (projectState.triggerWord){
+      renderProjectPillState(PROJECT.triggerPill, `Trigger: ${projectState.triggerWord}`, 'is-ready');
+      renderProjectPillState(PROJECT.compactTriggerPill, `Trigger: ${projectState.triggerWord}`, 'is-ready');
+    } else {
+      renderProjectPillState(PROJECT.triggerPill, 'Trigger not detected');
+      renderProjectPillState(PROJECT.compactTriggerPill, 'Trigger not detected');
+    }
+
+    const cueItems = [];
+    missingItems.forEach(item=> cueItems.push({ label: `Missing ${item}`, tone: 'is-missing' }));
+    (preview?.create_dirs || []).forEach(item=> cueItems.push({ label: `Will create ${item}`, tone: 'is-warning' }));
+    if ((preview?.copy_images || 0) > 0) cueItems.push({ label: `Copy ${preview.copy_images} root image(s)`, tone: 'is-warning' });
+    if ((preview?.generate_txt || 0) > 0) cueItems.push({ label: `Generate ${preview.generate_txt} txt`, tone: 'is-warning' });
+    if ((preview?.conflict_rename || 0) > 0) cueItems.push({ label: `${preview.conflict_rename} rename conflict(s)`, tone: 'is-warning' });
+    if (!getProjectRootInput() && !cueItems.length) cueItems.push({ label: 'Set project root first', tone: 'is-warning' });
+    if (projectState.ready && !cueItems.length) cueItems.push({ label: 'Project structure is complete', tone: 'is-ready' });
+    renderProjectCueList(cueItems);
+    renderProjectInfoList([...warnings, ...info]);
+
+    if (projectPanel){
+      projectPanel.open = !projectState.ready || projectState.needsInit || !getProjectRootInput();
+    }
+    if (initBtn) initBtn.classList.toggle('d-none', !projectState.needsInit);
+    if (planWrap && plan){
+      if (preview && projectState.needsInit){
+        planWrap.classList.remove('d-none');
+        plan.textContent = `Init preview: ${preview.root_images_found || 0} root image(s), ${preview.copy_images || 0} copy, ${preview.generate_txt || 0} txt, ${preview.conflict_rename || 0} rename conflict(s), ${preview.skip_images || 0} skipped.`;
+      } else {
+        planWrap.classList.add('d-none');
+        plan.textContent = '';
+      }
+    }
+    refreshWorkspaceGating();
+  }
+
+  async function loadProjectState(opts={}){
+    const folder = getProjectRootInput();
+    projectState.root = folder;
+    projectState.databaseRoot = folder ? `${folder}${sepFor(folder)}database` : '';
+    projectState.datasetRoot = folder ? `${folder}${sepFor(folder)}dataset` : '';
+    projectState.tempRoot = folder ? `${folder}${sepFor(folder)}dataset${sepFor(folder)}_temp` : '';
+    projectState.promptPath = folder ? `${folder}${sepFor(folder)}prompt.txt` : '';
+    projectState.ready = false;
+    projectState.needsInit = false;
+    projectState.status = '';
+    projectState.missing = [];
+    projectState.warnings = [];
+    projectState.info = [];
+    projectState.normalizedFromLegacy = false;
+    projectState.triggerWord = '';
+    projectState.initPreview = null;
+    renderProjectState();
+    refreshTempHints();
+    if (!folder){
+      if (!opts.silent) showStatus('Project root not set.');
+      return false;
+    }
+    try {
+      const res = await fetch('/api/tags/project-state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folder, exts: get(IDS.exts)?.value || '' })
+      });
+      let data = null;
+      try { data = await res.json(); } catch(_) {}
+      if (!res.ok || !data || !data.ok){
+        showStatus((data && data.error) ? data.error : `Project check failed (HTTP ${res.status})`);
+        return false;
+      }
+      projectState.root = data.project_root || folder;
+      projectState.databaseRoot = data.database_root || projectState.databaseRoot;
+      projectState.datasetRoot = data.dataset_root || projectState.datasetRoot;
+      projectState.tempRoot = data.temp_root || projectState.tempRoot;
+      projectState.promptPath = data.prompt_path || projectState.promptPath;
+      projectState.ready = !!data.ready;
+      projectState.needsInit = !!data.needs_init;
+      projectState.status = data.status || '';
+      projectState.missing = Array.isArray(data.missing) ? data.missing : [];
+      projectState.warnings = Array.isArray(data.warnings) ? data.warnings : [];
+      projectState.info = Array.isArray(data.info) ? data.info : [];
+      projectState.normalizedFromLegacy = !!data.normalized_from_legacy;
+      projectState.triggerWord = data.trigger_word || '';
+      projectState.initPreview = data.init_preview || null;
+      if (projectState.root && projectState.root !== folder){
+        const input = get(IDS.folder);
+        if (input) input.value = projectState.root;
+      }
+      renderProjectState();
+      refreshTempHints();
+      if (!opts.silent){
+        if (projectState.ready) showStatus('Project ready.');
+        else if (projectState.missing.length) showStatus(`Project needs initialization: missing ${projectState.missing.join(', ')}.`);
+        else showStatus('Project needs initialization.');
+      }
+      return projectState.ready;
+    } catch (err) {
+      showStatus(`Project check failed: ${err && err.message ? err.message : 'Unknown error'}`);
+      return false;
+    }
+  }
+
+  async function previewProjectInit(){
+    const folder = getProjectRootInput();
+    if (!folder) return;
+    let preview = null;
+    try {
+      const previewRes = await fetch('/api/tags/project-init', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folder, exts: get(IDS.exts)?.value || '', apply: false })
+      });
+      try { preview = await previewRes.json(); } catch(_) {}
+      if (!previewRes.ok || !preview || !preview.ok){
+        showStatus((preview && preview.error) ? preview.error : `Init preview failed (HTTP ${previewRes.status})`);
+        return;
+      }
+      projectState.initPreview = preview.init_preview || null;
+      projectState.missing = Array.isArray(preview.missing) ? preview.missing : projectState.missing;
+      projectState.warnings = Array.isArray(preview.warnings) ? preview.warnings : projectState.warnings;
+      projectState.info = Array.isArray(preview.info) ? preview.info : projectState.info;
+      renderProjectState();
+    } catch (err) {
+      showStatus(`Init preview failed: ${err && err.message ? err.message : 'Unknown error'}`);
+      return;
+    }
+    if (preview && preview.ready) return;
+    const initPreview = preview?.init_preview || {};
+    const confirmed = await showConfirm(
+      `Initialize project root? Create dirs: ${(initPreview.create_dirs || []).join(', ') || 'none'} | Copy images: ${initPreview.copy_images || 0} | Generate txt: ${initPreview.generate_txt || 0} | Rename conflicts: ${initPreview.conflict_rename || 0}`,
+      'Initialize Project'
+    );
+    if (!confirmed) return;
+    showStatus('Initializing project...');
+    try {
+      const res = await fetch('/api/tags/project-init', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folder: getProjectRootInput(), exts: get(IDS.exts)?.value || '', apply: true })
+      });
+      let data = null;
+      try { data = await res.json(); } catch(_) {}
+      (data?.logs || []).forEach(line => appendTagsLog(line));
+      if (!res.ok || !data || !data.ok){
+        showStatus((data && data.error) ? data.error : `Init failed (HTTP ${res.status})`);
+        return;
+      }
+      await loadProjectState({ silent: true });
+      await loadGallery();
+      await loadWorkdirRoot();
+      await scanTagViz();
+      showStatus('Project initialized.');
+    } catch (err) {
+      showStatus(`Init failed: ${err && err.message ? err.message : 'Unknown error'}`);
+    }
   }
 
   function setGalleryPath(root){
@@ -1081,17 +2156,30 @@
     el.textContent = `${shownText} images`;
   }
 
-  function applySidebarExpanded(expanded){
-    const layout = get(GALLERY.layout);
-    if (layout) layout.classList.toggle('is-expanded', expanded);
-    const btn = get(GALLERY.toggle);
-    if (btn) btn.textContent = expanded ? 'Close workspace' : 'Expand';
+  function applyGalleryGridColumns(value){
+    const sel = get(GALLERY.gridCols);
+    const grid = get(GALLERY.grid);
+    const parsed = Number.parseInt(String(value ?? sel?.value ?? ''), 10);
+    const cols = [2, 3, 4].includes(parsed) ? parsed : 2;
+    if (sel) sel.value = String(cols);
+    if (grid) grid.style.setProperty('--gallery-cols', String(cols));
+    try{
+      localStorage.setItem(GALLERY_GRID_COLS_KEY, String(cols));
+    }catch(_){}
   }
 
-  function toggleSidebarExpanded(){
-    uiState.sidebarExpanded = !uiState.sidebarExpanded;
-    try{ localStorage.setItem('bb.tags.sidebar.expanded', uiState.sidebarExpanded ? '1' : '0'); }catch(_){}
-    applySidebarExpanded(uiState.sidebarExpanded);
+  function updateGallerySelectToggle(){
+    const btn = get(GALLERY.selectToggle);
+    if (!btn) return;
+    const visible = getVisibleGalleryItems().filter(item => item?.rel);
+    if (!visible.length){
+      btn.disabled = true;
+      btn.textContent = 'Select All';
+      return;
+    }
+    const allSelected = visible.every(item => galleryState.selected?.has(item.rel));
+    btn.disabled = false;
+    btn.textContent = allSelected ? 'Deselect All' : 'Select All';
   }
 
   function computeMatchScore(itemTags, selectedSet){
@@ -1107,11 +2195,73 @@
     return Array.from(galleryState.selected || []);
   }
 
+  function setGallerySelectionAnchor(rel){
+    galleryState.selectionAnchorRel = rel ? String(rel) : '';
+  }
+
+  function getVisibleGallerySelectableItems(){
+    return getVisibleGalleryItems().filter(item => item?.rel);
+  }
+
+  function setGallerySelectionFromRels(rels, options={}){
+    const mode = options.mode === 'add' ? 'add' : 'replace';
+    const available = new Set((galleryState.items || []).map(item => item?.rel).filter(Boolean));
+    const next = mode === 'add' ? new Set(galleryState.selected || []) : new Set();
+    (Array.isArray(rels) ? rels : []).forEach(rel=>{
+      const normalized = String(rel || '').trim();
+      if (normalized && available.has(normalized)) next.add(normalized);
+    });
+    galleryState.selected = next;
+    if (Object.prototype.hasOwnProperty.call(options, 'anchorRel')){
+      setGallerySelectionAnchor(options.anchorRel || '');
+    }
+    updateGallerySelectionCount();
+    if (options.render !== false) renderGalleryItems();
+  }
+
+  function selectGalleryRange(anchorRel, targetRel, options={}){
+    const anchor = String(anchorRel || '').trim();
+    const target = String(targetRel || '').trim();
+    if (!anchor || !target) return false;
+    const visible = getVisibleGallerySelectableItems();
+    if (!visible.length) return false;
+    const rels = visible.map(item => item.rel);
+    const anchorIndex = rels.indexOf(anchor);
+    const targetIndex = rels.indexOf(target);
+    if (anchorIndex < 0 || targetIndex < 0) return false;
+    const start = Math.min(anchorIndex, targetIndex);
+    const end = Math.max(anchorIndex, targetIndex);
+    setGallerySelectionFromRels(rels.slice(start, end + 1), {
+      mode: options.mode === 'add' ? 'add' : 'replace',
+      render: options.render
+    });
+    return true;
+  }
+
+  function handleGalleryItemSelection(rel, options={}){
+    const targetRel = String(rel || '').trim();
+    if (!targetRel) return;
+    const hasForceValue = Object.prototype.hasOwnProperty.call(options, 'forceValue');
+    const forceValue = hasForceValue ? options.forceValue : null;
+    if (options.shiftKey){
+      const selectedRange = selectGalleryRange(galleryState.selectionAnchorRel, targetRel, {
+        mode: options.rangeMode === 'add' ? 'add' : 'replace',
+        render: true
+      });
+      if (selectedRange) return;
+    }
+    toggleGallerySelection(targetRel, forceValue);
+    setGallerySelectionAnchor(targetRel);
+  }
+
   function updateGallerySelectionCount(){
     const el = get(GALLERY.selectionCount);
+    const sendBtn = get(WORKDIR.sendSelected);
     if (!el) return;
     const count = galleryState.selected?.size || 0;
     el.textContent = `${count} selected`;
+    if (sendBtn) sendBtn.disabled = count === 0;
+    updateGallerySelectToggle();
   }
 
   function pruneGallerySelection(){
@@ -1121,6 +2271,9 @@
       if (available.has(rel)) next.add(rel);
     });
     galleryState.selected = next;
+    if (galleryState.selectionAnchorRel && !available.has(galleryState.selectionAnchorRel)){
+      setGallerySelectionAnchor('');
+    }
     updateGallerySelectionCount();
   }
 
@@ -1138,14 +2291,22 @@
 
   function clearGallerySelection(){
     galleryState.selected = new Set();
+    setGallerySelectionAnchor('');
     updateGallerySelectionCount();
     renderGalleryItems();
   }
 
-  function selectVisibleGalleryItems(){
+  function toggleSelectAllVisibleGalleryItems(){
+    const visible = getVisibleGallerySelectableItems();
+    if (!visible.length){
+      updateGallerySelectToggle();
+      return;
+    }
+    const allSelected = visible.every(item => galleryState.selected?.has(item.rel));
     const next = new Set(galleryState.selected || []);
-    getVisibleGalleryItems().forEach(item=>{
-      if (item?.rel) next.add(item.rel);
+    visible.forEach(item=>{
+      if (allSelected) next.delete(item.rel);
+      else next.add(item.rel);
     });
     galleryState.selected = next;
     updateGallerySelectionCount();
@@ -1157,7 +2318,186 @@
     const next = new Set(galleryState.selected);
     rels.forEach(rel=> next.delete(rel));
     galleryState.selected = next;
+    if (galleryState.selectionAnchorRel && !next.has(galleryState.selectionAnchorRel)){
+      const available = new Set((galleryState.items || []).map(item => item.rel).filter(Boolean));
+      if (!available.has(galleryState.selectionAnchorRel)){
+        setGallerySelectionAnchor('');
+      }
+    }
     updateGallerySelectionCount();
+  }
+
+  function isGalleryCardTarget(target){
+    return !!(target instanceof Element && target.closest('.gallery-card'));
+  }
+
+  function isGalleryInteractiveTarget(target){
+    if (!(target instanceof Element)) return false;
+    return !!target.closest('button, input, select, textarea, a, label, [contenteditable="true"], [role="button"], .gallery-thumb, .gallery-select, .gallery-drag-chip, [data-gallery-interactive="1"]');
+  }
+
+  function ensureGalleryMarqueeElement(){
+    const wrap = get(GALLERY.grid);
+    if (!wrap) return null;
+    let el = wrap.querySelector('.gallery-marquee');
+    if (!el){
+      el = document.createElement('div');
+      el.className = 'gallery-marquee';
+      wrap.appendChild(el);
+    }
+    galleryState.marqueeElement = el;
+    return el;
+  }
+
+  function getGallerySelectionRect(){
+    const left = Math.min(galleryState.marqueeStartX, galleryState.marqueeCurrentX);
+    const top = Math.min(galleryState.marqueeStartY, galleryState.marqueeCurrentY);
+    const right = Math.max(galleryState.marqueeStartX, galleryState.marqueeCurrentX);
+    const bottom = Math.max(galleryState.marqueeStartY, galleryState.marqueeCurrentY);
+    return {
+      left,
+      top,
+      right,
+      bottom,
+      width: Math.max(0, right - left),
+      height: Math.max(0, bottom - top)
+    };
+  }
+
+  function collectGalleryRelsInRect(rect){
+    const wrap = get(GALLERY.grid);
+    if (!wrap || !rect) return [];
+    const wrapRect = wrap.getBoundingClientRect();
+    if (!wrapRect.width || !wrapRect.height) return [];
+    const rels = [];
+    wrap.querySelectorAll('.gallery-card[data-rel]').forEach(card=>{
+      const rel = (card.dataset.rel || '').trim();
+      if (!rel) return;
+      const cardRect = card.getBoundingClientRect();
+      const left = cardRect.left - wrapRect.left;
+      const top = cardRect.top - wrapRect.top;
+      const right = cardRect.right - wrapRect.left;
+      const bottom = cardRect.bottom - wrapRect.top;
+      if (right < rect.left || left > rect.right || bottom < rect.top || top > rect.bottom) return;
+      rels.push(rel);
+    });
+    return rels;
+  }
+
+  function beginGalleryMarquee(event){
+    const wrap = get(GALLERY.grid);
+    if (!wrap || event.button !== 0) return false;
+    if (galleryState.marqueePointerId != null) return false;
+    if (!wrap.querySelector('.gallery-card[data-rel]')) return false;
+    const target = event.target;
+    if (isGalleryCardTarget(target) || isGalleryInteractiveTarget(target)) return false;
+    const rect = wrap.getBoundingClientRect();
+    if (!rect.width || !rect.height) return false;
+    const startX = Math.max(0, Math.min(rect.width, event.clientX - rect.left));
+    const startY = Math.max(0, Math.min(rect.height, event.clientY - rect.top));
+    galleryState.marqueePointerId = event.pointerId;
+    galleryState.marqueeStartX = startX;
+    galleryState.marqueeStartY = startY;
+    galleryState.marqueeCurrentX = startX;
+    galleryState.marqueeCurrentY = startY;
+    galleryState.marqueeActive = false;
+    galleryState.marqueeAdditive = !!event.shiftKey;
+    const marquee = ensureGalleryMarqueeElement();
+    if (marquee){
+      marquee.classList.remove('is-active');
+      marquee.style.left = `${startX}px`;
+      marquee.style.top = `${startY}px`;
+      marquee.style.width = '0px';
+      marquee.style.height = '0px';
+    }
+    if (typeof wrap.setPointerCapture === 'function'){
+      try{ wrap.setPointerCapture(event.pointerId); }catch(_){}
+    }
+    event.preventDefault();
+    return true;
+  }
+
+  function updateGalleryMarquee(event){
+    const wrap = get(GALLERY.grid);
+    if (!wrap) return;
+    if (galleryState.marqueePointerId == null || event.pointerId !== galleryState.marqueePointerId) return;
+    const rect = wrap.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    galleryState.marqueeCurrentX = Math.max(0, Math.min(rect.width, event.clientX - rect.left));
+    galleryState.marqueeCurrentY = Math.max(0, Math.min(rect.height, event.clientY - rect.top));
+    const dx = galleryState.marqueeCurrentX - galleryState.marqueeStartX;
+    const dy = galleryState.marqueeCurrentY - galleryState.marqueeStartY;
+    if (!galleryState.marqueeActive && Math.hypot(dx, dy) < GALLERY_MARQUEE_DRAG_THRESHOLD) return;
+    galleryState.marqueeActive = true;
+    const marquee = ensureGalleryMarqueeElement();
+    const selectionRect = getGallerySelectionRect();
+    if (!marquee || !selectionRect) return;
+    marquee.classList.add('is-active');
+    marquee.style.left = `${selectionRect.left}px`;
+    marquee.style.top = `${selectionRect.top}px`;
+    marquee.style.width = `${selectionRect.width}px`;
+    marquee.style.height = `${selectionRect.height}px`;
+    event.preventDefault();
+  }
+
+  function cancelGalleryMarquee(event=null){
+    if (event && galleryState.marqueePointerId != null && event.pointerId !== galleryState.marqueePointerId){
+      return;
+    }
+    const wrap = get(GALLERY.grid);
+    const pointerId = galleryState.marqueePointerId;
+    if (wrap && pointerId != null && typeof wrap.releasePointerCapture === 'function'){
+      try{ wrap.releasePointerCapture(pointerId); }catch(_){}
+    }
+    const marquee = galleryState.marqueeElement || wrap?.querySelector('.gallery-marquee');
+    if (marquee){
+      marquee.classList.remove('is-active');
+      marquee.style.left = '0px';
+      marquee.style.top = '0px';
+      marquee.style.width = '0px';
+      marquee.style.height = '0px';
+    }
+    galleryState.marqueeActive = false;
+    galleryState.marqueeStartX = 0;
+    galleryState.marqueeStartY = 0;
+    galleryState.marqueeCurrentX = 0;
+    galleryState.marqueeCurrentY = 0;
+    galleryState.marqueePointerId = null;
+    galleryState.marqueeAdditive = false;
+  }
+
+  function finishGalleryMarquee(event){
+    if (galleryState.marqueePointerId == null || event.pointerId !== galleryState.marqueePointerId) return;
+    updateGalleryMarquee(event);
+    const wasActive = galleryState.marqueeActive;
+    const additive = galleryState.marqueeAdditive;
+    const selectionRect = wasActive ? getGallerySelectionRect() : null;
+    cancelGalleryMarquee();
+    if (!wasActive || !selectionRect) return;
+    const rels = collectGalleryRelsInRect(selectionRect);
+    setGallerySelectionFromRels(rels, { mode: additive ? 'add' : 'replace' });
+  }
+
+  function initGalleryMarqueeEvents(){
+    const wrap = get(GALLERY.grid);
+    if (!wrap || wrap.dataset.marqueeBound === '1') return;
+    wrap.dataset.marqueeBound = '1';
+    wrap.addEventListener('pointerdown', (event)=>{
+      beginGalleryMarquee(event);
+    });
+    wrap.addEventListener('pointermove', updateGalleryMarquee);
+    wrap.addEventListener('pointerup', finishGalleryMarquee);
+    wrap.addEventListener('pointercancel', cancelGalleryMarquee);
+    wrap.addEventListener('lostpointercapture', ()=> cancelGalleryMarquee());
+  }
+
+  async function sendSelectedGalleryItemsToTemp(){
+    const rels = getSelectedGalleryRels();
+    if (!rels.length){
+      setWorkdirStatus('Select one or more dataset items first.');
+      return;
+    }
+    await moveFileToFolder(rels, '_temp');
   }
 
   function getDraggedGalleryRels(primaryRel){
@@ -1173,12 +2513,117 @@
     if (el) el.textContent = message || '';
   }
 
+  function getComposerCheatsheetTagSet(mode, raw){
+    const selected = new Set();
+    const effectiveMode = mode || getModeOrDefault();
+    if (effectiveMode === 'replace'){
+      (raw || '')
+        .split(';')
+        .map(token => token.trim())
+        .filter(Boolean)
+        .forEach(token=>{
+          const left = normalizeDanbooruTag(((token || '').split('->', 2)[0] || '').trim());
+          if (left) selected.add(left);
+        });
+      return selected;
+    }
+    splitTagList(raw || '').forEach(token=>{
+      const normalized = normalizeDanbooruTag(token);
+      if (normalized) selected.add(normalized);
+    });
+    return selected;
+  }
+
+  function refreshCheatsheetChipSelectionCue(){
+    const input = get(IDS.tags);
+    const selected = getComposerCheatsheetTagSet(getModeOrDefault(), input ? input.value : '');
+    const existing = new Map();
+    (tagVizState.items || []).forEach(item=>{
+      const key = normalizeDanbooruTag(item?.tag);
+      if (!key) return;
+      const count = Number(item?.count || 0);
+      if (count > 0){
+        existing.set(key, Math.max(Number(existing.get(key) || 0), count));
+      }
+    });
+    document.querySelectorAll('.gallery-cheatsheet-chip[data-tag-normalized]').forEach(chip=>{
+      const key = String(chip.dataset.tagNormalized || '').trim();
+      const active = !!key && selected.has(key);
+      const existingCount = Number(existing.get(key) || 0);
+      const exists = existingCount > 0;
+      const baseTitle = chip.dataset.baseTitle || 'Click to toggle this tag in Tags / mapping.';
+      chip.classList.toggle('is-active', active);
+      chip.classList.toggle('is-existing', exists);
+      chip.setAttribute('aria-pressed', active ? 'true' : 'false');
+      chip.title = exists
+        ? `${baseTitle} Already in Tag Explorer (${existingCount} tag file${existingCount === 1 ? '' : 's'}).`
+        : baseTitle;
+    });
+  }
+
+  function toggleCheatsheetTagInComposer(rawTag){
+    const tag = normalizeDanbooruTag(rawTag);
+    const input = get(IDS.tags);
+    if (!tag || !input || input.readOnly) return;
+    const mode = getModeOrDefault();
+    let nextText = '';
+    let action = '';
+    if (mode === 'replace'){
+      const parts = (input.value || '')
+        .split(';')
+        .map(p=>p.trim())
+        .filter(Boolean);
+      const idx = parts.findIndex(part=>{
+        const left = normalizeDanbooruTag(((part || '').split('->', 2)[0] || '').trim());
+        return left === tag;
+      });
+      if (idx >= 0){
+        parts.splice(idx, 1);
+        action = 'removed';
+      } else {
+        parts.push(`${tag}->`);
+        action = 'added';
+      }
+      nextText = parts.join('; ');
+    } else {
+      const tags = splitTagList(input.value || '')
+        .map(token => normalizeDanbooruTag(token))
+        .filter(Boolean);
+      const idx = tags.indexOf(tag);
+      if (idx >= 0){
+        tags.splice(idx, 1);
+        action = 'removed';
+      } else {
+        tags.push(tag);
+        action = 'added';
+      }
+      nextText = tags.join(', ');
+    }
+    tagsSyncEnabled = false;
+    tagsSyncLocked = true;
+    input.value = nextText;
+    tagsSyncLocked = false;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    refreshCheatsheetChipSelectionCue();
+    if (action === 'added'){
+      setTagVizStatus(`Added "${tag}" to Tags / mapping.`);
+    } else if (action === 'removed'){
+      setTagVizStatus(`Removed "${tag}" from Tags / mapping.`);
+    }
+    input.focus();
+  }
+
   function createCheatsheetChip(tag){
     const chip = document.createElement('button');
     chip.type = 'button';
     chip.className = 'gallery-cheatsheet-chip';
     chip.textContent = tag;
-    chip.addEventListener('click', ()=> addGlossaryTagToManualInput(tag));
+    chip.dataset.tagNormalized = normalizeDanbooruTag(tag);
+    chip.dataset.baseTitle = 'Click to toggle this tag in Tags / mapping.';
+    chip.title = chip.dataset.baseTitle;
+    chip.setAttribute('aria-pressed', 'false');
+    chip.addEventListener('click', ()=> toggleCheatsheetTagInComposer(tag));
     return chip;
   }
 
@@ -1271,6 +2716,7 @@
     if (contentEl){
       contentEl.textContent = galleryState.cheatsheetContent || 'Cheat sheet not loaded.';
     }
+    refreshCheatsheetChipSelectionCue();
   }
 
   async function loadCheatsheet(){
@@ -1286,7 +2732,7 @@
       galleryState.cheatsheetTags = [];
       galleryState.cheatsheetContent = '';
       renderCheatsheetPanel();
-      setCheatsheetStatus('Dataset folder not set.');
+      setCheatsheetStatus('Project root not set.');
       return;
     }
     if (!rel){
@@ -1303,7 +2749,7 @@
       const res = await fetch('/api/tags/cheatsheet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ folder: root, rel })
+        body: JSON.stringify({ folder: getResolvedProjectRoot(), rel })
       });
       let data = null;
       try{ data = await res.json(); }catch(_){}
@@ -1322,7 +2768,7 @@
       galleryState.cheatsheetTags = Array.isArray(data.tags) ? data.tags : [];
       galleryState.cheatsheetContent = String(data.content || '').trim();
       renderCheatsheetPanel();
-      setCheatsheetStatus(`Loaded ${galleryState.cheatsheetSections.length} section(s) and ${galleryState.cheatsheetTags.length} tag(s) from the parent folder.`);
+      setCheatsheetStatus(`Loaded ${galleryState.cheatsheetSections.length} section(s) and ${galleryState.cheatsheetTags.length} tag(s) from the project root.`);
     } catch (err) {
       galleryState.cheatsheetTrigger = '';
       galleryState.cheatsheetSections = [];
@@ -1426,10 +2872,11 @@
           e.stopPropagation();
           const folder = ctx?.folder || '';
           const rel = ctx?.rel || '';
+          const area = ctx?.area || 'temp';
           if (!folder || !rel || !tag) return;
           setGalleryStatus('Removing tag...');
           const backup = !!get(IDS.backup)?.checked;
-          const result = await apiRemoveTag(folder, rel, tag, backup);
+          const result = await apiRemoveTag(folder, rel, tag, backup, area);
           if (!result.ok){
             setGalleryStatus(`Remove failed: ${result.error || 'Unknown error'}`);
             return;
@@ -1570,20 +3017,34 @@
     return (galleryState.items || []).find(item => item.rel === rel) || null;
   }
 
+  function getPreviewItems(){
+    if (galleryState.previewSource === 'temp'){
+      return workdirState.tempItems || [];
+    }
+    return getVisibleGalleryItems();
+  }
+
+  function resolvePreviewItem(rel){
+    if (!rel) return null;
+    return getPreviewItems().find(item => item.rel === rel) || null;
+  }
+
   function renderGalleryModalSelectButton(item){
     const btn = get(GALLERY.modalSelect);
     if (!btn) return;
-    const isSelected = !!(item && galleryState.selected?.has(item.rel || ''));
-    btn.disabled = !item;
-    btn.textContent = isSelected ? 'Deselect' : 'Select';
+    const selectable = galleryState.previewSource !== 'temp';
+    const isSelected = !!(selectable && item && galleryState.selected?.has(item.rel || ''));
+    btn.disabled = !item || !selectable;
+    btn.textContent = selectable ? (isSelected ? 'Deselect' : 'Select') : 'Preview only';
     btn.classList.toggle('is-selected', isSelected);
     btn.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
   }
 
   function toggleCurrentPreviewSelection(){
+    if (galleryState.previewSource === 'temp') return;
     const item = resolveGalleryItem(galleryState.previewRel);
     if (!item) return;
-    toggleGallerySelection(item.rel || '');
+    handleGalleryItemSelection(item.rel || '');
     renderGalleryModalSelectButton(item);
   }
 
@@ -1591,6 +3052,7 @@
     const wrap = get(GALLERY.grid);
     const moreBtn = get(GALLERY.loadMore);
     if (!wrap) return;
+    cancelGalleryMarquee();
     wrap.innerHTML = '';
     if (moreBtn) moreBtn.classList.add('d-none');
     pruneGallerySelection();
@@ -1599,6 +3061,7 @@
       empty.className = 'gallery-empty';
       empty.textContent = 'No images to preview.';
       wrap.appendChild(empty);
+      ensureGalleryMarqueeElement();
       setGalleryCount(0, 0);
       if (isGalleryPreviewOpen()){
         renderGalleryPreviewModal();
@@ -1621,6 +3084,7 @@
       const folderCue = getFolderCueLabel(item);
       const card = document.createElement('div');
       card.className = 'gallery-card';
+      card.dataset.rel = item.rel || '';
       if (matchScore > 0) card.classList.add('is-match');
       if (item.in_temp) card.classList.add('is-temp');
       if (folderCue) card.classList.add('is-folder');
@@ -1634,6 +3098,10 @@
         e.dataTransfer.setData('text/plain', rels.map(rel => `file:${rel}`).join('\n'));
         e.dataTransfer.effectAllowed = 'move';
       });
+      card.addEventListener('click', (e)=>{
+        if (isGalleryInteractiveTarget(e.target)) return;
+        handleGalleryItemSelection(item.rel || '', { shiftKey: !!e.shiftKey });
+      });
 
       const head = document.createElement('div');
       head.className = 'gallery-card-head';
@@ -1642,8 +3110,20 @@
       const selectBox = document.createElement('input');
       selectBox.type = 'checkbox';
       selectBox.checked = !!isSelected;
-      selectBox.addEventListener('click', (e)=> e.stopPropagation());
-      selectBox.addEventListener('change', ()=> toggleGallerySelection(item.rel || '', selectBox.checked));
+      let checkboxShiftKey = false;
+      selectBox.addEventListener('click', (e)=>{
+        checkboxShiftKey = !!e.shiftKey;
+        e.stopPropagation();
+      });
+      selectBox.addEventListener('change', (e)=>{
+        e.stopPropagation();
+        const shiftKey = checkboxShiftKey || !!e.shiftKey;
+        checkboxShiftKey = false;
+        handleGalleryItemSelection(item.rel || '', {
+          shiftKey,
+          forceValue: selectBox.checked
+        });
+      });
       selectLabel.appendChild(selectBox);
       const selectText = document.createElement('span');
       selectText.textContent = 'Select';
@@ -1663,7 +3143,7 @@
       const img = document.createElement('img');
       img.loading = 'lazy';
       img.alt = item.name || item.rel || 'image';
-      img.src = `/api/tags/image?folder=${encodeURIComponent(root)}&path=${encodeURIComponent(item.rel)}`;
+      img.src = `/api/tags/image?folder=${encodeURIComponent(getResolvedProjectRoot())}&area=dataset&path=${encodeURIComponent(item.rel)}`;
       const fallback = document.createElement('div');
       fallback.className = 'gallery-thumb-fallback d-none';
       fallback.textContent = 'Preview unavailable';
@@ -1677,7 +3157,10 @@
       });
       thumbBtn.appendChild(img);
       thumbBtn.appendChild(fallback);
-      thumbBtn.addEventListener('click', ()=> openGalleryPreviewByRel(item.rel || ''));
+      thumbBtn.addEventListener('click', (e)=>{
+        e.stopPropagation();
+        openGalleryPreviewByRel(item.rel || '', 'dataset');
+      });
       card.appendChild(thumbBtn);
 
       const name = document.createElement('div');
@@ -1689,6 +3172,14 @@
       meta.className = 'gallery-meta';
       const badges = document.createElement('div');
       badges.className = 'gallery-badges';
+      const sourceBadge = document.createElement('span');
+      sourceBadge.className = 'gallery-state-badge';
+      sourceBadge.textContent = 'database';
+      badges.appendChild(sourceBadge);
+      const txtBadge = document.createElement('span');
+      txtBadge.className = 'gallery-state-badge' + (item.has_txt ? '' : ' is-temp');
+      txtBadge.textContent = item.has_txt ? 'has txt' : 'missing txt';
+      badges.appendChild(txtBadge);
       if (item.in_temp){
         const badge = document.createElement('span');
         badge.className = 'gallery-state-badge is-temp';
@@ -1731,6 +3222,7 @@
       frag.appendChild(card);
     });
     wrap.appendChild(frag);
+    ensureGalleryMarqueeElement();
     const remaining = items.length - visibleItems.length;
     if (moreBtn){
       if (remaining > 0){
@@ -1754,16 +3246,24 @@
     }
     galleryLoadBusy = true;
     setGalleryRefreshBusy(true);
-    const root = getGalleryRoot();
+    const root = getResolvedProjectRoot();
     try{
-      galleryState.root = root;
-      setGalleryPath(root);
+      galleryState.root = getGalleryRoot();
+      setGalleryPath(galleryState.root);
       if (!root){
         galleryState.items = [];
         galleryState.total = 0;
         renderGalleryItems();
         setGalleryCount(0, 0);
-        setGalleryStatus('Folder not set.');
+        setGalleryStatus('Project root not set.');
+        return;
+      }
+      if (projectState.needsInit && !projectState.ready){
+        galleryState.items = [];
+        galleryState.total = 0;
+        renderGalleryItems();
+        setGalleryCount(0, 0);
+        setGalleryStatus('Initialize the project to load dataset previews.');
         return;
       }
       const limitInput = get(GALLERY.limit);
@@ -1774,7 +3274,9 @@
 
       setGalleryStatus('Loading...');
       const payload = {
-        folder: root,
+        folder: getResolvedProjectRoot(),
+        area: 'dataset',
+        include_temp: false,
         exts: get(IDS.exts)?.value || '',
         recursive: !!get(GALLERY.recursive)?.checked,
         limit,
@@ -1837,9 +3339,9 @@
   async function uploadGalleryFiles(fileList){
     const files = Array.from(fileList || []);
     if (!files.length) return;
-    const root = getGalleryRoot();
+    const root = getResolvedProjectRoot();
     if (!root){
-      setGalleryStatus('Folder not set.');
+      setGalleryStatus('Project root not set.');
       return;
     }
     const fd = new FormData();
@@ -1896,7 +3398,7 @@
   }
 
   function resolveGalleryPreviewCursor(preferredRel = ''){
-    const items = getVisibleGalleryItems();
+    const items = getPreviewItems();
     if (!items.length){
       galleryState.previewIndex = -1;
       galleryState.previewRel = '';
@@ -1951,9 +3453,10 @@
 
     const modalEl = get(GALLERY.modal);
     if (!modalEl) return;
-    const root = galleryState.root || getGalleryRoot();
-    const nextSrc = `/api/tags/image?folder=${encodeURIComponent(root)}&path=${encodeURIComponent(item.rel)}`;
-    const previewKey = `${root}::${item.rel || ''}`;
+    const previewArea = galleryState.previewSource === 'temp' ? 'temp' : 'dataset';
+    const root = previewArea === 'temp' ? getTempRoot() : (galleryState.root || getGalleryRoot());
+    const nextSrc = `/api/tags/image?folder=${encodeURIComponent(getResolvedProjectRoot())}&area=${encodeURIComponent(previewArea)}&path=${encodeURIComponent(item.rel)}`;
+    const previewKey = `${root}::${previewArea}::${item.rel || ''}`;
     if (img.dataset.previewKey !== previewKey){
       img.src = nextSrc;
       img.dataset.previewKey = previewKey;
@@ -1966,8 +3469,9 @@
     renderGalleryModalSelectButton(item);
     if (addInput) addInput.value = '';
     setGalleryManualStatus('');
-    setGalleryManualControlsEnabled(!!item.in_temp);
-    if (item.in_temp){
+    const editableInTemp = previewArea === 'temp';
+    setGalleryManualControlsEnabled(editableInTemp);
+    if (editableInTemp){
       setGalleryManualDisabledReason('');
       if (tempNote) tempNote.textContent = 'Adding and removing tags here edits the paired .txt inside _temp.';
     } else {
@@ -1976,28 +3480,32 @@
     renderGalleryGlossaryQuick();
 
     const ctx = {
-      removable: !!item.in_temp,
-      folder: root,
+      removable: editableInTemp,
+      folder: getResolvedProjectRoot(),
       rel: item.rel || '',
+      area: previewArea,
       onRemoved: async (updatedTags, info) => {
         item.tags = Array.isArray(updatedTags) ? updatedTags : [];
         item.has_txt = true;
-        const srcItem = (galleryState.items || []).find(it => it.rel === item.rel);
+        const srcPool = previewArea === 'temp' ? (workdirState.tempItems || []) : (galleryState.items || []);
+        const srcItem = srcPool.find(it => it.rel === item.rel);
         if (srcItem){
           srcItem.tags = [...item.tags];
           srcItem.tag_count = item.tags.length;
           srcItem.has_txt = true;
         }
         fillGalleryTags(tags, item.tags || [], item.has_txt, 0, ctx);
-        renderGalleryItems();
+        if (previewArea === 'temp') renderTempItems();
+        else renderGalleryItems();
         await scanTagViz();
       }
     };
     fillGalleryTags(tags, item.tags || [], item.has_txt, 0, ctx);
   }
 
-  function openGalleryPreviewByRel(rel){
+  function openGalleryPreviewByRel(rel, source='dataset'){
     if (!rel) return;
+    galleryState.previewSource = source === 'temp' ? 'temp' : 'dataset';
     galleryState.previewRel = rel;
     renderGalleryPreviewModal(rel);
     setGalleryZoom(1);
@@ -2006,12 +3514,13 @@
   }
 
   async function handleGalleryManualAdd(){
-    const item = resolveGalleryItem(galleryState.previewRel);
+    const item = resolvePreviewItem(galleryState.previewRel);
     if (!item){
       setGalleryManualStatus('No image selected.');
       return;
     }
-    if (!item.in_temp){
+    const area = galleryState.previewSource === 'temp' ? 'temp' : 'dataset';
+    if (area !== 'temp'){
       setGalleryManualStatus('Manual tag editing is only available for items inside _temp.');
       return;
     }
@@ -2025,7 +3534,7 @@
     setGalleryManualStatus('Adding tags...');
     setGalleryManualControlsEnabled(false);
     const backup = !!get(IDS.backup)?.checked;
-    const result = await apiAddTags(galleryState.root || getGalleryRoot(), item.rel || '', raw, backup, true);
+    const result = await apiAddTags(getResolvedProjectRoot(), item.rel || '', raw, backup, true, area);
     if (!result.ok){
       setGalleryManualControlsEnabled(true);
       setGalleryManualStatus(`Add failed: ${result.error || 'Unknown error'}`);
@@ -2035,7 +3544,7 @@
     item.tags = Array.isArray(data.tags) ? data.tags : [];
     item.has_txt = true;
     item.tag_count = item.tags.length;
-    const srcItem = resolveGalleryItem(item.rel || '');
+    const srcItem = resolvePreviewItem(item.rel || '');
     if (srcItem){
       srcItem.tags = [...item.tags];
       srcItem.has_txt = true;
@@ -2045,7 +3554,8 @@
     setGalleryManualControlsEnabled(true);
     setGalleryManualStatus(data.added && data.added.length ? `Added ${data.added.length} tag(s).` : 'No new tags added.');
     renderGalleryPreviewModal(item.rel || '');
-    renderGalleryItems();
+    if (area === 'temp') renderTempItems();
+    else renderGalleryItems();
     await scanTagViz();
   }
 
@@ -2062,12 +3572,16 @@
   }
 
   function getWorkdirRoot(){
-    return stripTemp((get(IDS.folder)?.value||'').trim());
+    return getDatasetRoot();
   }
 
   function setWorkdirStatus(msg){
     const el = get(WORKDIR.status);
-    if (el) el.textContent = msg || '';
+    if (el){
+      const text = msg || '';
+      el.textContent = text;
+      el.title = text;
+    }
   }
 
   function getDragPayload(e){
@@ -2092,9 +3606,139 @@
     return { fileRel, fileRels, dirRel };
   }
 
+  function toDatasetTempRel(rel){
+    const clean = String(rel || '').replace(/\\/g, '/').replace(/^\/+/, '').trim();
+    if (!clean) return '';
+    if (clean.toLowerCase() === '_temp' || clean.toLowerCase().startsWith('_temp/')){
+      return clean;
+    }
+    return `_temp/${clean}`;
+  }
+
   function setWorkdirPath(root){
     const el = get(WORKDIR.path);
-    if (el) el.textContent = root || '...';
+    if (el){
+      const text = root || '...';
+      el.textContent = text;
+      el.title = root || '';
+    }
+  }
+
+  function setWorkdirTempCount(total){
+    const el = get(WORKDIR.tempCount);
+    if (!el) return;
+    const count = Number.isFinite(total) ? total : 0;
+    el.textContent = `${count} item${count === 1 ? '' : 's'}`;
+    el.title = el.textContent;
+  }
+
+  function renderTempItems(){
+    const wrap = get(WORKDIR.tempList);
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    const items = workdirState.tempItems || [];
+    setWorkdirTempCount(items.length);
+    if (!items.length){
+      const empty = document.createElement('div');
+      empty.className = 'workdir-empty';
+      empty.textContent = 'No staged items in _temp.';
+      wrap.appendChild(empty);
+      return;
+    }
+    const frag = document.createDocumentFragment();
+    items.forEach(item=>{
+      const card = document.createElement('div');
+      card.className = 'workdir-temp-card';
+      card.draggable = true;
+      card.addEventListener('dragstart', (e)=>{
+        const rel = toDatasetTempRel(item.rel || '');
+        if (!rel){
+          e.preventDefault();
+          return;
+        }
+        e.dataTransfer.setData('application/x-bb-files', JSON.stringify([rel]));
+        e.dataTransfer.setData('application/x-bb-file', rel);
+        e.dataTransfer.setData('text/plain', `file:${rel}`);
+        e.dataTransfer.effectAllowed = 'move';
+      });
+
+      const thumbWrap = document.createElement('button');
+      thumbWrap.type = 'button';
+      thumbWrap.className = 'gallery-thumb';
+      const img = document.createElement('img');
+      img.className = 'workdir-temp-thumb';
+      img.loading = 'lazy';
+      img.alt = item.name || item.rel || 'temp item';
+      img.src = `/api/tags/image?folder=${encodeURIComponent(getResolvedProjectRoot())}&area=temp&path=${encodeURIComponent(item.rel)}`;
+      const fallback = document.createElement('div');
+      fallback.className = 'workdir-temp-fallback d-none';
+      fallback.textContent = 'No preview';
+      img.addEventListener('error', ()=>{
+        img.classList.add('d-none');
+        fallback.classList.remove('d-none');
+      });
+      img.addEventListener('load', ()=>{
+        img.classList.remove('d-none');
+        fallback.classList.add('d-none');
+      });
+      thumbWrap.addEventListener('click', ()=> openGalleryPreviewByRel(item.rel || '', 'temp'));
+      thumbWrap.appendChild(img);
+      thumbWrap.appendChild(fallback);
+      card.appendChild(thumbWrap);
+
+      const body = document.createElement('div');
+      body.className = 'workdir-temp-body';
+      const name = document.createElement('div');
+      name.className = 'workdir-temp-name';
+      name.textContent = item.name || item.rel || '';
+      name.title = item.rel || item.name || '';
+      body.appendChild(name);
+      const path = document.createElement('div');
+      path.className = 'workdir-temp-path';
+      path.textContent = item.rel || '';
+      path.title = item.rel || '';
+      body.appendChild(path);
+      const tags = document.createElement('div');
+      tags.className = 'gallery-tags';
+      fillGalleryTags(tags, item.tags || [], item.has_txt, 6);
+      body.appendChild(tags);
+      card.appendChild(body);
+      frag.appendChild(card);
+    });
+    wrap.appendChild(frag);
+  }
+
+  async function loadTempItems(){
+    const root = getResolvedProjectRoot();
+    workdirState.tempItems = [];
+    renderTempItems();
+    if (!root || (projectState.needsInit && !projectState.ready)){
+      return;
+    }
+    try{
+      const res = await fetch('/api/tags/images', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          folder: root,
+          area: 'temp',
+          exts: get(IDS.exts)?.value || '',
+          recursive: true,
+          limit: 120,
+          tag_limit: 40
+        })
+      });
+      let data = null;
+      try{ data = await res.json(); }catch(_){}
+      if (!res.ok || !data || !data.ok){
+        return;
+      }
+      workdirState.tempItems = Array.isArray(data.images) ? data.images : [];
+      renderTempItems();
+    } catch (_err) {
+      workdirState.tempItems = [];
+      renderTempItems();
+    }
   }
 
   function clearWorkdirSelection(){
@@ -2111,8 +3755,8 @@
   }
 
   async function fetchWorkdirDirs(rel){
-    const root = getWorkdirRoot();
-    if (!root) return { ok: false, error: 'Folder not set.' };
+    const root = getResolvedProjectRoot();
+    if (!root) return { ok: false, error: 'Project root not set.' };
     const res = await fetch('/api/tags/dirs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2150,6 +3794,7 @@
     const name = document.createElement('div');
     name.className = 'workdir-name';
     name.textContent = item.name || item.rel || '(root)';
+    name.title = item.rel || item.name || '(root)';
     row.appendChild(name);
 
     const children = document.createElement('div');
@@ -2241,7 +3886,7 @@
 
   async function loadWorkdirRoot(){
     const tree = get(WORKDIR.tree);
-    const root = getWorkdirRoot();
+    const root = getDatasetRoot();
     const prevRoot = workdirState.root;
     workdirState.root = root;
     if (prevRoot && prevRoot !== root){
@@ -2252,8 +3897,13 @@
     if (!tree) return;
     tree.innerHTML = '';
     clearWorkdirSelection();
+    await loadTempItems();
     if (!root){
-      setWorkdirStatus('Folder not set.');
+      setWorkdirStatus('Project root not set.');
+      return;
+    }
+    if (projectState.needsInit && !projectState.ready){
+      setWorkdirStatus('Initialize the project to load dataset workspace.');
       return;
     }
     setWorkdirStatus('Loading...');
@@ -2289,7 +3939,11 @@
     const input = get(WORKDIR.newName);
     const raw = (input?.value || '').trim();
     if (!root){
-      setWorkdirStatus('Folder not set.');
+      setWorkdirStatus('Project root not set.');
+      return;
+    }
+    if (projectState.needsInit && !projectState.ready){
+      setWorkdirStatus('Initialize the project to load dataset workspace.');
       return;
     }
     if (!raw){
@@ -2306,7 +3960,7 @@
     const res = await fetch('/api/tags/mkdir', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ folder: root, rel })
+      body: JSON.stringify({ folder: getResolvedProjectRoot(), rel })
     });
     let data = null;
     try{ data = await res.json(); }catch(_){}
@@ -2321,10 +3975,14 @@
   }
 
   async function deleteWorkdirFolder(){
-    const root = getWorkdirRoot();
+    const root = getResolvedProjectRoot();
     const rel = workdirState.selected;
     if (!root){
-      setWorkdirStatus('Folder not set.');
+      setWorkdirStatus('Project root not set.');
+      return;
+    }
+    if (projectState.needsInit && !projectState.ready){
+      setWorkdirStatus('Initialize the project to load dataset workspace.');
       return;
     }
     if (!rel){
@@ -2369,59 +4027,52 @@
   }
 
   async function moveFileToFolder(fileRelOrList, dstRel){
-    const root = getWorkdirRoot();
+    const root = getResolvedProjectRoot();
     const srcRels = Array.isArray(fileRelOrList)
       ? fileRelOrList.map(rel => String(rel || '').replace(/\\/g, '/')).filter(Boolean)
       : [String(fileRelOrList || '').replace(/\\/g, '/')].filter(Boolean);
     if (!root || !srcRels.length) return;
-    setWorkdirStatus(srcRels.length > 1 ? `Moving ${srcRels.length} files...` : 'Moving file...');
-    const endpoint = srcRels.length > 1 ? '/api/tags/move-files' : '/api/tags/move-file';
-    const body = srcRels.length > 1
-      ? { folder: root, srcs: srcRels, dst: dstRel || '' }
-      : { folder: root, src: srcRels[0], dst: dstRel || '' };
-    const res = await fetch(endpoint, {
+    const dstNormalized = String(dstRel || '').replace(/\\/g, '/').trim();
+    const isTempTarget = dstNormalized === '_temp' || dstNormalized.startsWith('_temp/');
+    const targetLabel = dstNormalized ? (isTempTarget ? 'dataset/_temp' : `dataset/${dstNormalized}`) : 'dataset root';
+    const actionVerb = isTempTarget ? 'Sending' : 'Moving';
+    setWorkdirStatus(srcRels.length > 1 ? `${actionVerb} ${srcRels.length} files to ${targetLabel}...` : `${actionVerb} file to ${targetLabel}...`);
+    const res = await fetch('/api/tags/move-files', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
+      body: JSON.stringify({ folder: root, srcs: srcRels, dst: dstRel || '' })
     });
     let data = null;
     try{ data = await res.json(); }catch(_){}
     if (!res.ok || !data){
       const err = (data && data.error) ? data.error : `HTTP ${res.status}`;
-      setWorkdirStatus(`Move failed: ${err}`);
+      setWorkdirStatus(`${actionVerb} failed: ${err}`);
       return;
     }
-
-    let movedItems = [];
-    let errors = [];
-    if (srcRels.length > 1){
-      movedItems = Array.isArray(data.moved) ? data.moved : [];
-      errors = Array.isArray(data.errors) ? data.errors : [];
-    } else if (data.ok) {
-      movedItems = [{ src: srcRels[0], rel: data.rel || srcRels[0], moved: !!data.moved, warnings: data.warnings || [] }];
-    } else {
-      errors = [{ src: srcRels[0], error: data.error || 'Unknown error' }];
-    }
-
+    const movedItems = Array.isArray(data.moved) ? data.moved : [];
+    const errors = Array.isArray(data.errors) ? data.errors : [];
     movedItems.forEach(item=>{
       appendTagsLog(`Moved ${item.src} -> ${item.rel || item.src}`);
       (item.warnings || []).forEach(warn => appendTagsLog(`[WARN] ${warn}`));
     });
+    errors.forEach(item => appendTagsLog(`[ERROR] ${item.src}: ${item.error}`));
     if (errors.length){
-      errors.forEach(item => appendTagsLog(`[ERROR] ${item.src}: ${item.error}`));
       setWorkdirStatus(movedItems.length
-        ? `Moved ${movedItems.length}/${srcRels.length} file(s).`
-        : `Move failed: ${errors[0]?.error || 'Unknown error'}`);
+        ? `${actionVerb} ${movedItems.length}/${srcRels.length} file(s) to ${targetLabel}.`
+        : `${actionVerb} failed: ${errors[0]?.error || 'Unknown error'}`);
     } else {
-      setWorkdirStatus(srcRels.length > 1 ? `Moved ${movedItems.length} file(s).` : (movedItems[0]?.moved === false ? 'No move needed.' : 'File moved.'));
+      setWorkdirStatus(srcRels.length > 1
+        ? `${actionVerb} ${movedItems.length} file(s) to ${targetLabel}.`
+        : `${actionVerb} file to ${targetLabel}.`);
     }
     removeGallerySelection(movedItems.map(item => item.src).filter(Boolean));
     await loadGallery();
     await loadWorkdirRoot();
+    await scanTagViz();
   }
 
   async function moveWorkdirFolder(srcRel, dstRel){
-    const root = getWorkdirRoot();
+    const root = getResolvedProjectRoot();
     if (!root || !srcRel) return;
     if (dstRel && (dstRel === srcRel || dstRel.startsWith(srcRel + '/'))){
       setWorkdirStatus('Cannot move into itself.');
@@ -2445,15 +4096,16 @@
   }
 
   async function returnAllTempToRoot(){
-    const root = getWorkdirRoot();
-    if (!root) return;
-    const confirmed = await showConfirm('Move every image from _temp back to dataset root?', 'Return all');
-    if (!confirmed) return;
-    setWorkdirStatus('Returning files from _temp...');
+    const root = getResolvedProjectRoot();
+    if (!root){
+      setWorkdirStatus('Project root not set.');
+      return;
+    }
+    setWorkdirStatus('Returning files from dataset subfolders...');
     const res = await fetch('/api/tags/return-temp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ folder: root, exts: get(IDS.exts)?.value || '' })
+      body: JSON.stringify({ folder: root, exts: get(IDS.exts)?.value || '', source: 'all' })
     });
     let data = null;
     try{ data = await res.json(); }catch(_){}
@@ -2466,7 +4118,7 @@
     const movedItems = Array.isArray(data.moved) ? data.moved : [];
     const errors = Array.isArray(data.errors) ? data.errors : [];
     if (!movedItems.length && !errors.length){
-      setWorkdirStatus('_temp is already empty.');
+      setWorkdirStatus('No files found in dataset subfolders.');
       await loadWorkdirRoot();
       return;
     }
@@ -2479,13 +4131,14 @@
     removeGallerySelection(movedItems.map(item => item.src).filter(Boolean));
     if (errors.length){
       setWorkdirStatus(movedItems.length
-        ? `Returned ${movedItems.length}/${data.total || movedItems.length} file(s) from _temp.`
+        ? `Returned ${movedItems.length}/${data.total || movedItems.length} file(s) from dataset subfolders.`
         : `Return failed: ${errors[0]?.error || 'Unknown error'}`);
     } else {
-      setWorkdirStatus(`Returned ${movedItems.length} file(s) from _temp.`);
+      setWorkdirStatus(`Returned ${movedItems.length} file(s) from dataset subfolders.`);
     }
     await loadGallery();
     await loadWorkdirRoot();
+    await scanTagViz();
   }
 
   function bindWorkdirQuickDrop(elementId, dstRel){
@@ -2516,9 +4169,13 @@
     if(!el) return;
     if (!tagVizState.selected.size){
       el.textContent = 'Auto-sync ON';
+      el.title = 'Auto-sync ON';
+      updateTagExplorerTooltip();
       return;
     }
     el.textContent = tagsSyncEnabled ? 'Auto-sync ON' : 'Auto-sync paused (manual edit)';
+    el.title = el.textContent;
+    updateTagExplorerTooltip();
   }
 
   function clearWarning(){
@@ -2632,7 +4289,7 @@
     if (mode === 'replace'){
       return Number(parsedReplace?.validCount || 0) > 0;
     }
-    if (mode === 'insert' || mode === 'delete' || mode === 'move'){
+    if (mode === 'insert' || mode === 'delete'){
       return splitTagList(raw).length > 0;
     }
     return true;
@@ -2688,6 +4345,7 @@
     updateTagSyncStatus();
     updateTagWarningsFromInput();
     clearWarning();
+    refreshCheatsheetChipSelectionCue();
   }
 
   function clearTagsIfSynced(){
@@ -2701,11 +4359,16 @@
     tagsSyncLocked = false;
     updateTagWarningsFromInput();
     clearWarning();
+    refreshCheatsheetChipSelectionCue();
   }
 
   function setTagVizStatus(msg){
     const el = get(TAGVIZ.status);
-    if(el) el.textContent = msg || '';
+    if(el){
+      const text = msg || '';
+      el.textContent = text;
+      el.title = text;
+    }
   }
 
   function updateTagVizStats(){
@@ -2718,6 +4381,7 @@
     if (tagVizState.meta.total_images) parts.push(`${tagVizState.meta.total_images} images`);
     if (tagVizState.tempTags && tagVizState.tempTags.size) parts.push(`${tagVizState.tempTags.size} in _temp`);
     el.textContent = parts.join(' | ');
+    el.title = el.textContent;
   }
 
   function updateTagVizCount(tag, delta){
@@ -3349,6 +5013,7 @@
     setTagVizStatus(`Added "${tag}" to Tags / mapping.`);
     updateTagSyncStatus();
     updateTagHint();
+    refreshCheatsheetChipSelectionCue();
   }
 
   function clearDanbooruPanel(){
@@ -3615,8 +5280,8 @@
   }
 
   
-  async function fetchTagScan(folder, recursive=false){
-    const payload = { folder, exts: get(IDS.exts)?.value || '', recursive };
+  async function fetchTagScan(folder, recursive=false, area='dataset'){
+    const payload = { folder, area, exts: get(IDS.exts)?.value || '', recursive };
     const res = await fetch('/api/tags/scan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -3633,34 +5298,31 @@
 
   async function ensureEditTempFolderReady(mode){
     if (!['insert', 'delete', 'replace', 'dedup'].includes(mode)) return true;
-    const root = stripTemp((get(IDS.folder)?.value||'').trim());
+    const root = getResolvedProjectRoot();
     if (!root){
-      showWarning('Folder is required before running edit modes.', { level: 'error' });
+      showWarning('Project root is required before running edit modes.', { level: 'error' });
       return false;
     }
-    const tempFolder = defaultTempFor(root);
+    const tempFolder = getTempRoot();
     if (!tempFolder){
       showWarning('Could not resolve _temp folder from the selected root.', { level: 'error' });
       return false;
     }
-    const result = await fetchTagScan(tempFolder, true);
+    const result = await fetchTagScan(root, true, 'temp');
     if (result.ok) return true;
 
     const errText = (result.error || '').trim();
     const missingTemp = /folder not found/i.test(errText);
     const message = missingTemp
-      ? `_temp folder not found: ${tempFolder}. Use Move mode first to populate _temp.`
+      ? `_temp folder not found: ${tempFolder}. Send files from dataset to _temp first.`
       : `Cannot access _temp folder (${tempFolder}): ${errText || 'Unknown error'}`;
     showWarning(message, {
       level: 'error',
       actions: [
         {
-          label: 'Switch to Move mode',
+          label: 'Close',
           className: 'btn btn-warning btn-sm',
-          onClick: () => {
-            clearWarning();
-            setMode('move', true);
-          }
+          onClick: clearWarning
         },
         {
           label: 'Cancel',
@@ -3675,12 +5337,12 @@
   async function checkInsertNeedsMissingTxtWarning(){
     const mode = getModeValue();
     if (mode !== 'insert') return { warn: false, createMissingTxt: false };
-    const root = stripTemp((get(IDS.folder)?.value||'').trim());
+    const root = getResolvedProjectRoot();
     if (!root) return { warn: false, createMissingTxt: false };
-    const tempFolder = defaultTempFor(root);
+    const tempFolder = getTempRoot();
     if (!tempFolder) return { warn: false, createMissingTxt: false };
 
-    const result = await fetchTagScan(tempFolder, true);
+    const result = await fetchTagScan(root, true, 'temp');
     if (!result.ok || !result.data) return { warn: false, createMissingTxt: false };
 
     const totalImages = Number(result.data.total_images || 0);
@@ -3696,16 +5358,16 @@
     if (tagScanBusy) return;
     tagScanBusy = true;
     setTagScanButtonBusy(true);
-    const root = stripTemp((get(IDS.folder)?.value||'').trim());
+    const root = getResolvedProjectRoot();
     try{
       if (!root){
-        setTagVizStatus('Folder not set.');
+        setTagVizStatus('Project root not set.');
         return;
       }
       const previousSelected = new Set(tagVizState.selected);
       setTagVizStatus('Scanning...');
-      let scanFolder = root;
-      let result = await fetchTagScan(scanFolder, true);
+      let scanFolder = getDatasetRoot();
+      let result = await fetchTagScan(root, true, 'dataset');
 
       if (!result.ok){
         setTagVizStatus(result.error || 'Scan failed.');
@@ -3718,10 +5380,10 @@
         tag_files: data.tag_files || 0,
         total_images: data.total_images || 0
       };
-      const tempFolder = defaultTempFor(root);
+      const tempFolder = getTempRoot();
       tagVizState.tempTags = new Set();
       if (tempFolder){
-        const tempResult = await fetchTagScan(tempFolder, true);
+        const tempResult = await fetchTagScan(root, true, 'temp');
         if (tempResult.ok && tempResult.data){
           const tempItems = tempResult.data.tags || [];
           tagVizState.tempTags = new Set(tempItems.map(it => it.tag));
@@ -3744,6 +5406,7 @@
       } else {
         setTagVizStatus('Scan complete.');
       }
+      refreshCheatsheetChipSelectionCue();
       renderGalleryItems();
     } finally {
       tagScanBusy = false;
@@ -3820,6 +5483,7 @@
     updateTagHint();
     updateTagWarningsFromInput();
     refreshTempHints();
+    refreshCheatsheetChipSelectionCue();
   }
 
   // ---- AJAX helpers ----
@@ -3835,10 +5499,8 @@
   function setFormBusy(isBusy){
     formBusy = !!isBusy;
     const runBtn = get('btn-run');
-    const undoBtn = get('btn-undo');
     const clearBtn = get('btn-clear');
     if (runBtn) runBtn.disabled = formBusy;
-    if (undoBtn) undoBtn.disabled = formBusy;
     if (clearBtn) clearBtn.disabled = formBusy;
   }
   function showLog(text){
@@ -3878,8 +5540,8 @@
     return { ok: true, log: '' };
   }
 
-  async function apiRemoveTag(folder, rel, tag, backup=true){
-    const payload = { folder, rel, tag, backup: !!backup };
+  async function apiRemoveTag(folder, rel, tag, backup=true, area='temp'){
+    const payload = { folder, rel, tag, area, backup: !!backup };
     try{
       const res = await fetch('/api/tags/tag-remove', {
         method: 'POST',
@@ -3898,12 +5560,13 @@
     }
   }
 
-  async function apiAddTags(folder, rel, tags, backup=true, createMissingTxt=true){
+  async function apiAddTags(folder, rel, tags, backup=true, createMissingTxt=true, area='temp'){
     const payload = {
       folder,
       rel,
       tags,
       backup: !!backup,
+      area,
       create_missing_txt: !!createMissingTxt
     };
     try{
@@ -3927,7 +5590,7 @@
   // Build proper params:
   // - always send base folder; server derives temp path from folder
   function finalizeFormDataForMode(fd){
-    const root = stripTemp((get(IDS.folder)?.value||'').trim());
+    const root = getResolvedProjectRoot();
 
     fd.set('active_tab','tags');
     fd.set('tool','tags');
@@ -3935,6 +5598,10 @@
   }
 
   async function runTagsForm(form, options={}){
+    if (!isWorkspaceReady()){
+      showStatus('Workspace not ready. Complete Project Setup first.');
+      return;
+    }
     const mode = getModeValue();
     if (!mode){
       showWarning('Select a mode before running.', { level: 'error' });
@@ -4051,7 +5718,13 @@
   }
 
   document.addEventListener('DOMContentLoaded', ()=>{
+    arrangeWorkspaceLayout();
     const form = get('tags-form');
+    const tagsInput = get('tags');
+
+    if(tagsInput){
+      tagsInput.placeholder = 'insert/delete: tag1, tag2   |   replace: old->new; old2->new2';
+    }
 
     loadSaved();
     hookSavers();
@@ -4074,22 +5747,30 @@
     updateTagSyncStatus();
     updateTagHint();
     try{
-      uiState.sidebarExpanded = localStorage.getItem('bb.tags.sidebar.expanded') === '1';
-    }catch(_){}
-    try{
       galleryState.cheatsheetFile = localStorage.getItem(GALLERY_CHEATSHEET_FILE_KEY) || 'prompt.txt';
     }catch(_){
       galleryState.cheatsheetFile = 'prompt.txt';
     }
-    applySidebarExpanded(uiState.sidebarExpanded);
     galleryState.sort = get(GALLERY.sort)?.value || 'match';
+    let gridCols = 2;
+    try{
+      const savedCols = Number.parseInt(localStorage.getItem(GALLERY_GRID_COLS_KEY) || '', 10);
+      if ([2, 3, 4].includes(savedCols)) gridCols = savedCols;
+    }catch(_){}
+    applyGalleryGridColumns(gridCols);
+    initGalleryMarqueeEvents();
     updateGallerySelectionCount();
+    renderProjectState();
     setGalleryPath(getGalleryRoot());
     renderCheatsheetPanel();
-    loadCheatsheet();
-    loadGallery();
-    setWorkdirPath(getWorkdirRoot());
-    loadWorkdirRoot();
+    void loadProjectState({ silent: true }).then(()=>{
+      setGalleryPath(getGalleryRoot());
+      setWorkdirPath(getWorkdirRoot());
+      loadCheatsheet();
+      loadGallery();
+      loadWorkdirRoot();
+      scanTagViz();
+    });
 
     get(TAGVIZ.scan)?.addEventListener('click', scanTagViz);
     get(TAGVIZ.sync)?.addEventListener('click', syncSelectionToTags);
@@ -4154,8 +5835,10 @@
       danbooruState.glossaryFilter = e.target.value || '__all__';
       renderGlossaryList();
     });
-    get(GALLERY.toggle)?.addEventListener('click', toggleSidebarExpanded);
+    get(PROJECT.refresh)?.addEventListener('click', async ()=>{ await loadProjectState({ silent: false }); await loadGallery(); await loadWorkdirRoot(); await scanTagViz(); });
+    get(PROJECT.initPreview)?.addEventListener('click', previewProjectInit);
     get(GALLERY.refresh)?.addEventListener('click', loadGallery);
+    get(WORKDIR.sendSelected)?.addEventListener('click', sendSelectedGalleryItemsToTemp);
     get(GALLERY.loadMore)?.addEventListener('click', ()=>{
       const total = (galleryState.items || []).length;
       galleryState.visibleCount = Math.min(
@@ -4164,14 +5847,17 @@
       );
       renderGalleryItems();
     });
-    get(GALLERY.selectVisible)?.addEventListener('click', selectVisibleGalleryItems);
-    get(GALLERY.clearSelection)?.addEventListener('click', clearGallerySelection);
+    get(GALLERY.selectToggle)?.addEventListener('click', toggleSelectAllVisibleGalleryItems);
     get(GALLERY.recursive)?.addEventListener('change', loadGallery);
     get(GALLERY.limit)?.addEventListener('change', loadGallery);
     get(GALLERY.sort)?.addEventListener('change', ()=>{
       galleryState.sort = get(GALLERY.sort)?.value || 'match';
       renderGalleryItems();
       if (isGalleryPreviewOpen()) renderGalleryPreviewModal();
+    });
+    get(GALLERY.gridCols)?.addEventListener('change', (e)=>{
+      applyGalleryGridColumns(e.target?.value);
+      renderGalleryItems();
     });
     get(IDS.exts)?.addEventListener('change', scheduleGalleryRefresh);
     get(GALLERY.drop)?.addEventListener('click', ()=> get(GALLERY.input)?.click());
@@ -4234,19 +5920,67 @@
       setGalleryManualStatus('');
       galleryState.previewRel = '';
       galleryState.previewIndex = -1;
+      galleryState.previewSource = 'dataset';
     });
     document.addEventListener('keydown', (e)=>{
-      if (!isGalleryPreviewOpen()) return;
       const target = e.target;
-      const tag = (target && target.tagName ? target.tagName.toLowerCase() : '');
-      if (tag === 'input' || tag === 'textarea' || (target && target.isContentEditable)) return;
-      if (e.key === 'ArrowLeft'){
+      const editableTarget = isEditableTarget(target);
+      if (!editableTarget){
+        const pos = getAltNumberPosition(e);
+        if (pos > 0){
+          e.preventDefault();
+          openGalleryPreviewByPosition(pos);
+          return;
+        }
+      }
+      if (e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && isSpaceKey(e)){
+        e.preventDefault();
+        const runBtn = get('btn-run');
+        if (runBtn && !runBtn.disabled){
+          runBtn.click();
+        }
+        return;
+      }
+
+      if (e.ctrlKey && e.altKey && !e.shiftKey && keyMatches(e, 'c')){
+        const cheatBtn = get(LEFT.cheatBtn);
+        if (cheatBtn && !cheatBtn.disabled){
+          e.preventDefault();
+          toggleLeftDrawer('cheatsheet');
+        }
+        return;
+      }
+      if (e.ctrlKey && e.altKey && !e.shiftKey && keyMatches(e, 's')){
+        e.preventDefault();
+        sendSelectedGalleryItemsToTemp();
+        return;
+      }
+      if (e.ctrlKey && e.altKey && !e.shiftKey && keyMatches(e, 'f')){
+        e.preventDefault();
+        returnAllTempToRoot();
+        return;
+      }
+      if (!editableTarget && e.ctrlKey && !e.altKey && !e.shiftKey && keyMatches(e, 'q')){
+        e.preventDefault();
+        cycleMode(-1);
+        return;
+      }
+      if (!editableTarget && e.ctrlKey && !e.altKey && !e.shiftKey && keyMatches(e, 'e')){
+        e.preventDefault();
+        cycleMode(1);
+        return;
+      }
+
+      if (!isGalleryPreviewOpen()) return;
+      if (editableTarget) return;
+      const key = String(e.key || '').toLowerCase();
+      if (key === 'arrowleft' || key === 'a'){
         e.preventDefault();
         stepGalleryPreview(-1);
-      } else if (e.key === 'ArrowRight'){
+      } else if (key === 'arrowright' || key === 'd'){
         e.preventDefault();
         stepGalleryPreview(1);
-      } else if (e.key.toLowerCase() === 's'){
+      } else if (key === 's' || key === ' ' || key === 'spacebar'){
         e.preventDefault();
         toggleCurrentPreviewSelection();
       }
@@ -4272,6 +6006,7 @@
         updateTagHint();
       }
       updateTagWarningsFromInput();
+      refreshCheatsheetChipSelectionCue();
     });
     // Main Run → AJAX (no refresh)
     form.addEventListener('submit', async (e)=>{
@@ -4328,9 +6063,12 @@
         }
       }
       refreshTempHints();
-      loadCheatsheet();
-      scheduleGalleryRefresh();
-      scheduleWorkdirRefresh();
+      loadProjectState({ silent: true }).then(()=>{
+        loadCheatsheet();
+        scheduleGalleryRefresh();
+        scheduleWorkdirRefresh();
+        scanTagViz();
+      });
     };
     get(IDS.folder)?.addEventListener('input', onFolderChange);
     get(IDS.folder)?.addEventListener('change', onFolderChange);

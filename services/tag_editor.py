@@ -1,15 +1,30 @@
 from collections import Counter, OrderedDict
 from pathlib import Path
-from typing import Tuple, List, Set, Optional
+from typing import Any, Dict, List, Optional, Set, Tuple
 import re
-from utils.io import readable_path
-from utils.dataset import join_tags
-from utils.parse import parse_bool, parse_exts, parse_tag_list
-from utils.tool_result import build_tool_result
-from utils.text_io import read_text_best_effort
 import shutil
 
-EDIT_MODES = {"insert", "delete", "replace", "dedup"}  # non-move, non-undo
+from utils.dataset import join_tags
+from utils.io import readable_path
+from utils.parse import parse_bool, parse_exts, parse_tag_list
+from utils.text_io import read_text_best_effort
+from utils.tool_result import build_tool_result
+
+EDIT_MODES = {"insert", "delete", "replace", "dedup"}
+DEFAULT_PROJECT_PROMPT = """trigger_word
+
+appearance:
+hair_color, eye_color, hairstyle
+
+accessory:
+hair_ornament, necklace, earrings
+
+outfit:
+top, bottom, footwear
+
+optional:
+expression, pose, background
+"""
 _TXT_TAG_CACHE: "OrderedDict[str, Tuple[Tuple[int, int], List[str]]]" = OrderedDict()
 _TXT_TAG_CACHE_MAX = 4096
 
@@ -84,6 +99,7 @@ def _normalize_exts(exts: List[str]) -> Set[str]:
         out.add(val)
     return out
 
+
 def _list_images(
     folder_path: Path,
     exts: List[str],
@@ -109,7 +125,7 @@ def _list_images(
     return sorted(images, key=lambda p: str(p).lower())
 
 
-def _next_pair_target(folder: Path, stem: str, image_suffix: str) -> Tuple[Path, Path]:
+def _next_pair_target(folder: Path, stem: str, image_suffix: str) -> Tuple[Path, Path, bool]:
     bump = 0
     while True:
         suffix = "" if bump == 0 else f"_{bump}"
@@ -117,7 +133,7 @@ def _next_pair_target(folder: Path, stem: str, image_suffix: str) -> Tuple[Path,
         dst_img = folder / f"{candidate_stem}{image_suffix}"
         dst_txt = folder / f"{candidate_stem}.txt"
         if not dst_img.exists() and not dst_txt.exists():
-            return dst_img, dst_txt
+            return dst_img, dst_txt, bump > 0
         bump += 1
 
 
@@ -160,6 +176,24 @@ def _move_pair_transaction(
         return False, message
 
 
+def _copy_pair_with_txt(src_img: Path, dst_img: Path, dst_txt: Path, txt_content: str) -> Tuple[bool, str]:
+    copied: List[Path] = []
+    try:
+        shutil.copy2(src_img, dst_img)
+        copied.append(dst_img)
+        dst_txt.write_text(txt_content, encoding="utf-8")
+        copied.append(dst_txt)
+        return True, ""
+    except Exception as exc:
+        for path in reversed(copied):
+            try:
+                if path.exists():
+                    path.unlink()
+            except Exception:
+                pass
+        return False, str(exc)
+
+
 def _created_ts(path: Path) -> float:
     try:
         return float(path.stat().st_ctime)
@@ -169,10 +203,10 @@ def _created_ts(path: Path) -> float:
 
 def _is_temp_relative(rel: Path) -> bool:
     parts = rel.parts
-    return bool(parts) and parts[0].lower() == "_temp"
+    return len(parts) >= 2 and parts[0].lower() == "_temp"
 
 
-def _serialize_image_item(root_folder: Path, img: Path, tag_limit: int) -> dict:
+def _serialize_image_item(root_folder: Path, img: Path, tag_limit: int, area: str = "dataset") -> dict:
     txt = img.with_suffix(".txt")
     tags: List[str] = []
     has_txt = False
@@ -182,7 +216,6 @@ def _serialize_image_item(root_folder: Path, img: Path, tag_limit: int) -> dict:
     tag_count = len(tags)
     if tag_limit > 0 and len(tags) > tag_limit:
         tags = tags[:tag_limit]
-
     rel_path = img.relative_to(root_folder)
     rel = rel_path.as_posix()
     parent_rel = rel_path.parent.as_posix() if rel_path.parent != Path(".") else ""
@@ -190,6 +223,7 @@ def _serialize_image_item(root_folder: Path, img: Path, tag_limit: int) -> dict:
         "name": img.name,
         "rel": rel,
         "parent_rel": parent_rel,
+        "area": area,
         "tags": tags,
         "tag_count": tag_count,
         "tags_truncated": tag_count > len(tags),
@@ -199,14 +233,373 @@ def _serialize_image_item(root_folder: Path, img: Path, tag_limit: int) -> dict:
     }
 
 
+def _make_serializable_path_info(paths: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "project_root": str(paths["project_root"]),
+        "database_root": str(paths["database_root"]),
+        "dataset_root": str(paths["dataset_root"]),
+        "temp_root": str(paths["temp_root"]),
+        "prompt_path": str(paths["prompt_path"]),
+        "normalized_from_legacy": bool(paths["normalized_from_legacy"]),
+        "normalized_input": str(paths["normalized_input"]),
+    }
+
+
+def _clean_messages(*items: str) -> List[str]:
+    return [str(item).strip() for item in items if str(item or "").strip()]
+
+
+def _is_image_file(path: Path, extset: Set[str]) -> bool:
+    return path.is_file() and path.suffix.lower() in extset
+
+
+def resolve_project_paths(raw_folder: Path) -> Dict[str, Any]:
+    normalized_input = readable_path(str(raw_folder or "")).expanduser()
+    project_root = normalized_input
+    normalized_from_legacy = False
+    if project_root.name.lower() in {"dataset", "database"} and project_root.parent != project_root:
+        project_root = project_root.parent
+        normalized_from_legacy = True
+    return {
+        "project_root": project_root,
+        "database_root": project_root / "database",
+        "dataset_root": project_root / "dataset",
+        "temp_root": project_root / "dataset" / "_temp",
+        "prompt_path": project_root / "prompt.txt",
+        "normalized_from_legacy": normalized_from_legacy,
+        "normalized_input": str(normalized_input),
+    }
+
+
+def extract_trigger_word(prompt_path: Path) -> str:
+    if not prompt_path.exists() or not prompt_path.is_file():
+        return ""
+    try:
+        text, _, _ = read_text_best_effort(prompt_path)
+    except Exception:
+        return ""
+    lines = [line.strip() for line in str(text or "").replace("\r\n", "\n").replace("\r", "\n").split("\n")]
+    non_empty = [line for line in lines if line]
+    if not non_empty:
+        return ""
+    trigger_keys = {"trigger", "trigger_word", "trigger word", "activation", "activation_word"}
+    for line in non_empty:
+        if ":" not in line:
+            continue
+        left, right = line.split(":", 1)
+        if left.strip().lower() in trigger_keys:
+            return right.strip().strip(",")
+    first = non_empty[0]
+    if ":" not in first:
+        return first.strip().strip(",")
+    left, right = first.split(":", 1)
+    if left.strip().lower() in trigger_keys:
+        return right.strip().strip(",")
+    return ""
+
+
+def inspect_project_layout(project_root: Path, exts: List[str]) -> Dict[str, Any]:
+    paths = resolve_project_paths(project_root)
+    root = paths["project_root"]
+    extset = _normalize_exts(exts)
+    if not str(root).strip():
+        return {"ok": False, "error": "Project root is required", **_make_serializable_path_info(paths)}
+    if root.exists() and not root.is_dir():
+        return {"ok": False, "error": f"Project root is not a folder: {root}", **_make_serializable_path_info(paths)}
+
+    database_exists = paths["database_root"].is_dir()
+    dataset_exists = paths["dataset_root"].is_dir()
+    temp_exists = paths["temp_root"].is_dir()
+    prompt_exists = paths["prompt_path"].exists()
+    missing = []
+    if not database_exists:
+        missing.append("database")
+    if not dataset_exists:
+        missing.append("dataset")
+    if not temp_exists:
+        missing.append("dataset/_temp")
+    if not prompt_exists:
+        missing.append("prompt.txt")
+
+    root_images: List[Path] = []
+    root_non_images = 0
+    if root.exists() and root.is_dir() and extset:
+        for path in sorted(root.iterdir(), key=lambda p: p.name.lower()):
+            if _is_image_file(path, extset):
+                root_images.append(path)
+            elif path.is_file():
+                root_non_images += 1
+
+    trigger_word = extract_trigger_word(paths["prompt_path"])
+    preview_examples: List[Dict[str, str]] = []
+    conflict_count = 0
+    for img in root_images:
+        if paths["database_root"].exists():
+            dst_img, dst_txt, _ = _next_pair_target(paths["database_root"], img.stem, img.suffix.lower())
+            if paths["database_root"].joinpath(img.name).exists() or paths["database_root"].joinpath(f"{img.stem}.txt").exists():
+                conflict_count += 1
+            preview_examples.append(
+                {"source": img.name, "image": dst_img.relative_to(root).as_posix(), "txt": dst_txt.relative_to(root).as_posix()}
+            )
+        else:
+            preview_examples.append({"source": img.name, "image": f"database/{img.name}", "txt": f"database/{img.stem}.txt"})
+
+    ready = root.exists() and root.is_dir() and not missing
+    warnings: List[str] = []
+    if root.exists() and root.is_dir() and not extset:
+        warnings.append("No valid image extensions supplied; root-level image scan skipped.")
+    if root.exists() and root.is_dir() and not root_images and not ready:
+        warnings.append("No root-level source images detected for initialization preview.")
+    return {
+        "ok": True,
+        **_make_serializable_path_info(paths),
+        "exists": root.exists(),
+        "is_dir": root.is_dir() if root.exists() else False,
+        "ready": ready,
+        "needs_init": not ready,
+        "status": "ready" if ready else ("partial" if root.exists() else "missing"),
+        "missing": missing,
+        "database_exists": database_exists,
+        "dataset_exists": dataset_exists,
+        "temp_exists": temp_exists,
+        "prompt_exists": prompt_exists,
+        "root_image_count": len(root_images),
+        "root_non_image_count": root_non_images,
+        "root_images": [img.name for img in root_images[:20]],
+        "trigger_word": trigger_word,
+        "trigger_detected": bool(trigger_word),
+        "init_preview": {
+            "create_dirs": [part for part in ["database", "dataset", "dataset/_temp"] if part in missing],
+            "create_prompt": not prompt_exists,
+            "root_images_found": len(root_images),
+            "copy_images": len(root_images),
+            "generate_txt": len(root_images),
+            "skip_images": 0,
+            "conflict_rename": conflict_count,
+            "examples": preview_examples[:5],
+        },
+        "warnings": warnings,
+        "info": _clean_messages(
+            f"Normalized legacy input to project root: {root}" if paths["normalized_from_legacy"] else "",
+            f"Trigger word detected: {trigger_word}" if trigger_word else "",
+        ),
+    }
+
+
+def initialize_project_layout(project_root: Path, exts: List[str], create_prompt: bool = True) -> Dict[str, Any]:
+    paths = resolve_project_paths(project_root)
+    root = paths["project_root"]
+    inspect = inspect_project_layout(root, exts)
+    if not inspect.get("ok"):
+        return inspect
+    if root.exists() and not root.is_dir():
+        return {"ok": False, "error": f"Project root is not a folder: {root}", **_make_serializable_path_info(paths)}
+    if not root.exists():
+        return {"ok": False, "error": f"Project root not found: {root}", **_make_serializable_path_info(paths)}
+
+    logs: List[str] = []
+    errors: List[str] = []
+    created_dirs: List[str] = []
+    copied: List[Dict[str, str]] = []
+    generated_txt: List[str] = []
+    skipped: List[str] = []
+    renamed: List[Dict[str, str]] = []
+
+    for name, path in (("database", paths["database_root"]), ("dataset", paths["dataset_root"]), ("dataset/_temp", paths["temp_root"])):
+        if path.exists():
+            if not path.is_dir():
+                errors.append(f"{name} exists but is not a folder: {path}")
+            else:
+                skipped.append(f"{name}: already exists")
+            continue
+        try:
+            path.mkdir(parents=True, exist_ok=False)
+            created_dirs.append(name)
+            logs.append(f"[mkdir] {name}")
+        except Exception as exc:
+            errors.append(f"{name}: {exc}")
+
+    if create_prompt:
+        if paths["prompt_path"].exists():
+            skipped.append("prompt.txt: already exists")
+        else:
+            try:
+                paths["prompt_path"].write_text(DEFAULT_PROJECT_PROMPT, encoding="utf-8")
+                logs.append("[create] prompt.txt")
+            except Exception as exc:
+                errors.append(f"prompt.txt: {exc}")
+
+    trigger_word = extract_trigger_word(paths["prompt_path"])
+    txt_content = trigger_word.strip()
+    extset = _normalize_exts(exts)
+    root_images = [path for path in sorted(root.iterdir(), key=lambda p: p.name.lower()) if _is_image_file(path, extset)]
+    for src_img in root_images:
+        dst_img, dst_txt, renamed_flag = _next_pair_target(paths["database_root"], src_img.stem, src_img.suffix.lower())
+        if renamed_flag:
+            renamed.append({"source": src_img.name, "target": dst_img.name})
+            logs.append(f"[rename] {src_img.name} -> {dst_img.name}")
+        ok, error = _copy_pair_with_txt(src_img, dst_img, dst_txt, txt_content)
+        if not ok:
+            errors.append(f"{src_img.name}: {error}")
+            logs.append(f"[error] copy {src_img.name}: {error}")
+            continue
+        copied.append({"source": src_img.name, "image": dst_img.name})
+        generated_txt.append(dst_txt.name)
+        logs.append(f"[copy] {src_img.name} -> database/{dst_img.name}")
+        logs.append(f"[txt] database/{dst_txt.name}" + (f" (trigger: {trigger_word})" if trigger_word else " (empty)"))
+
+    return {
+        "ok": len(errors) == 0,
+        **_make_serializable_path_info(paths),
+        "trigger_word": trigger_word,
+        "created_dirs": created_dirs,
+        "copied": copied,
+        "generated_txt": generated_txt,
+        "skipped": skipped,
+        "renamed": renamed,
+        "warnings": _clean_messages(
+            f"Trigger word detected: {trigger_word}" if trigger_word else "",
+            "Some files were skipped or renamed during initialization." if skipped or renamed else "",
+        ),
+        "errors": errors,
+        "logs": logs,
+        "summary": {
+            "created_dirs": len(created_dirs),
+            "copied_images": len(copied),
+            "generated_txt": len(generated_txt),
+            "skipped": len(skipped),
+            "renamed": len(renamed),
+            "errors": len(errors),
+        },
+    }
+
+
+def list_database_images(project_root: Path, exts: List[str], recursive: bool, limit: int, tag_limit: int) -> Dict[str, Any]:
+    paths = resolve_project_paths(project_root)
+    result = list_images_with_tags(paths["database_root"], exts, recursive=recursive, limit=limit, tag_limit=tag_limit)
+    if result.get("ok"):
+        result.update({"area": "database", **_make_serializable_path_info(paths)})
+    return result
+
+
+def list_dataset_images(
+    project_root: Path,
+    exts: List[str],
+    recursive: bool,
+    limit: int,
+    tag_limit: int,
+    include_temp: bool = True,
+) -> Dict[str, Any]:
+    paths = resolve_project_paths(project_root)
+    folder = paths["dataset_root"]
+    if not folder.exists() or not folder.is_dir():
+        return {"ok": False, "error": f"Folder not found: {folder}", **_make_serializable_path_info(paths)}
+    images = _list_images(folder, exts, recursive=recursive, exclude_dir=None if include_temp else paths["temp_root"])
+    total = len(images)
+    if limit and limit > 0:
+        images = images[:limit]
+    items = [_serialize_image_item(folder, img, tag_limit, area="dataset") for img in images]
+    return {"ok": True, "folder": str(folder), "total": total, "images": items, "area": "dataset", **_make_serializable_path_info(paths)}
+
+
+def list_temp_images(project_root: Path, exts: List[str], recursive: bool, limit: int, tag_limit: int) -> Dict[str, Any]:
+    paths = resolve_project_paths(project_root)
+    folder = paths["temp_root"]
+    if not folder.exists() or not folder.is_dir():
+        return {"ok": False, "error": f"Folder not found: {folder}", **_make_serializable_path_info(paths)}
+    images = _list_images(folder, exts, recursive=recursive, exclude_dir=None)
+    total = len(images)
+    if limit and limit > 0:
+        images = images[:limit]
+    items = [_serialize_image_item(folder, img, tag_limit, area="temp") for img in images]
+    return {"ok": True, "folder": str(folder), "total": total, "images": items, "area": "temp", **_make_serializable_path_info(paths)}
+
+
+def move_database_files_to_temp(project_root: Path, srcs: List[str]) -> Dict[str, Any]:
+    paths = resolve_project_paths(project_root)
+    database_root = paths["database_root"]
+    temp_root = paths["temp_root"]
+    if not database_root.exists() or not database_root.is_dir():
+        return {"ok": False, "error": f"Database folder not found: {database_root}", **_make_serializable_path_info(paths)}
+    temp_root.mkdir(parents=True, exist_ok=True)
+    moved = []
+    warnings = []
+    errors = []
+    seen: Set[str] = set()
+
+    for raw_rel in srcs or []:
+        rel = str(raw_rel or "").replace("\\", "/").strip().lstrip("/")
+        if not rel or rel in seen:
+            continue
+        seen.add(rel)
+        src_img = database_root / Path(rel)
+        try:
+            src_img_res = src_img.resolve()
+            db_res = database_root.resolve()
+        except Exception:
+            errors.append({"src": rel, "error": "Path resolution failed"})
+            continue
+        if db_res not in src_img_res.parents and src_img_res != db_res:
+            errors.append({"src": rel, "error": "Invalid relative path"})
+            continue
+        if not src_img.exists() or not src_img.is_file():
+            errors.append({"src": rel, "error": "Source image not found"})
+            continue
+        src_txt = src_img.with_suffix(".txt")
+        rel_parent = Path(rel).parent
+        dst_dir = temp_root if rel_parent == Path(".") else temp_root / rel_parent
+        try:
+            dst_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as exc:
+            errors.append({"src": rel, "error": str(exc)})
+            continue
+        dst_img, dst_txt, renamed_flag = _next_pair_target(dst_dir, src_img.stem, src_img.suffix.lower())
+        ok, error = _move_pair_transaction(src_img, src_txt, dst_img, dst_txt, require_txt=False)
+        if not ok:
+            errors.append({"src": rel, "error": error})
+            continue
+        item = {"src": rel, "rel": dst_img.relative_to(paths["dataset_root"]).as_posix(), "moved": True, "warnings": []}
+        if renamed_flag:
+            item["warnings"].append(f"Renamed on move: {src_img.name} -> {dst_img.name}")
+        if not dst_txt.exists():
+            item["warnings"].append(f"Missing sidecar: {src_img.stem}.txt")
+        if item["warnings"]:
+            warnings.extend(item["warnings"])
+        moved.append(item)
+    return {"ok": len(errors) == 0, **_make_serializable_path_info(paths), "moved": moved, "warnings": warnings, "errors": errors}
+
+
+def resolve_image_path(project_root: Path, rel: str, area: str = "database") -> Dict[str, Any]:
+    paths = resolve_project_paths(project_root)
+    area_key = (area or "database").strip().lower()
+    if area_key == "database":
+        root = paths["database_root"]
+    elif area_key == "dataset":
+        root = paths["dataset_root"]
+    elif area_key == "temp":
+        root = paths["temp_root"]
+    else:
+        return {"ok": False, "error": f"Unknown area: {area}", **_make_serializable_path_info(paths)}
+    rel_path = Path(str(rel or "").replace("\\", "/").lstrip("/"))
+    if not str(rel_path) or any(part == ".." for part in rel_path.parts):
+        return {"ok": False, "error": "Invalid path", **_make_serializable_path_info(paths)}
+    target = root / rel_path
+    try:
+        target_res = target.resolve()
+        root_res = root.resolve()
+    except Exception:
+        return {"ok": False, "error": "Path resolution failed", **_make_serializable_path_info(paths)}
+    if target_res != root_res and root_res not in target_res.parents:
+        return {"ok": False, "error": "Invalid path", **_make_serializable_path_info(paths)}
+    return {"ok": True, "root": root, "target": target, "area": area_key, **_make_serializable_path_info(paths)}
+
+
 def scan_tags(folder: Path, exts: List[str], recursive: bool = False) -> dict:
     if not folder or not folder.exists() or not folder.is_dir():
         return {"ok": False, "error": f"Folder not found: {folder}"}
-
     images = _list_images(folder, exts, recursive=recursive)
     counts: Counter = Counter()
     tag_files = 0
-
     for img in images:
         txt = img.with_suffix(".txt")
         if not txt.exists():
@@ -215,49 +608,25 @@ def scan_tags(folder: Path, exts: List[str], recursive: bool = False) -> dict:
         tag_files += 1
         if tags:
             counts.update(set(tags))
+    items = [{"tag": tag, "count": int(cnt)} for tag, cnt in sorted(counts.items(), key=lambda x: (-x[1], x[0]))]
+    return {"ok": True, "folder": str(folder), "total_images": len(images), "tag_files": tag_files, "tags": items}
 
-    items = [
-        {"tag": tag, "count": int(cnt)}
-        for tag, cnt in sorted(counts.items(), key=lambda x: (-x[1], x[0]))
-    ]
-    return {
-        "ok": True,
-        "folder": str(folder),
-        "total_images": len(images),
-        "tag_files": tag_files,
-        "tags": items,
-    }
 
-def list_images_with_tags(
-    folder: Path,
-    exts: List[str],
-    recursive: bool = False,
-    limit: int = 80,
-    tag_limit: int = 200,
-) -> dict:
+def list_images_with_tags(folder: Path, exts: List[str], recursive: bool = False, limit: int = 80, tag_limit: int = 200) -> dict:
     if not folder or not folder.exists() or not folder.is_dir():
         return {"ok": False, "error": f"Folder not found: {folder}"}
-
     images = _list_images(folder, exts, recursive=recursive, exclude_dir=None)
     total = len(images)
     if limit and limit > 0:
         images = images[:limit]
-
     items = [_serialize_image_item(folder, img, tag_limit) for img in images]
-
     return {"ok": True, "folder": str(folder), "total": total, "images": items}
 
 
-def add_tags(
-    txt_path: Path,
-    raw_tags: List[str],
-    backup: bool = True,
-    create_missing_txt: bool = False,
-) -> dict:
+def add_tags(txt_path: Path, raw_tags: List[str], backup: bool = True, create_missing_txt: bool = False) -> dict:
     tags_to_add = _dedup_tags(raw_tags or [])
     if not tags_to_add:
         return {"ok": False, "error": "No tags provided"}
-
     had_txt = txt_path.exists()
     src = ""
     current_tags: List[str] = []
@@ -269,7 +638,6 @@ def add_tags(
         current_tags = _normalize_tags(parse_tag_list(src, dedupe=False), dedupe=False)
     elif not create_missing_txt:
         return {"ok": False, "error": "Missing .txt"}
-
     next_tags = list(current_tags)
     added: List[str] = []
     for tag in tags_to_add:
@@ -277,10 +645,8 @@ def add_tags(
             continue
         next_tags.append(tag)
         added.append(tag)
-
     if not had_txt and not next_tags:
         return {"ok": False, "error": "No tags to write"}
-
     content = join_tags(next_tags)
     changed = (not had_txt) or (content.strip() != src.strip())
     if changed:
@@ -294,14 +660,7 @@ def add_tags(
             _invalidate_cache(txt_path)
         except Exception as exc:
             return {"ok": False, "error": str(exc)}
-
-    return {
-        "ok": True,
-        "created": not had_txt,
-        "changed": changed,
-        "added": added,
-        "tags": next_tags,
-    }
+    return {"ok": True, "created": not had_txt, "changed": changed, "added": added, "tags": next_tags}
 
 
 def remove_tag(txt_path: Path, tag: str, backup: bool = True) -> dict:
@@ -329,34 +688,50 @@ def remove_tag(txt_path: Path, tag: str, backup: bool = True) -> dict:
         return {"ok": False, "error": str(exc)}
     return {"ok": True, "removed": True, "tags": newtags}
 
+
 def handle(form, ctx):
     active_tab = "tags"
-
-    # Raw inputs
     raw_folder_text = (form.get("folder", "") or "").strip()
-    raw_folder = readable_path(raw_folder_text)
     mode = (form.get("mode", "insert") or "insert").strip().lower()
     tags_field = form.get("tags", "")
     exts = parse_exts(form.get("exts"), default=[".jpg", ".jpeg", ".png", ".webp"])
     backup = parse_bool(form.get("backup"), default=False)
     create_missing_txt = parse_bool(form.get("create_missing_txt"), default=False)
-
     lines: List[str] = []
 
     def _done(ok: bool, error: str = ""):
         return build_tool_result(active_tab, lines, ok=ok, error=error)
 
-    # Derive base from whatever the user passed:
-    # If they give <base>/_temp, base = parent; else base = given.
     if not raw_folder_text:
-        lines.append("Folder not provided.")
-        return _done(False, "Folder not provided.")
+        lines.append("Project root not provided.")
+        return _done(False, "Project root not provided.")
+    if mode not in EDIT_MODES and mode != "undo":
+        lines.append(f"Unknown mode: {mode}")
+        return _done(False, f"Unknown mode: {mode}")
 
-    if raw_folder.name.lower() == "_temp":
-        base_folder = raw_folder.parent
-    else:
-        base_folder = raw_folder
-    temp_folder = base_folder / "_temp"
+    raw_folder = readable_path(raw_folder_text)
+    paths = resolve_project_paths(raw_folder)
+    dataset_root = paths["dataset_root"]
+    temp_folder = paths["temp_root"]
+    if (not dataset_root.exists() or not dataset_root.is_dir()) and raw_folder.exists() and raw_folder.is_dir():
+        direct_dataset = None
+        direct_temp = None
+        if raw_folder.name.lower() == "_temp" and raw_folder.parent.exists() and raw_folder.parent.is_dir():
+            direct_dataset = raw_folder.parent
+            direct_temp = raw_folder
+        elif (raw_folder / "_temp").exists() and (raw_folder / "_temp").is_dir():
+            direct_dataset = raw_folder
+            direct_temp = raw_folder / "_temp"
+        if direct_dataset and direct_temp:
+            dataset_root = direct_dataset
+            temp_folder = direct_temp
+            lines.append(f"Compatibility mode: treating {raw_folder} as dataset root.")
+    if not dataset_root.exists() or not dataset_root.is_dir():
+        lines.append(f"Dataset folder not found: {dataset_root}")
+        return _done(False, f"Dataset folder not found: {dataset_root}")
+    if not temp_folder.exists() or not temp_folder.is_dir():
+        lines.append(f"Temp folder not found: {temp_folder}")
+        return _done(False, f"Temp folder not found: {temp_folder}")
 
     def _parse_tag_input(raw: str) -> List[str]:
         out: List[str] = []
@@ -383,6 +758,30 @@ def handle(form, ctx):
                 mapping[old] = new
         return mapping
 
+    if mode == "undo":
+        images_in_temp = _list_images(temp_folder, exts, recursive=True)
+        if not images_in_temp:
+            lines.append(f"No image files with {exts} found in temp folder: {temp_folder}")
+            return _done(False, f"No image files found in temp folder: {temp_folder}")
+        restored = 0
+        errors = 0
+        for img in sorted(images_in_temp, key=lambda p: p.name.lower()):
+            txt = img.with_suffix(".txt")
+            had_txt = txt.exists()
+            rel_parent = img.parent.relative_to(temp_folder)
+            dest_parent = dataset_root / rel_parent
+            dest_parent.mkdir(parents=True, exist_ok=True)
+            dest_img, dest_txt, _ = _next_pair_target(dest_parent, img.stem, img.suffix.lower())
+            ok, error = _move_pair_transaction(img, txt, dest_img, dest_txt, require_txt=False)
+            if not ok:
+                lines.append(f"[ERROR] restoring {img.name}: {error}")
+                errors += 1
+                continue
+            restored += 1
+            lines.append(f"Restored: {dest_img.relative_to(dataset_root)}{' (+ .txt)' if had_txt else ''}")
+        lines.append(f"Done. {restored} file(s) restored from {temp_folder} to {dataset_root}. Errors: {errors}.")
+        return _done(errors == 0, "" if errors == 0 else f"{errors} restore operation(s) failed.")
+
     add: List[str] = []
     deltags: Set[str] = set()
     mapping = {}
@@ -393,129 +792,20 @@ def handle(form, ctx):
     elif mode == "replace":
         mapping = _parse_replace_mapping(tags_field)
 
-    if mode not in {"move", "undo"} and mode not in EDIT_MODES:
-        lines.append(f"Unknown mode: {mode}")
-        return _done(False, f"Unknown mode: {mode}")
+    if mode == "insert" and not add:
+        lines.append("Insert skipped: no tags provided.")
+        return _done(False, "Insert skipped: no tags provided.")
+    if mode == "delete" and not deltags:
+        lines.append("Delete skipped: no tags provided.")
+        return _done(False, "Delete skipped: no tags provided.")
+    if mode == "replace" and not mapping:
+        lines.append("Replace skipped: no mappings provided.")
+        return _done(False, "Replace skipped: no mappings provided.")
 
-    if not base_folder.exists() or not base_folder.is_dir():
-        lines.append(f"Base folder not found: {base_folder}")
-        return _done(False, f"Base folder not found: {base_folder}")
-
-    # Fixed path behavior:
-    # - move scans base (recursive), excludes base/_temp, and stages into base/_temp.
-    # - undo scans base/_temp (recursive) and restores to base.
-    # - edit modes always run on base/_temp (recursive).
-    if mode == "move":
-        recursive_scan = True
-        exclude_dir = temp_folder
-        scan_folder = base_folder
-        temp_folder.mkdir(parents=True, exist_ok=True)
-    elif mode == "undo":
-        if not temp_folder.exists() or not temp_folder.is_dir():
-            lines.append(f"Temp folder not found: {temp_folder}")
-            return _done(False, f"Temp folder not found: {temp_folder}")
-        recursive_scan = True
-        exclude_dir = None
-        scan_folder = temp_folder
-    else:
-        if not temp_folder.exists() or not temp_folder.is_dir():
-            lines.append(f"Temp folder not found: {temp_folder}")
-            return _done(False, f"Temp folder not found: {temp_folder}")
-        recursive_scan = True
-        exclude_dir = None
-        scan_folder = temp_folder
-
-    # ---------- MOVE ----------
-    if mode == "move":
-        images = _list_images(scan_folder, exts, recursive=recursive_scan, exclude_dir=exclude_dir)
-        processed = 0
-        errors = 0
-        want: Set[str] = set(_parse_tag_input(tags_field))
-        if not want:
-            lines.append("Move skipped: no tags provided.")
-            return _done(False, "Move skipped: no tags provided.")
-        if not images:
-            lines.append(f"No image files with {exts} found in: {scan_folder}")
-            return _done(False, f"No images found in: {scan_folder}")
-
-        for img in images:
-            txt = img.with_suffix(".txt")
-            if not txt.exists():
-                continue
-            try:
-                src, _, _ = read_text_best_effort(txt)
-            except Exception as exc:
-                lines.append(f"[ERROR] reading {txt.name}: {exc}")
-                continue
-            taglist = _normalize_tags(parse_tag_list(src, dedupe=False), dedupe=False)
-
-            matches = sorted([t for t in taglist if t in want])
-            if matches:
-                rel_parent = img.parent.relative_to(base_folder)
-                dest_parent = temp_folder / rel_parent
-                dest_parent.mkdir(parents=True, exist_ok=True)
-                dest_img, dest_txt = _next_pair_target(dest_parent, img.stem, img.suffix.lower())
-                ok, error = _move_pair_transaction(
-                    img, txt, dest_img, dest_txt, require_txt=True
-                )
-                if not ok:
-                    lines.append(f"[ERROR] moving {img.name}: {error}")
-                    errors += 1
-                    continue
-                lines.append(
-                    f"{img.name}: moved to {dest_parent.relative_to(base_folder)} (matched: {', '.join(matches)})"
-                )
-                processed += 1
-
-        lines.append(f"Done. {processed} file(s) moved to {temp_folder}. Errors: {errors}.")
-        return _done(errors == 0, "" if errors == 0 else f"{errors} move operation(s) failed.")
-
-    # ---------- UNDO ----------
-    if mode == "undo":
-        images_in_temp = _list_images(scan_folder, exts, recursive=recursive_scan)
-        if not images_in_temp:
-            lines.append(f"No image files with {exts} found in temp folder: {scan_folder}")
-            return _done(False, f"No image files found in temp folder: {scan_folder}")
-
-        restored = 0
-        errors = 0
-        for img in sorted(images_in_temp, key=lambda p: p.name.lower()):
-            txt = img.with_suffix(".txt")
-            had_txt = txt.exists()
-            rel_parent = img.parent.relative_to(temp_folder)
-            dest_parent = base_folder / rel_parent
-            dest_parent.mkdir(parents=True, exist_ok=True)
-            dest_img, dest_txt = _next_pair_target(dest_parent, img.stem, img.suffix.lower())
-            ok, error = _move_pair_transaction(
-                img, txt, dest_img, dest_txt, require_txt=False
-            )
-            if not ok:
-                lines.append(f"[ERROR] restoring {img.name}: {error}")
-                errors += 1
-                continue
-            restored += 1
-            lines.append(
-                f"Restored: {dest_img.relative_to(base_folder)}{' (+ .txt)' if had_txt else ''}"
-            )
-
-        lines.append(f"Done. {restored} file(s) restored from {scan_folder} to {base_folder}. Errors: {errors}.")
-        return _done(errors == 0, "" if errors == 0 else f"{errors} restore operation(s) failed.")
-
-    # ---------- EDIT MODES (insert/delete/replace/dedup) ----------
-    if mode in EDIT_MODES:
-        if mode == "insert" and not add:
-            lines.append("Insert skipped: no tags provided.")
-            return _done(False, "Insert skipped: no tags provided.")
-        if mode == "delete" and not deltags:
-            lines.append("Delete skipped: no tags provided.")
-            return _done(False, "Delete skipped: no tags provided.")
-        if mode == "replace" and not mapping:
-            lines.append("Replace skipped: no mappings provided.")
-            return _done(False, "Replace skipped: no mappings provided.")
-        images = _list_images(scan_folder, exts, recursive=recursive_scan, exclude_dir=exclude_dir)
+    images = _list_images(temp_folder, exts, recursive=True, exclude_dir=None)
     if not images:
-        lines.append(f"No image files with {exts} found in: {scan_folder}")
-        return _done(False, f"No image files found in: {scan_folder}")
+        lines.append(f"No image files with {exts} found in: {temp_folder}")
+        return _done(False, f"No image files found in: {temp_folder}")
 
     processed = 0
     errors = 0
@@ -537,7 +827,6 @@ def handle(form, ctx):
             else:
                 missing_txt_skipped += 1
             continue
-
         try:
             src, _, _ = read_text_best_effort(txt)
         except Exception as exc:
@@ -545,7 +834,6 @@ def handle(form, ctx):
             errors += 1
             continue
         taglist = _normalize_tags(parse_tag_list(src, dedupe=False), dedupe=False)
-
         newtags = list(taglist)
         action_desc = ""
         if mode == "insert":
@@ -561,8 +849,7 @@ def handle(form, ctx):
             action_desc = f"replace -> {mapping}"
         elif mode == "dedup":
             newtags = _dedup_tags(taglist)
-            action_desc = f"dedup -> {len(taglist)-len(newtags)} removed"
-
+            action_desc = f"dedup -> {len(taglist) - len(newtags)} removed"
         content = join_tags(newtags)
         if content.strip() == src.strip():
             continue
@@ -576,17 +863,11 @@ def handle(form, ctx):
             lines.append(f"[ERROR] writing {txt.name}: {exc}")
             errors += 1
             continue
-
         processed += 1
 
     if mode == "insert" and missing_txt_skipped:
-        lines.append(
-            f"Skipped {missing_txt_skipped} image(s) without paired .txt in {scan_folder}."
-        )
+        lines.append(f"Skipped {missing_txt_skipped} image(s) without paired .txt in {temp_folder}.")
     if mode == "insert" and missing_txt_created:
-        lines.append(
-            f"Created {missing_txt_created} new .txt file(s) for images that had no paired tags."
-        )
-
-    lines.append(f"Done. {processed} file(s) updated in {scan_folder}. Errors: {errors}.")
+        lines.append(f"Created {missing_txt_created} new .txt file(s) for images that had no paired tags.")
+    lines.append(f"Done. {processed} file(s) updated in {temp_folder}. Errors: {errors}.")
     return _done(errors == 0, "" if errors == 0 else f"{errors} file update(s) failed.")

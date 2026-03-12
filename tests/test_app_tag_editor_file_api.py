@@ -124,6 +124,43 @@ class TagEditorFileApiTests(unittest.TestCase):
             self.assertTrue((root / "_temp").exists())
             self.assertFalse((root / "_temp" / "batch_a").exists())
 
+    def test_return_temp_with_source_all_moves_from_any_subfolder_to_root(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / "dataset"
+            temp_nested = root / "_temp" / "batch_a"
+            other_nested = root / "placeholderA" / "round_1"
+            temp_nested.mkdir(parents=True, exist_ok=True)
+            other_nested.mkdir(parents=True, exist_ok=True)
+
+            (temp_nested / "from_temp.png").write_bytes(b"img")
+            (temp_nested / "from_temp.txt").write_text("tag_temp", encoding="utf-8")
+            (other_nested / "from_other.png").write_bytes(b"img")
+            (other_nested / "from_other.txt").write_text("tag_other", encoding="utf-8")
+            (root / "already_root.png").write_bytes(b"img")
+            (root / "already_root.txt").write_text("tag_root", encoding="utf-8")
+
+            resp = self.client.post(
+                "/api/tags/return-temp",
+                json={"folder": str(root), "exts": ".png,.jpg,.jpeg,.webp", "source": "all"},
+            )
+
+            self.assertEqual(resp.status_code, 200)
+            data = resp.get_json()
+            self.assertTrue(data.get("ok"), msg=data)
+            self.assertEqual(data.get("source"), "all")
+            self.assertEqual(data.get("total"), 2)
+            self.assertEqual(len(data.get("moved") or []), 2)
+            self.assertTrue((root / "from_temp.png").exists())
+            self.assertTrue((root / "from_temp.txt").exists())
+            self.assertTrue((root / "from_other.png").exists())
+            self.assertTrue((root / "from_other.txt").exists())
+            self.assertTrue((root / "already_root.png").exists())
+            self.assertTrue((root / "already_root.txt").exists())
+            self.assertFalse((temp_nested / "from_temp.png").exists())
+            self.assertFalse((temp_nested / "from_temp.txt").exists())
+            self.assertFalse((other_nested / "from_other.png").exists())
+            self.assertFalse((other_nested / "from_other.txt").exists())
+
     def test_cheatsheet_reads_root_level_txt(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td) / "dataset"

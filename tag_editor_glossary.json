@@ -1,20 +1,6 @@
 {
   "version": 1,
   "categories": {
-    "Unsorted": [],
-    "bangs": [
-      "wispy_bangs"
-    ],
-    "Lighting": [
-      "day",
-      "evening",
-      "sidelighting",
-      "warm_colored"
-    ],
-    "hand gesture": [
-      "clenched_hands",
-      "v_arms"
-    ],
     "Armor": [
       "bracer",
       "breastplate",
@@ -30,7 +16,15 @@
       "blank_eyes",
       "clenched_teeth",
       "constricted_pupils",
-      "faceless"
+      "dripping_eye",
+      "faceless",
+      "mouth_drool"
+    ],
+    "Lighting": [
+      "day",
+      "evening",
+      "sidelighting",
+      "warm_colored"
     ],
     "Lighting and Effects": [
       "bloom"
@@ -40,14 +34,24 @@
       "blank_speech_bubble",
       "comic",
       "cover_page",
+      "emphasis_lines",
+      "halftone_background",
       "narration",
       "sound_effects",
       "speech_bubble"
+    ],
+    "Unsorted": [],
+    "bangs": [
+      "wispy_bangs"
+    ],
+    "hand gesture": [
+      "clenched_hands",
+      "v_arms"
     ],
     "niche clothes": [
       "chest_sarashi",
       "loincloth"
     ]
   },
-  "updated_at": 1773252357351
+  "updated_at": 1773341349571
 }

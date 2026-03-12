@@ -140,6 +140,46 @@ def _rel_to_root(root: Path, path: Path) -> str:
             return str(path)
 
 
+def _project_paths(folder_raw: str) -> Dict[str, Any]:
+    return tag_editor.resolve_project_paths(readable_path(folder_raw))
+
+
+def _json_error(message: str, code: int = 400, **extra):
+    payload = {"ok": False, "error": message, "warnings": [], "info": [], **extra}
+    return jsonify(payload), code
+
+
+def _resolve_project_root_from_payload(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Optional[Any]]:
+    folder = (payload.get("folder") or "").strip()
+    if not folder:
+        return None, _json_error("folder is required", 400)
+    paths = _project_paths(folder)
+    root = paths["project_root"]
+    if not root.exists() or not root.is_dir():
+        return None, _json_error(
+            f"Project root not found: {root}",
+            400,
+            normalized_root=str(root),
+            needs_init=True,
+        )
+    return paths, None
+
+
+def _resolve_rel_under(root: Path, rel: str) -> Optional[Path]:
+    rel_path = Path(str(rel or "").replace("\\", "/").lstrip("/"))
+    if not str(rel_path) or any(part == ".." for part in rel_path.parts):
+        return None
+    target = root / rel_path
+    try:
+        target_res = target.resolve()
+        root_res = root.resolve()
+    except Exception:
+        return None
+    if target_res != root_res and root_res not in target_res.parents:
+        return None
+    return target
+
+
 def _parse_cheatsheet_content(content: str) -> Dict[str, Any]:
     raw_lines = str(content or "").replace("\r\n", "\n").replace("\r", "\n").split("\n")
     lines = [line.strip() for line in raw_lines]
@@ -450,15 +490,87 @@ def api_danbooru_taginfo():
     code = 400 if error_code == "invalid_input" else 502
     return jsonify(result), code
 
-@app.post("/api/tags/scan")
-def api_tags_scan():
+
+@app.post("/api/tags/project-state")
+def api_tags_project_state():
     payload = request.get_json(silent=True) or {}
     folder = (payload.get("folder") or "").strip()
     if not folder:
-        return jsonify({"ok": False, "error": "folder is required"}), 400
+        return _json_error("folder is required", 400)
+    exts = _parse_exts(payload.get("exts"))
+    result = tag_editor.inspect_project_layout(readable_path(folder), exts)
+    code = 200 if result.get("ok") else 400
+    result.setdefault("normalized_root", result.get("project_root", ""))
+    result.setdefault("warnings", [])
+    result.setdefault("info", [])
+    result.setdefault("needs_init", not bool(result.get("ready")))
+    return jsonify(result), code
+
+
+@app.post("/api/tags/project-init")
+def api_tags_project_init():
+    payload = request.get_json(silent=True) or {}
+    folder = (payload.get("folder") or "").strip()
+    if not folder:
+        return _json_error("folder is required", 400)
+    exts = _parse_exts(payload.get("exts"))
+    apply_changes = _parse_bool(payload.get("apply"))
+    if not apply_changes:
+        result = tag_editor.inspect_project_layout(readable_path(folder), exts)
+        code = 200 if result.get("ok") else 400
+        result.setdefault("normalized_root", result.get("project_root", ""))
+        result.setdefault("warnings", [])
+        result.setdefault("info", [])
+        result["apply"] = False
+        return jsonify(result), code
+    result = tag_editor.initialize_project_layout(readable_path(folder), exts, create_prompt=True)
+    code = 200 if result.get("ok") else 400
+    result.setdefault("normalized_root", result.get("project_root", ""))
+    result.setdefault("warnings", [])
+    result.setdefault("info", [])
+    result["apply"] = True
+    return jsonify(result), code
+
+
+@app.post("/api/tags/database-to-temp")
+def api_tags_database_to_temp():
+    payload = request.get_json(silent=True) or {}
+    folder = (payload.get("folder") or "").strip()
+    srcs = payload.get("srcs")
+    if not folder:
+        return _json_error("folder is required", 400)
+    if not isinstance(srcs, list) or not srcs:
+        return _json_error("srcs must be a non-empty list", 400)
+    result = tag_editor.move_database_files_to_temp(readable_path(folder), [str(item or "") for item in srcs])
+    code = 200 if result.get("ok") or result.get("moved") else 400
+    result.setdefault("normalized_root", result.get("project_root", ""))
+    return jsonify(result), code
+
+@app.post("/api/tags/scan")
+def api_tags_scan():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
     exts = _parse_exts(payload.get("exts"))
     recursive = _parse_bool(payload.get("recursive"))
-    result = tag_editor.scan_tags(readable_path(folder), exts, recursive=recursive)
+    area = (payload.get("area") or "temp").strip().lower()
+    if area == "database":
+        folder = paths["database_root"]
+    elif area == "dataset":
+        folder = paths["dataset_root"]
+    else:
+        folder = paths["temp_root"]
+    result = tag_editor.scan_tags(folder, exts, recursive=recursive)
+    result.update(
+        {
+            "area": area,
+            "normalized_root": str(paths["project_root"]),
+            "needs_init": False,
+            "warnings": [],
+            "info": [],
+        }
+    )
     code = 200 if result.get("ok") else 400
     return jsonify(result), code
 
@@ -466,24 +578,36 @@ def api_tags_scan():
 @app.post("/api/tags/images")
 def api_tags_images():
     payload = request.get_json(silent=True) or {}
-    folder = (payload.get("folder") or "").strip()
-    if not folder:
-        return jsonify({"ok": False, "error": "folder is required"}), 400
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
     exts = _parse_exts(payload.get("exts"))
     recursive = _parse_bool(payload.get("recursive"))
+    area = (payload.get("area") or "database").strip().lower()
+    include_temp = _parse_bool(payload.get("include_temp"), True)
     limit = _parse_int(payload.get("limit"), 80)
     if limit <= 0:
         limit = 80
     limit = max(1, min(500, limit))
     tag_limit = _parse_int(payload.get("tag_limit"), 200)
     tag_limit = max(10, min(2000, tag_limit))
-    result = tag_editor.list_images_with_tags(
-        readable_path(folder),
-        exts,
-        recursive=recursive,
-        limit=limit,
-        tag_limit=tag_limit,
-    )
+    if area == "dataset":
+        result = tag_editor.list_dataset_images(
+            paths["project_root"],
+            exts,
+            recursive=recursive,
+            limit=limit,
+            tag_limit=tag_limit,
+            include_temp=include_temp,
+        )
+    elif area == "temp":
+        result = tag_editor.list_temp_images(paths["project_root"], exts, recursive=recursive, limit=limit, tag_limit=tag_limit)
+    else:
+        result = tag_editor.list_database_images(paths["project_root"], exts, recursive=recursive, limit=limit, tag_limit=tag_limit)
+    result.setdefault("normalized_root", str(paths["project_root"]))
+    result.setdefault("needs_init", False)
+    result.setdefault("warnings", [])
+    result.setdefault("info", [])
     code = 200 if result.get("ok") else 400
     return jsonify(result), code
 
@@ -491,33 +615,36 @@ def api_tags_images():
 @app.post("/api/tags/tag-remove")
 def api_tags_tag_remove():
     payload = request.get_json(silent=True) or {}
-    folder = (payload.get("folder") or "").strip()
     rel = (payload.get("rel") or "").strip()
     tag = (payload.get("tag") or "").strip()
     backup = _parse_bool(payload.get("backup"), True)
-    if not folder or not rel or not tag:
-        return jsonify({"ok": False, "error": "folder, rel, and tag are required"}), 400
-    if _bad_rel(rel):
-        return jsonify({"ok": False, "error": "Invalid path"}), 400
-    root = readable_path(folder)
-    if not root.exists() or not root.is_dir():
-        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
-    target = _safe_child(root, rel)
+    area = (payload.get("area") or "temp").strip().lower()
+    if not rel or not tag:
+        return _json_error("folder, rel, and tag are required", 400)
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    base_root = paths["temp_root"] if area != "dataset" else paths["dataset_root"]
+    target = _resolve_rel_under(base_root, rel)
     if not target or not target.exists() or not target.is_file():
-        return jsonify({"ok": False, "error": "File not found"}), 404
+        return _json_error("File not found", 404, normalized_root=str(paths["project_root"]))
     txt_path = target if target.suffix.lower() == ".txt" else target.with_suffix(".txt")
     if not txt_path.exists():
-        return jsonify({"ok": False, "error": "Missing .txt"}), 400
+        return _json_error("Missing .txt", 400, normalized_root=str(paths["project_root"]))
     result = tag_editor.remove_tag(txt_path, tag, backup=backup)
     if not result.get("ok"):
-        return jsonify({"ok": False, "error": result.get("error") or "Remove failed"}), 400
+        return _json_error(result.get("error") or "Remove failed", 400, normalized_root=str(paths["project_root"]))
     return jsonify(
         {
             "ok": True,
-            "rel": _rel_to_root(root, target),
+            "rel": _rel_to_root(base_root, target),
             "tag": tag,
             "removed": bool(result.get("removed")),
             "tags": result.get("tags") or [],
+            "normalized_root": str(paths["project_root"]),
+            "needs_init": False,
+            "warnings": [],
+            "info": [],
         }
     )
 
@@ -525,21 +652,20 @@ def api_tags_tag_remove():
 @app.post("/api/tags/tag-add")
 def api_tags_tag_add():
     payload = request.get_json(silent=True) or {}
-    folder = (payload.get("folder") or "").strip()
     rel = (payload.get("rel") or "").strip()
     raw_tags = payload.get("tags")
     backup = _parse_bool(payload.get("backup"), True)
     create_missing_txt = _parse_bool(payload.get("create_missing_txt"), True)
-    if not folder or not rel:
-        return jsonify({"ok": False, "error": "folder and rel are required"}), 400
-    if _bad_rel(rel):
-        return jsonify({"ok": False, "error": "Invalid path"}), 400
-    root = readable_path(folder)
-    if not root.exists() or not root.is_dir():
-        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
-    target = _safe_child(root, rel)
+    area = (payload.get("area") or "temp").strip().lower()
+    if not rel:
+        return _json_error("folder and rel are required", 400)
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    base_root = paths["temp_root"] if area != "dataset" else paths["dataset_root"]
+    target = _resolve_rel_under(base_root, rel)
     if not target or not target.exists() or not target.is_file():
-        return jsonify({"ok": False, "error": "File not found"}), 404
+        return _json_error("File not found", 404, normalized_root=str(paths["project_root"]))
     txt_path = target if target.suffix.lower() == ".txt" else target.with_suffix(".txt")
 
     tags = parse_tag_list(raw_tags) if raw_tags is not None else []
@@ -550,15 +676,19 @@ def api_tags_tag_add():
         create_missing_txt=create_missing_txt,
     )
     if not result.get("ok"):
-        return jsonify({"ok": False, "error": result.get("error") or "Add failed"}), 400
+        return _json_error(result.get("error") or "Add failed", 400, normalized_root=str(paths["project_root"]))
     return jsonify(
         {
             "ok": True,
-            "rel": _rel_to_root(root, target),
+            "rel": _rel_to_root(base_root, target),
             "tags": result.get("tags") or [],
             "added": result.get("added") or [],
             "created": bool(result.get("created")),
             "changed": bool(result.get("changed")),
+            "normalized_root": str(paths["project_root"]),
+            "needs_init": False,
+            "warnings": [],
+            "info": [],
         }
     )
 
@@ -566,29 +696,27 @@ def api_tags_tag_add():
 @app.post("/api/tags/cheatsheet")
 def api_tags_cheatsheet():
     payload = request.get_json(silent=True) or {}
-    folder = (payload.get("folder") or "").strip()
     rel = (payload.get("rel") or "").strip()
-    if not folder or not rel:
-        return jsonify({"ok": False, "error": "folder and rel are required"}), 400
-    if _bad_rel(rel):
-        return jsonify({"ok": False, "error": "Invalid path"}), 400
-    root = readable_path(folder)
-    if not root.exists() or not root.is_dir():
-        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
-    target = _safe_child(root, rel)
+    if not rel:
+        return _json_error("folder and rel are required", 400)
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    root = paths["project_root"]
+    target = _resolve_rel_under(root, rel)
     if not target or not target.exists() or not target.is_file():
-        return jsonify({"ok": False, "error": "Cheat sheet file not found"}), 404
+        return _json_error("Cheat sheet file not found", 404, normalized_root=str(root))
     if target.suffix.lower() != ".txt":
-        return jsonify({"ok": False, "error": "Cheat sheet must be a .txt file"}), 400
+        return _json_error("Cheat sheet must be a .txt file", 400, normalized_root=str(root))
     try:
         content = target.read_text(encoding="utf-8")
     except UnicodeDecodeError:
         try:
             content = target.read_text(encoding="utf-8-sig")
         except Exception as exc:
-            return jsonify({"ok": False, "error": str(exc)}), 500
+            return _json_error(str(exc), 500, normalized_root=str(root))
     except Exception as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 500
+        return _json_error(str(exc), 500, normalized_root=str(root))
     parsed = _parse_cheatsheet_content(content)
     return jsonify(
         {
@@ -598,6 +726,10 @@ def api_tags_cheatsheet():
             "trigger": parsed.get("trigger") or "",
             "sections": parsed.get("sections") or [],
             "tags": parsed.get("tags") or [],
+            "normalized_root": str(root),
+            "needs_init": False,
+            "warnings": [],
+            "info": [],
         }
     )
 
@@ -606,14 +738,18 @@ def api_tags_cheatsheet():
 def api_tags_image():
     folder = (request.args.get("folder") or "").strip()
     rel = (request.args.get("path") or "").strip()
+    area = (request.args.get("area") or "database").strip().lower()
     if not folder or not rel:
-        return jsonify({"ok": False, "error": "folder and path are required"}), 400
-    root = readable_path(folder)
+        return _json_error("folder and path are required", 400)
+    resolved = tag_editor.resolve_image_path(readable_path(folder), rel, area=area)
+    if not resolved.get("ok"):
+        return _json_error(resolved.get("error") or "Invalid path", 400, normalized_root=resolved.get("project_root", ""))
+    root = resolved["root"]
+    target = resolved["target"]
     if not root.exists() or not root.is_dir():
-        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
-    target = _safe_child(root, rel)
+        return _json_error(f"Folder not found: {root}", 400, normalized_root=resolved.get("project_root", ""))
     if not target or not target.exists() or not target.is_file():
-        return jsonify({"ok": False, "error": "File not found"}), 404
+        return _json_error("File not found", 404, normalized_root=resolved.get("project_root", ""))
     return send_file(target, conditional=True)
 
 
@@ -768,10 +904,13 @@ def api_blur_brush_preview():
 def api_tags_upload():
     folder = (request.form.get("folder") or "").strip()
     if not folder:
-        return jsonify({"ok": False, "error": "folder is required"}), 400
-    root = readable_path(folder)
+        return _json_error("folder is required", 400)
+    paths = _project_paths(folder)
+    root = paths["dataset_root"]
+    if not paths["project_root"].exists() or not paths["project_root"].is_dir():
+        return _json_error(f"Project root not found: {paths['project_root']}", 400, normalized_root=str(paths["project_root"]), needs_init=True)
     if not root.exists() or not root.is_dir():
-        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
+        return _json_error(f"Dataset folder not found: {root}", 400, normalized_root=str(paths["project_root"]), needs_init=True)
 
     requested_exts = _parse_exts(request.form.get("exts"))
     allowed = {e.lower() for e in requested_exts if e.lower() in SERVER_UPLOAD_IMAGE_EXTS}
@@ -808,25 +947,25 @@ def api_tags_upload():
         except Exception as exc:
             errors.append(f"{filename}: {exc}")
 
-    return jsonify({"ok": True, "saved": saved, "skipped": skipped, "errors": errors})
+    return jsonify({"ok": True, "saved": saved, "skipped": skipped, "errors": errors, "normalized_root": str(paths["project_root"]), "needs_init": False})
 
 
 @app.post("/api/tags/dirs")
 def api_tags_dirs():
     payload = request.get_json(silent=True) or {}
-    folder = (payload.get("folder") or "").strip()
     rel = (payload.get("rel") or "").strip()
     hide_temp = _parse_bool(payload.get("hide_temp"), True)
-    if not folder:
-        return jsonify({"ok": False, "error": "folder is required"}), 400
-    root = readable_path(folder)
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    root = paths["dataset_root"]
     if not root.exists() or not root.is_dir():
-        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
+        return _json_error(f"Dataset folder not found: {root}", 400, normalized_root=str(paths["project_root"]), needs_init=True)
     if _bad_rel(rel):
-        return jsonify({"ok": False, "error": "Invalid path"}), 400
+        return _json_error("Invalid path", 400, normalized_root=str(paths["project_root"]))
     target = _safe_child_or_root(root, rel)
     if not target or not target.exists() or not target.is_dir():
-        return jsonify({"ok": False, "error": "Path not found"}), 404
+        return _json_error("Path not found", 404, normalized_root=str(paths["project_root"]))
 
     dirs = []
     try:
@@ -839,97 +978,103 @@ def api_tags_dirs():
                 has_children = False
             dirs.append({"name": d.name, "rel": _rel_to_root(root, d), "has_children": has_children})
     except Exception as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 500
-    return jsonify({"ok": True, "root": str(root), "rel": rel, "dirs": dirs})
+        return _json_error(str(exc), 500, normalized_root=str(paths["project_root"]))
+    return jsonify({"ok": True, "root": str(root), "rel": rel, "dirs": dirs, "normalized_root": str(paths["project_root"]), "needs_init": False, "warnings": [], "info": []})
 
 
 @app.post("/api/tags/mkdir")
 def api_tags_mkdir():
     payload = request.get_json(silent=True) or {}
-    folder = (payload.get("folder") or "").strip()
     rel = (payload.get("rel") or "").strip()
-    if not folder or not rel:
-        return jsonify({"ok": False, "error": "folder and rel are required"}), 400
+    if not rel:
+        return _json_error("folder and rel are required", 400)
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
     if _bad_rel(rel):
-        return jsonify({"ok": False, "error": "Invalid path"}), 400
-    root = readable_path(folder)
+        return _json_error("Invalid path", 400, normalized_root=str(paths["project_root"]))
+    root = paths["dataset_root"]
     if not root.exists() or not root.is_dir():
-        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
+        return _json_error(f"Dataset folder not found: {root}", 400, normalized_root=str(paths["project_root"]), needs_init=True)
     target = _safe_child(root, rel)
     if not target:
-        return jsonify({"ok": False, "error": "Invalid path"}), 400
+        return _json_error("Invalid path", 400, normalized_root=str(paths["project_root"]))
     if target.exists():
-        return jsonify({"ok": False, "error": "Folder already exists"}), 400
+        return _json_error("Folder already exists", 400, normalized_root=str(paths["project_root"]))
     try:
         target.mkdir(parents=True, exist_ok=False)
     except Exception as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 500
-    return jsonify({"ok": True, "rel": _rel_to_root(root, target)})
+        return _json_error(str(exc), 500, normalized_root=str(paths["project_root"]))
+    return jsonify({"ok": True, "rel": _rel_to_root(root, target), "normalized_root": str(paths["project_root"]), "needs_init": False, "warnings": [], "info": []})
 
 
 @app.post("/api/tags/rmdir")
 def api_tags_rmdir():
     payload = request.get_json(silent=True) or {}
-    folder = (payload.get("folder") or "").strip()
     rel = (payload.get("rel") or "").strip()
     force = _parse_bool(payload.get("force"))
-    if not folder or not rel:
-        return jsonify({"ok": False, "error": "folder and rel are required"}), 400
+    if not rel:
+        return _json_error("folder and rel are required", 400)
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
     if _bad_rel(rel):
-        return jsonify({"ok": False, "error": "Invalid path"}), 400
-    root = readable_path(folder)
+        return _json_error("Invalid path", 400, normalized_root=str(paths["project_root"]))
+    root = paths["dataset_root"]
     if not root.exists() or not root.is_dir():
-        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
+        return _json_error(f"Dataset folder not found: {root}", 400, normalized_root=str(paths["project_root"]), needs_init=True)
     target = _safe_child(root, rel)
     if not target or not target.exists() or not target.is_dir():
-        return jsonify({"ok": False, "error": "Folder not found"}), 404
+        return _json_error("Folder not found", 404, normalized_root=str(paths["project_root"]))
     if target == root:
-        return jsonify({"ok": False, "error": "Cannot delete root folder"}), 400
+        return _json_error("Cannot delete root folder", 400, normalized_root=str(paths["project_root"]))
 
     try:
         if not force:
             if any(target.iterdir()):
-                return jsonify({"ok": False, "error": "Folder not empty", "needs_force": True}), 400
+                return _json_error("Folder not empty", 400, normalized_root=str(paths["project_root"]), needs_force=True)
             target.rmdir()
         else:
             shutil.rmtree(target)
     except Exception as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 500
-    return jsonify({"ok": True})
+        return _json_error(str(exc), 500, normalized_root=str(paths["project_root"]))
+    return jsonify({"ok": True, "normalized_root": str(paths["project_root"]), "needs_init": False, "warnings": [], "info": []})
 
 
 @app.post("/api/tags/move")
 def api_tags_move():
     payload = request.get_json(silent=True) or {}
-    folder = (payload.get("folder") or "").strip()
     src_rel = (payload.get("src") or "").strip()
     dst_rel = (payload.get("dst") or "").strip()
-    if not folder or not src_rel:
-        return jsonify({"ok": False, "error": "folder and src are required"}), 400
+    if not src_rel:
+        return _json_error("folder and src are required", 400)
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
     if _bad_rel(src_rel) or _bad_rel(dst_rel):
-        return jsonify({"ok": False, "error": "Invalid path"}), 400
-    root = readable_path(folder)
+        return _json_error("Invalid path", 400, normalized_root=str(paths["project_root"]))
+    root = paths["dataset_root"]
     if not root.exists() or not root.is_dir():
-        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
+        return _json_error(f"Dataset folder not found: {root}", 400, normalized_root=str(paths["project_root"]), needs_init=True)
 
     src = _safe_child(root, src_rel)
     dst_parent = _safe_child_or_root(root, dst_rel)
     if not src or not src.exists() or not src.is_dir():
-        return jsonify({"ok": False, "error": "Source folder not found"}), 404
+        return _json_error("Source folder not found", 404, normalized_root=str(paths["project_root"]))
     if not dst_parent or not dst_parent.exists() or not dst_parent.is_dir():
-        return jsonify({"ok": False, "error": "Target folder not found"}), 404
+        return _json_error("Target folder not found", 404, normalized_root=str(paths["project_root"]))
 
     try:
         src_res = src.resolve()
         dst_res = dst_parent.resolve()
     except Exception:
-        return jsonify({"ok": False, "error": "Path resolution failed"}), 400
+        return _json_error("Path resolution failed", 400, normalized_root=str(paths["project_root"]))
 
     if dst_res == src_res or src_res in dst_res.parents:
-        return jsonify({"ok": False, "error": "Cannot move a folder into itself"}), 400
+        return _json_error("Cannot move a folder into itself", 400, normalized_root=str(paths["project_root"]))
 
     if dst_res == src_res.parent:
-        return jsonify({"ok": True, "moved": False, "rel": src_rel})
+        return jsonify({"ok": True, "moved": False, "rel": src_rel, "normalized_root": str(paths["project_root"]), "needs_init": False, "warnings": [], "info": []})
 
     target = dst_parent / src.name
     if target.exists():
@@ -943,38 +1088,44 @@ def api_tags_move():
     try:
         shutil.move(str(src), str(target))
     except Exception as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 500
-    return jsonify({"ok": True, "moved": True, "rel": _rel_to_root(root, target)})
+        return _json_error(str(exc), 500, normalized_root=str(paths["project_root"]))
+    return jsonify({"ok": True, "moved": True, "rel": _rel_to_root(root, target), "normalized_root": str(paths["project_root"]), "needs_init": False, "warnings": [], "info": []})
 
 
 @app.post("/api/tags/move-file")
 def api_tags_move_file():
     payload = request.get_json(silent=True) or {}
-    folder = (payload.get("folder") or "").strip()
     src_rel = (payload.get("src") or "").strip()
     dst_rel = (payload.get("dst") or "").strip()
-    if not folder or not src_rel:
-        return jsonify({"ok": False, "error": "folder and src are required"}), 400
+    if not src_rel:
+        return _json_error("folder and src are required", 400)
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
     if _bad_rel(src_rel) or _bad_rel(dst_rel):
-        return jsonify({"ok": False, "error": "Invalid path"}), 400
-    root = readable_path(folder)
+        return _json_error("Invalid path", 400, normalized_root=str(paths["project_root"]))
+    root = paths["dataset_root"]
     if not root.exists() or not root.is_dir():
-        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
+        return _json_error(f"Dataset folder not found: {root}", 400, normalized_root=str(paths["project_root"]), needs_init=True)
     result, code = _move_file_with_sidecars(root, src_rel, dst_rel)
+    result.setdefault("normalized_root", str(paths["project_root"]))
+    result.setdefault("needs_init", False)
+    result.setdefault("warnings", [])
+    result.setdefault("info", [])
     return jsonify(result), code
 
 @app.post("/api/tags/move-files")
 def api_tags_move_files():
     payload = request.get_json(silent=True) or {}
-    folder = (payload.get("folder") or "").strip()
     dst_rel = (payload.get("dst") or "").strip()
     srcs_raw = payload.get("srcs")
-    if not folder:
-        return jsonify({"ok": False, "error": "folder is required"}), 400
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
     if _bad_rel(dst_rel):
-        return jsonify({"ok": False, "error": "Invalid path"}), 400
+        return _json_error("Invalid path", 400, normalized_root=str(paths["project_root"]))
     if not isinstance(srcs_raw, list) or not srcs_raw:
-        return jsonify({"ok": False, "error": "srcs must be a non-empty list"}), 400
+        return _json_error("srcs must be a non-empty list", 400, normalized_root=str(paths["project_root"]))
     srcs = []
     seen = set()
     for raw in srcs_raw:
@@ -982,14 +1133,14 @@ def api_tags_move_files():
         if not src_rel or src_rel in seen:
             continue
         if _bad_rel(src_rel):
-            return jsonify({"ok": False, "error": f"Invalid path: {src_rel}"}), 400
+            return _json_error(f"Invalid path: {src_rel}", 400, normalized_root=str(paths["project_root"]))
         seen.add(src_rel)
         srcs.append(src_rel)
     if not srcs:
-        return jsonify({"ok": False, "error": "No valid source files provided"}), 400
-    root = readable_path(folder)
+        return _json_error("No valid source files provided", 400, normalized_root=str(paths["project_root"]))
+    root = paths["dataset_root"]
     if not root.exists() or not root.is_dir():
-        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
+        return _json_error(f"Dataset folder not found: {root}", 400, normalized_root=str(paths["project_root"]), needs_init=True)
 
     moved = []
     errors = []
@@ -1012,6 +1163,10 @@ def api_tags_move_files():
             "ok": len(errors) == 0,
             "moved": moved,
             "errors": errors,
+            "normalized_root": str(paths["project_root"]),
+            "needs_init": False,
+            "warnings": [],
+            "info": [],
         }
     )
 
@@ -1019,31 +1174,35 @@ def api_tags_move_files():
 @app.post("/api/tags/return-temp")
 def api_tags_return_temp():
     payload = request.get_json(silent=True) or {}
-    folder = (payload.get("folder") or "").strip()
-    if not folder:
-        return jsonify({"ok": False, "error": "folder is required"}), 400
-    root = readable_path(folder)
-    if not root.exists() or not root.is_dir():
-        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
-
-    temp_dir = root / "_temp"
-    if not temp_dir.exists() or not temp_dir.is_dir():
-        return jsonify({"ok": False, "error": "_temp folder not found"}), 404
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    root = paths["dataset_root"]
+    temp_dir = paths["temp_root"]
+    source_scope = str(payload.get("source") or "temp").strip().lower()
+    if source_scope not in {"temp", "all"}:
+        source_scope = "temp"
+    if source_scope == "temp" and (not temp_dir.exists() or not temp_dir.is_dir()):
+        return _json_error("_temp folder not found", 404, normalized_root=str(paths["project_root"]), needs_init=True)
 
     exts = _parse_exts(payload.get("exts"))
     extset = {ext.lower() for ext in exts or []}
-    temp_images: List[Path] = []
-    for path in temp_dir.rglob("*"):
+    source_images: List[Path] = []
+    image_iter = root.rglob("*") if source_scope == "all" else temp_dir.rglob("*")
+    for path in image_iter:
         if not path.is_file():
             continue
         if extset and path.suffix.lower() not in extset:
             continue
-        temp_images.append(path)
-    temp_images.sort(key=lambda p: _rel_to_root(root, p).lower())
+        if source_scope == "all" and path.parent == root:
+            # Root-level files are already in the destination folder.
+            continue
+        source_images.append(path)
+    source_images.sort(key=lambda p: _rel_to_root(root, p).lower())
 
     moved = []
     errors = []
-    for path in temp_images:
+    for path in source_images:
         src_rel = _rel_to_root(root, path)
         result, code = _move_file_with_sidecars(root, src_rel, "")
         if code == 200 and result.get("ok"):
@@ -1058,13 +1217,19 @@ def api_tags_return_temp():
         else:
             errors.append({"src": src_rel, "error": result.get("error") or f"HTTP {code}"})
 
-    _remove_empty_dirs(temp_dir, keep=temp_dir)
+    if temp_dir.exists() and temp_dir.is_dir():
+        _remove_empty_dirs(temp_dir, keep=temp_dir)
     return jsonify(
         {
             "ok": len(errors) == 0,
             "moved": moved,
             "errors": errors,
-            "total": len(temp_images),
+            "total": len(source_images),
+            "source": source_scope,
+            "normalized_root": str(paths["project_root"]),
+            "needs_init": False,
+            "warnings": [],
+            "info": [],
         }
     )
 
@@ -1211,7 +1376,7 @@ def api_pipeline_status():
         except Exception:
             since_log_id = None
     ok, data, err = PIPELINE_MANAGER.get_status(job_id, since_log_id=since_log_id)
-    code = 200 if ok else 404
+    code = 200 if ok or err == "job not found" else 404
     return jsonify({"ok": ok, "job": data, "error": err if not ok else ""}), code
 
 
