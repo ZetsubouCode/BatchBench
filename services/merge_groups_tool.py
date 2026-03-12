@@ -1,6 +1,7 @@
-from typing import Tuple, List
+from typing import List
 from pathlib import Path
-from utils.io import readable_path, log_join
+from utils.io import readable_path
+from utils.tool_result import build_tool_result
 from utils.merge_groups_core import group_by_prefix, merge_many  # note: no list_pngs import
 
 def _list_images(folder: Path, glob_pat: str, exts: List[str]) -> List[Path]:
@@ -11,9 +12,10 @@ def _list_images(folder: Path, glob_pat: str, exts: List[str]) -> List[Path]:
         key=lambda p: p.name.lower()
     )
 
-def handle(form, ctx) -> Tuple[str, str]:
+def handle(form, ctx):
     active_tab = "merge"
-    folder = readable_path(form.get("merge_folder",""))
+    folder_raw = (form.get("merge_folder", "") or "").strip()
+    folder = readable_path(folder_raw)
     out_dir_raw = (form.get("merge_out_dir","") or "").strip()
     out_dir = readable_path(out_dir_raw) if out_dir_raw else None
     glob_pat = form.get("merge_glob","*_*.*").strip() or "*_*.*"
@@ -34,9 +36,14 @@ def handle(form, ctx) -> Tuple[str, str]:
     verbose = True
 
     lines: List[str] = []
+    def _done(ok: bool, error: str = ""):
+        return build_tool_result(active_tab, lines, ok=ok, error=error)
+    if not folder_raw:
+        lines.append("Source folder is required.")
+        return _done(False, "Source folder is required.")
     if not folder.exists() or not folder.is_dir():
         lines.append("Source folder not found.")
-        return active_tab, log_join(lines)
+        return _done(False, "Source folder not found.")
 
     # CHANGED: use _list_images instead of list_pngs
     files = _list_images(folder, glob_pat, exts)
@@ -44,7 +51,7 @@ def handle(form, ctx) -> Tuple[str, str]:
 
     if not groups:
         lines.append(f"No matching files like <prefix>_<number> with extensions {', '.join(exts)} found.")
-        return active_tab, log_join(lines)
+        return _done(False, "No matching files found for merge groups.")
 
     if verbose:
         lines.append(f"Source: {folder}")
@@ -72,9 +79,10 @@ def handle(form, ctx) -> Tuple[str, str]:
             lines.append(f"  {prefix} -> {out_path.name}  [{len(ordered)} parts]  :: {names}")
 
     if dry_run:
-        return active_tab, log_join(lines)
+        return _done(True)
 
     made = 0
+    errors = 0
     for idx, (prefix, ordered, out_path) in enumerate(planned, start=1):
         if out_path.exists() and not overwrite:
             if verbose: lines.append(f"[{idx}/{len(planned)}] Skip (exists): {out_path.name}")
@@ -86,7 +94,8 @@ def handle(form, ctx) -> Tuple[str, str]:
             made += 1
             if verbose: lines.append(f"[{idx}/{len(planned)}] Saved -> {out_path}")
         except Exception as e:
-            lines.append(f"[{idx}/{len(planned)}] ERROR merging {prefix}: {e}")
+            errors += 1
+            lines.append(f"[ERROR] [{idx}/{len(planned)}] merging {prefix}: {e}")
 
-    lines.append(f"Done. Wrote {made} file(s) to: {out_dir}")
-    return active_tab, log_join(lines)
+    lines.append(f"Done. Wrote {made} file(s) to: {out_dir}. Errors: {errors}.")
+    return _done(errors == 0, "" if errors == 0 else f"{errors} merge group(s) failed.")

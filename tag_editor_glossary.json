@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "categories": {
+    "Unsorted": [],
+    "bangs": [
+      "wispy_bangs"
+    ],
+    "Lighting": [
+      "day",
+      "evening",
+      "sidelighting",
+      "warm_colored"
+    ],
+    "hand gesture": [
+      "clenched_hands",
+      "v_arms"
+    ],
+    "Armor": [
+      "bracer",
+      "breastplate",
+      "pauldron",
+      "tassets"
+    ],
+    "Background": [
+      "abstract_background",
+      "geometric_background",
+      "gradient_background"
+    ],
+    "Face details": [
+      "blank_eyes",
+      "clenched_teeth",
+      "constricted_pupils",
+      "faceless"
+    ],
+    "Lighting and Effects": [
+      "bloom"
+    ],
+    "Manhwa and Manga": [
+      "1koma",
+      "blank_speech_bubble",
+      "comic",
+      "cover_page",
+      "narration",
+      "sound_effects",
+      "speech_bubble"
+    ],
+    "niche clothes": [
+      "chest_sarashi",
+      "loincloth"
+    ]
+  },
+  "updated_at": 1773252357351
+}

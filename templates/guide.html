@@ -1,0 +1,206 @@
+<style>
+  .guide-shell{
+    background:
+      radial-gradient(circle at top right, rgba(121,192,255,.14), transparent 28rem),
+      linear-gradient(180deg, rgba(15,23,42,.96), rgba(10,16,32,.98));
+    border:1px solid var(--bb-border);
+    border-radius:1rem;
+    overflow:hidden;
+  }
+  .guide-hero{
+    padding:1.5rem;
+    border-bottom:1px solid rgba(121,192,255,.12);
+    background:linear-gradient(135deg, rgba(59,130,246,.14), rgba(15,23,42,.12));
+  }
+  .guide-kicker,.guide-badge{
+    display:inline-flex;
+    align-items:center;
+    gap:.45rem;
+    padding:.35rem .75rem;
+    border-radius:999px;
+    font-size:.84rem;
+  }
+  .guide-kicker{
+    border:1px solid rgba(121,192,255,.22);
+    background:rgba(121,192,255,.08);
+    color:#cfe7ff;
+  }
+  .guide-badge{
+    background:rgba(245,184,76,.12);
+    border:1px solid rgba(245,184,76,.28);
+    color:#ffd997;
+  }
+  .guide-lead,.guide-section-head p,.guide-title-copy p{color:#bfd0e1;}
+  .guide-tip-grid,.guide-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));
+    gap:1rem;
+  }
+  .guide-tip-grid{margin-top:1.25rem;}
+  .guide-tip-card,.guide-panel{
+    background:rgba(11,18,32,.68);
+    border:1px solid rgba(121,192,255,.12);
+    border-radius:.95rem;
+    padding:1rem;
+  }
+  .guide-tip-card p,.guide-panel p,.guide-panel li{color:#d8e3ee;}
+  .guide-tip-card .bi,.guide-title-icon{color:#9ed0ff;}
+  .guide-section{padding:1.5rem;}
+  .guide-section-head{
+    display:flex;
+    flex-wrap:wrap;
+    justify-content:space-between;
+    gap:1rem;
+    margin-bottom:1rem;
+  }
+  .guide-accordion.accordion{
+    --bs-accordion-bg:transparent;
+    --bs-accordion-border-color:rgba(121,192,255,.12);
+    --bs-accordion-btn-bg:rgba(15,23,42,.88);
+    --bs-accordion-active-bg:rgba(59,130,246,.1);
+    --bs-accordion-active-color:var(--bb-text);
+    --bs-accordion-btn-color:var(--bb-text);
+  }
+  .guide-accordion .accordion-item{
+    border-radius:.95rem;
+    overflow:hidden;
+    background:rgba(11,18,32,.74);
+    margin-bottom:.9rem;
+    border:1px solid rgba(121,192,255,.12);
+  }
+  .guide-accordion .accordion-button{padding:1rem 1.1rem;}
+  .guide-accordion .accordion-button:not(.collapsed){box-shadow:none;}
+  .guide-title{
+    display:flex;
+    align-items:center;
+    gap:.9rem;
+    width:100%;
+  }
+  .guide-title-icon{
+    width:2.3rem;
+    height:2.3rem;
+    flex:0 0 auto;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    border-radius:.75rem;
+    border:1px solid rgba(121,192,255,.18);
+    background:linear-gradient(135deg, rgba(59,130,246,.18), rgba(121,192,255,.08));
+  }
+  .guide-title-copy h6,.guide-panel h6{margin:0;}
+  .guide-title-copy p{margin:.2rem 0 0;font-size:.9rem;}
+  .guide-panel h6{
+    margin-bottom:.55rem;
+    color:#d8ebff;
+    font-size:.92rem;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+  }
+  .guide-panel ul{margin:0;padding-left:1.1rem;}
+  .guide-panel li + li{margin-top:.4rem;}
+  .guide-note{
+    margin-top:1rem;
+    padding:.9rem 1rem;
+    border-left:3px solid rgba(121,192,255,.48);
+    border-radius:.7rem;
+    background:rgba(59,130,246,.08);
+    color:#dbe8f5;
+  }
+</style>
+
+<div class="guide-shell">
+  <div class="guide-hero">
+    <div class="guide-kicker"><i class="bi bi-signpost-split"></i> Workflow Guide</div>
+    <h4 class="mt-3 mb-2">How to use each menu correctly</h4>
+    <p class="guide-lead mb-0">BatchBench is a dataset preparation toolbox. The easiest way to avoid mistakes is to pick the right tab for the current step, keep source and output folders separate, and use preview-style actions before writing files.</p>
+
+    <div class="guide-tip-grid">
+      <div class="guide-tip-card">
+        <i class="bi bi-folder-check"></i>
+        <h6 class="mt-3 mb-2">Folder roles</h6>
+        <p><strong>Source</strong> reads your current files. <strong>Temp</strong> is a staging area. <strong>Output</strong> writes new results. <strong>Working</strong> is Pipeline's scratch space.</p>
+      </div>
+      <div class="guide-tip-card">
+        <i class="bi bi-eye"></i>
+        <h6 class="mt-3 mb-2">Preview first</h6>
+        <p>Use scan, dry-run, preview, or a small limit before applying a change to the full dataset.</p>
+      </div>
+      <div class="guide-tip-card">
+        <i class="bi bi-shield-check"></i>
+        <h6 class="mt-3 mb-2">Keep backups on</h6>
+        <p>Backups cost disk space, but they are the simplest recovery path when a preset or tag rule is wrong.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="guide-section">
+    <div class="guide-section-head">
+      <div>
+        <h5 class="mb-1">Menu explanations</h5>
+        <p>Open the section for the tool you want to use. Each dropdown explains when to use it, the normal steps, and the most common source of confusion.</p>
+      </div>
+      <div class="guide-badge"><i class="bi bi-lightbulb"></i> Choose the simplest tool that matches the job</div>
+    </div>
+
+    <div class="accordion guide-accordion" id="workflowGuideAccordion">
+      {% set items = [
+        {'id':'webp','icon':'images','title':'Image to PNG Converter','summary':'Convert image files into PNG without editing the content.','best':'Best when you only need format conversion before another step.','steps':['Set Source Folder to the images you want to convert.','Set Output Folder to a separate destination so originals stay untouched.','Click Convert and review the log for skipped or failed files.'],'watch':['This tool changes file format only; it does not improve image quality.','A clean output folder makes reruns easier to verify.'],'note':''},
+        {'id':'batch','icon':'sliders2','title':'Photo Adjust','summary':'Apply one preset or manual tuning across many images.','best':'Best for consistent exposure, contrast, warmth, saturation, or sharpness.','steps':['Choose the source folder and output folder, or let the tool create one automatically.','Select a preset and load it into the sliders if you want to inspect or tweak it.','Set suffix, output format, limit, recursive mode, then click Process.'],'watch':['Test on a small limit first if you are unsure about the preset strength.','Recursive mode includes subfolders, so turn it off for top-level only runs.'],'note':'Safe pattern: process 10 to 20 files first, then run the full set.'},
+        {'id':'tags','icon':'tags','title':'Dataset Tag Editor','summary':'Bulk edit captions with insert, delete, replace, move, dedup, and undo.','best':'Best for direct tag cleanup without opening each .txt manually.','steps':['Set Folder to the main dataset and Temp folder to your staging area.','Pick the correct mode before entering any tags or mappings.','Run the action, then inspect the result list before moving to the next mode.'],'watch':['Move works from the main folder into temp, while most edit modes operate inside temp.','Use Dataset Normalization instead if your captions contain #optional: or #warning: blocks.'],'note':'Lowest-risk starting action: dedup with backups enabled.'},
+        {'id':'offline','icon':'cpu','title':'Offline Tagger (WD v3)','summary':'Auto-generate captions locally with a WD-style tagger model.','best':'Best for creating initial tags or extending weak captions before manual review.','steps':['Set the dataset folder and provide a model ID or local model path.','Start with Device auto and moderate thresholds if you do not know the model behavior yet.','Use Preview only first, then switch to append or overwrite when the samples look correct.'],'watch':['Lower thresholds add more tags but also more noise.','Skip mode is useful when only uncaptured files should be processed.'],'note':'Typical flow: preview, append tags, then clean the results in Tag Editor or Normalization.'},
+        {'id':'normalize','icon':'funnel','title':'Dataset Normalization','summary':'Clean captions with presets, protection rules, and before/after previews.','best':'Best for removing junk tags, standardizing wording, and managing #optional blocks.','steps':['Choose dataset folder, image extensions, recursive mode, and backup settings.','Pick a preset type and preset file, then read the preset summary before running.','Use Scan dataset or Dry-run preview first, then Apply normalization only after the preview looks right.'],'watch':['Put critical tags into Extra keep or Identity tags before applying.','If the dataset uses subfolders, enable Include subfolders or those files will be skipped.'],'note':'This is the correct tool when your caption files contain structured sections like #optional: and #warning:.'},
+        {'id':'combine','icon':'collection','title':'Combine Dataset','summary':'Merge multiple datasets into one output while preserving image-text pairs.','best':'Best for building a larger training set from several prepared sources.','steps':['Enter at least two source folders, one per line.','Set the output folder and keep suffix handling enabled unless you have a reason to change it.','Use copy mode first, then run the combine step.'],'watch':['Only files with both the image and matching .txt caption are combined.','Move mode removes files from the sources, so it is not the safe default.'],'note':''},
+        {'id':'rename','icon':'sort-numeric-down','title':'Flatten & Renumber','summary':'Collapse a folder tree into one numbered output set.','best':'Best when you need predictable filenames and optional matching caption renames.','steps':['Set Root Folder and confirm the output folder.','Choose numbering, ordering, and whether matching .txt files should follow the rename.','Run Dry run first, then do the real run after checking the order.'],'watch':['The tool handles the top level and first-level subfolders, not deep recursive trees.','Copy mode is safer until you know the ordering is correct.'],'note':''},
+        {'id':'merge','icon':'columns-gap','title':'Stitch Groups','summary':'Merge numbered fragments that share a prefix into one PNG.','best':'Best for strip exports or split pages named like prefix_1, prefix_2, prefix_3.','steps':['Set the source folder containing the numbered image parts.','Choose stack direction, resize rule, gap, background, and overwrite behavior.','Use dry run if you are not sure the grouping pattern matches your filenames.'],'watch':['Only files matching the prefix-number pattern are grouped.','If output is empty, the tool writes to a combined folder under the source path.'],'note':''},
+        {'id':'webtoon','icon':'scissors','title':'Webtoon Panel Splitter','summary':'Cut long vertical pages into panels using white separator stripes.','best':'Best for webtoon chapters or tall comic pages.','steps':['Set the source folder and optionally a central output folder.','Leave stripe detection defaults alone unless the results are clearly wrong.','Use dry testing when a chapter has noisy separators or unusual spacing.'],'watch':['Lower the white threshold or row coverage if real separators are being missed.','Increase minimum panel height if tiny junk slices are produced.'],'note':''},
+        {'id':'blur','icon':'brush','title':'Brush Blur','summary':'Blur only selected areas instead of processing the entire image.','best':'Best for manual touch-up when one region needs softening or privacy treatment.','steps':['Load the target image, then adjust blur settings until the preview looks correct.','Paint only the region that should be blurred.','Save after checking that the mask does not cover important details by accident.'],'watch':['This tool is intentionally manual and slower than the batch tools.','Use it after structural steps like conversion, stitching, or splitting.'],'note':''},
+        {'id':'pipeline','icon':'diagram-3','title':'Pipeline (beta)','summary':'Run several dataset preparation stages in one guided workflow.','best':'Best when you want copy, auto-tagging, normalization, manual pause, and packaging in one sequence.','steps':['Set Dataset Source, Working Directory, Output Directory, and the normalization preset.','Decide whether offline auto-tagging should run as part of the job.','When the job pauses, edit files inside the working directory, then click Resume.'],'watch':['Pipeline works in the working folder, so check disk space before long runs.','Use the individual tabs instead if you need custom tuning at each stage.'],'note':'Pipeline is the fastest route for repeatable workflows, but not the most flexible one.'}
+      ] %}
+
+      {% for item in items %}
+      <div class="accordion-item">
+        <h2 class="accordion-header" id="guide-heading-{{ item.id }}">
+          <button class="accordion-button {{ '' if loop.first else 'collapsed' }}" type="button" data-bs-toggle="collapse" data-bs-target="#guide-collapse-{{ item.id }}" aria-expanded="{{ 'true' if loop.first else 'false' }}" aria-controls="guide-collapse-{{ item.id }}">
+            <div class="guide-title">
+              <span class="guide-title-icon"><i class="bi bi-{{ item.icon }}"></i></span>
+              <div class="guide-title-copy">
+                <h6>{{ item.title }}</h6>
+                <p>{{ item.summary }}</p>
+              </div>
+            </div>
+          </button>
+        </h2>
+        <div id="guide-collapse-{{ item.id }}" class="accordion-collapse collapse {{ 'show' if loop.first else '' }}" aria-labelledby="guide-heading-{{ item.id }}" data-bs-parent="#workflowGuideAccordion">
+          <div class="accordion-body">
+            <div class="guide-grid">
+              <div class="guide-panel">
+                <h6>Best for</h6>
+                <p>{{ item.best }}</p>
+              </div>
+              <div class="guide-panel">
+                <h6>How to use it</h6>
+                <ul>
+                  {% for step in item.steps %}
+                  <li>{{ step }}</li>
+                  {% endfor %}
+                </ul>
+              </div>
+              <div class="guide-panel">
+                <h6>Watch for</h6>
+                <ul>
+                  {% for note in item.watch %}
+                  <li>{{ note }}</li>
+                  {% endfor %}
+                </ul>
+              </div>
+            </div>
+            {% if item.note %}
+            <div class="guide-note">{{ item.note }}</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>

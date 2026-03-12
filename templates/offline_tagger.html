@@ -1,0 +1,198 @@
+<div class="card p-4">
+  <div class="text-muted small mb-2">
+    Offline tagger (WD v3). WD color policy (RGB-&gt;BGR) is forced on and cannot be changed.
+  </div>
+  <div class="small text-muted mb-3">
+    Quick tips:
+    <ul class="mb-0">
+      <li>Start with the defaults. Lower thresholds if you get too few tags.</li>
+      <li>MCUT mode is recommended for the WD tagger. Use MCUT tuning below if output is too simple.</li>
+      <li>Use Tag focus to output all tags, character/subject only, or non-character only.</li>
+      <li>Set a trigger tag for LoRA so it is always the first tag.</li>
+    </ul>
+  </div>
+
+  <form method="post" data-tool-label="Offline tagger">
+    <input type="hidden" name="tool" value="offline_tagger">
+    <input type="hidden" name="active_tab" value="offline_tagger">
+
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label">Dataset folder</label>
+        <div class="input-group">
+          <input id="offline_folder" name="folder" type="text" class="form-control" data-root-sync="1"
+                 placeholder="D:\path\to\dataset" data-bs-toggle="tooltip"
+                 data-bs-title="Folder with images to tag">
+          <button class="btn btn-outline-light btn-browse" type="button" data-target="offline_folder"
+                  data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
+        </div>
+      </div>
+
+      <div class="col-md-3 d-flex align-items-end">
+        <div class="form-check" data-bs-toggle="tooltip" data-bs-title="Scan subfolders">
+          <input class="form-check-input" type="checkbox" id="offline_recursive" name="recursive">
+          <label class="form-check-label" for="offline_recursive">Recursive</label>
+        </div>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Image limit (0 = all)</label>
+        <input class="form-control" name="limit" value="0" data-bs-toggle="tooltip" data-bs-title="Process only the first N images">
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Batch size</label>
+        <input class="form-control" name="batch_size" value="4" data-bs-toggle="tooltip" data-bs-title="Bigger = faster, needs more VRAM">
+        <div class="form-text text-muted">Bigger = faster, needs more VRAM.</div>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Write mode</label>
+        <select class="form-select" name="write_mode" data-bs-toggle="tooltip" data-bs-title="Append keeps existing tags">
+          <option value="overwrite">overwrite</option>
+          <option value="append" selected>append</option>
+          <option value="skip_if_exists">skip if exists</option>
+        </select>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Min general</label>
+        <input class="form-control" name="min_general" value="0.35" data-bs-toggle="tooltip" data-bs-title="Lower = more tags; higher = fewer">
+        <div class="form-text text-muted">General: 0.35 is usually safe.</div>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Min character</label>
+        <input class="form-control" name="min_character" value="0.75" data-bs-toggle="tooltip" data-bs-title="Character tags usually need higher threshold">
+        <div class="form-text text-muted">Character: 0.75 is usually safe.</div>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Threshold mode</label>
+        <select class="form-select" name="threshold_mode" data-bs-toggle="tooltip" data-bs-title="MCUT adapts per image">
+          <option value="fixed">fixed</option>
+          <option value="mcut" selected>mcut</option>
+        </select>
+        <div class="form-text text-muted">MCUT is recommended for the WD tagger.</div>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Tag focus</label>
+        <select class="form-select" name="tag_focus_mode" data-bs-toggle="tooltip" data-bs-title="Split between character/subject and non-character tags">
+          <option value="all" selected>all</option>
+          <option value="character">character/subject only</option>
+          <option value="non_character">non-character only</option>
+        </select>
+      </div>
+
+      <div class="col-md-3 d-flex align-items-end">
+        <div class="form-check" data-bs-toggle="tooltip" data-bs-title="Include character name tags">
+          <input class="form-check-input" type="checkbox" id="offline_include_character" name="include_character" checked>
+          <label class="form-check-label" for="offline_include_character">Include character tags (focus=all)</label>
+        </div>
+      </div>
+
+      <div class="col-md-3 d-flex align-items-end">
+        <div class="form-check" data-bs-toggle="tooltip" data-bs-title="Include rating tag (rating:general, etc)">
+          <input class="form-check-input" type="checkbox" id="offline_include_rating" name="include_rating">
+          <label class="form-check-label" for="offline_include_rating">Include rating</label>
+        </div>
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">Trigger tag (pinned first)</label>
+        <input class="form-control" name="trigger_tag" placeholder="lora_trigger"
+               data-bs-toggle="tooltip" data-bs-title="Always inserted as the first tag">
+        <div class="form-text text-muted">Stays first and will not be removed.</div>
+      </div>
+
+      <div class="col-lg-6">
+        <label class="form-label">Exclude tags (comma)</label>
+        <input class="form-control" name="exclude_tags" placeholder="lowres, blurry">
+        <div class="form-text text-muted">Separate with commas.</div>
+      </div>
+
+      <div class="col-md-3 d-flex align-items-end">
+        <div class="form-check" data-bs-toggle="tooltip" data-bs-title="Preview tags without writing files">
+          <input class="form-check-input" type="checkbox" id="offline_preview_only" name="preview_only">
+          <label class="form-check-label" for="offline_preview_only">Preview only</label>
+        </div>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Preview limit</label>
+        <input class="form-control" name="preview_limit" value="20" data-bs-toggle="tooltip" data-bs-title="How many sample outputs to show in log">
+      </div>
+    </div>
+
+    <details class="mt-3">
+      <summary class="fw-semibold">Advanced (optional)</summary>
+      <div class="row g-3 mt-1">
+        <div class="col-md-3">
+          <label class="form-label">Max general tags (0 = unlimited)</label>
+          <input class="form-control" name="max_general_tags" value="0">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Max character tags (0 = unlimited)</label>
+          <input class="form-control" name="max_character_tags" value="0">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Character top-k (0 = off)</label>
+          <input class="form-control" name="character_topk" value="0">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Model ID (optional)</label>
+          <input class="form-control" name="model_id" value="SmilingWolf/wd-swinv2-tagger-v3">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">MCUT relax general</label>
+          <input class="form-control" type="number" step="0.01" min="0" max="1" name="mcut_relax_general" value="0.08">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">MCUT relax character</label>
+          <input class="form-control" type="number" step="0.01" min="0" max="1" name="mcut_relax_character" value="0.02">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">MCUT min general tags</label>
+          <input class="form-control" type="number" min="0" name="mcut_min_general_tags" value="8">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">MCUT min character tags</label>
+          <input class="form-control" type="number" min="0" name="mcut_min_character_tags" value="0">
+        </div>
+        <div class="col-12">
+          <label class="form-label">Non-character regex (one per line)</label>
+          <textarea class="form-control" rows="3" name="non_character_regex" placeholder="(optional) override subject/background split regex"></textarea>
+          <div class="form-text text-muted">Leave empty to use WD-friendly default patterns.</div>
+        </div>
+
+        <div class="col-12 d-flex flex-wrap gap-4">
+          <label class="form-check">
+            <input class="form-check-input" type="checkbox" name="dedupe" checked>
+            <span class="form-check-label">Dedupe tags</span>
+          </label>
+          <label class="form-check">
+            <input class="form-check-input" type="checkbox" name="sort_tags" checked>
+            <span class="form-check-label">Sort tags</span>
+          </label>
+          <label class="form-check">
+            <input class="form-check-input" type="checkbox" name="keep_existing_tags" checked>
+            <span class="form-check-label">Keep existing tags (append)</span>
+          </label>
+          <label class="form-check">
+            <input class="form-check-input" type="checkbox" name="newline_end" checked>
+            <span class="form-check-label">Ensure newline at end</span>
+          </label>
+          <label class="form-check">
+            <input class="form-check-input" type="checkbox" name="strip_whitespace" checked>
+            <span class="form-check-label">Strip whitespace</span>
+          </label>
+        </div>
+      </div>
+    </details>
+
+    <div class="mt-3">
+      <button class="btn btn-primary">Run tagger</button>
+    </div>
+  </form>
+</div>

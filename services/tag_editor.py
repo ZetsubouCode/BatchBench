@@ -1,185 +1,592 @@
-from typing import Tuple, List, Set
-from utils.io import readable_path, log_join
-from utils.dataset import split_tags, join_tags
+from collections import Counter, OrderedDict
+from pathlib import Path
+from typing import Tuple, List, Set, Optional
+import re
+from utils.io import readable_path
+from utils.dataset import join_tags
+from utils.parse import parse_bool, parse_exts, parse_tag_list
+from utils.tool_result import build_tool_result
+from utils.text_io import read_text_best_effort
 import shutil
 
 EDIT_MODES = {"insert", "delete", "replace", "dedup"}  # non-move, non-undo
+_TXT_TAG_CACHE: "OrderedDict[str, Tuple[Tuple[int, int], List[str]]]" = OrderedDict()
+_TXT_TAG_CACHE_MAX = 4096
 
-def handle(form, ctx) -> Tuple[str, str]:
+
+def _sanitize_tag(t: str) -> str:
+    t = (t or "").strip()
+    if not t:
+        return ""
+    return re.sub(r"\s+", "_", t)
+
+
+def _dedup_tags(tags: List[str]) -> List[str]:
+    out: List[str] = []
+    seen: Set[str] = set()
+    for raw in tags:
+        tag = _sanitize_tag(raw)
+        if not tag or tag in seen:
+            continue
+        seen.add(tag)
+        out.append(tag)
+    return out
+
+
+def _normalize_tags(raw_tags: List[str], dedupe: bool = False) -> List[str]:
+    tags = [tag for tag in (_sanitize_tag(x) for x in raw_tags) if tag]
+    return _dedup_tags(tags) if dedupe else tags
+
+
+def _cache_put(key: str, value: Tuple[Tuple[int, int], List[str]]):
+    _TXT_TAG_CACHE[key] = value
+    _TXT_TAG_CACHE.move_to_end(key)
+    while len(_TXT_TAG_CACHE) > _TXT_TAG_CACHE_MAX:
+        _TXT_TAG_CACHE.popitem(last=False)
+
+
+def _read_text_tags(path: Path) -> List[str]:
+    try:
+        text, _, _ = read_text_best_effort(path)
+    except Exception:
+        return []
+    return _normalize_tags(parse_tag_list(text, dedupe=False), dedupe=False)
+
+
+def _read_tags_cached(txt_path: Path) -> List[str]:
+    key = str(txt_path)
+    try:
+        st = txt_path.stat()
+    except Exception:
+        return []
+    sig = (st.st_mtime_ns, st.st_size)
+    cached = _TXT_TAG_CACHE.get(key)
+    if cached and cached[0] == sig:
+        _TXT_TAG_CACHE.move_to_end(key)
+        return list(cached[1])
+    tags = _read_text_tags(txt_path)
+    _cache_put(key, (sig, list(tags)))
+    return tags
+
+
+def _invalidate_cache(txt_path: Path):
+    _TXT_TAG_CACHE.pop(str(txt_path), None)
+
+
+def _normalize_exts(exts: List[str]) -> Set[str]:
+    out: Set[str] = set()
+    for raw in exts or []:
+        val = (raw or "").strip().lower()
+        if not val:
+            continue
+        if not val.startswith("."):
+            val = "." + val
+        out.add(val)
+    return out
+
+def _list_images(
+    folder_path: Path,
+    exts: List[str],
+    recursive: bool = False,
+    exclude_dir: Optional[Path] = None,
+) -> List[Path]:
+    if not folder_path.exists() or not folder_path.is_dir():
+        return []
+    extset = _normalize_exts(exts)
+    if not extset:
+        return []
+    if recursive:
+        images: List[Path] = []
+        for p in folder_path.rglob("*"):
+            if not p.is_file():
+                continue
+            if exclude_dir and exclude_dir in p.parents:
+                continue
+            if p.suffix.lower() in extset:
+                images.append(p)
+    else:
+        images = [p for p in folder_path.iterdir() if p.is_file() and p.suffix.lower() in extset]
+    return sorted(images, key=lambda p: str(p).lower())
+
+
+def _next_pair_target(folder: Path, stem: str, image_suffix: str) -> Tuple[Path, Path]:
+    bump = 0
+    while True:
+        suffix = "" if bump == 0 else f"_{bump}"
+        candidate_stem = f"{stem}{suffix}"
+        dst_img = folder / f"{candidate_stem}{image_suffix}"
+        dst_txt = folder / f"{candidate_stem}.txt"
+        if not dst_img.exists() and not dst_txt.exists():
+            return dst_img, dst_txt
+        bump += 1
+
+
+def _move_pair_transaction(
+    src_img: Path,
+    src_txt: Path,
+    dst_img: Path,
+    dst_txt: Path,
+    require_txt: bool,
+) -> Tuple[bool, str]:
+    moved: List[Tuple[Path, Path]] = []
+    had_txt = src_txt.exists()
+    if require_txt and not had_txt:
+        return False, f"Missing paired .txt for {src_img.name}"
+
+    try:
+        shutil.move(str(src_img), str(dst_img))
+        moved.append((dst_img, src_img))
+        if had_txt:
+            shutil.move(str(src_txt), str(dst_txt))
+            moved.append((dst_txt, src_txt))
+        return True, ""
+    except Exception as exc:
+        rollback_errors: List[str] = []
+        for moved_path, original_path in reversed(moved):
+            try:
+                if not moved_path.exists():
+                    continue
+                if original_path.exists():
+                    rollback_errors.append(
+                        f"cannot rollback {moved_path.name} because source already exists: {original_path}"
+                    )
+                    continue
+                shutil.move(str(moved_path), str(original_path))
+            except Exception as rollback_exc:
+                rollback_errors.append(f"{moved_path.name}: {rollback_exc}")
+        message = str(exc)
+        if rollback_errors:
+            message = f"{message} | rollback issues: {'; '.join(rollback_errors)}"
+        return False, message
+
+
+def _created_ts(path: Path) -> float:
+    try:
+        return float(path.stat().st_ctime)
+    except Exception:
+        return 0.0
+
+
+def _is_temp_relative(rel: Path) -> bool:
+    parts = rel.parts
+    return bool(parts) and parts[0].lower() == "_temp"
+
+
+def _serialize_image_item(root_folder: Path, img: Path, tag_limit: int) -> dict:
+    txt = img.with_suffix(".txt")
+    tags: List[str] = []
+    has_txt = False
+    if txt.exists():
+        has_txt = True
+        tags = _read_tags_cached(txt)
+    tag_count = len(tags)
+    if tag_limit > 0 and len(tags) > tag_limit:
+        tags = tags[:tag_limit]
+
+    rel_path = img.relative_to(root_folder)
+    rel = rel_path.as_posix()
+    parent_rel = rel_path.parent.as_posix() if rel_path.parent != Path(".") else ""
+    return {
+        "name": img.name,
+        "rel": rel,
+        "parent_rel": parent_rel,
+        "tags": tags,
+        "tag_count": tag_count,
+        "tags_truncated": tag_count > len(tags),
+        "has_txt": has_txt,
+        "in_temp": _is_temp_relative(rel_path),
+        "created_ts": _created_ts(img),
+    }
+
+
+def scan_tags(folder: Path, exts: List[str], recursive: bool = False) -> dict:
+    if not folder or not folder.exists() or not folder.is_dir():
+        return {"ok": False, "error": f"Folder not found: {folder}"}
+
+    images = _list_images(folder, exts, recursive=recursive)
+    counts: Counter = Counter()
+    tag_files = 0
+
+    for img in images:
+        txt = img.with_suffix(".txt")
+        if not txt.exists():
+            continue
+        tags = _read_tags_cached(txt)
+        tag_files += 1
+        if tags:
+            counts.update(set(tags))
+
+    items = [
+        {"tag": tag, "count": int(cnt)}
+        for tag, cnt in sorted(counts.items(), key=lambda x: (-x[1], x[0]))
+    ]
+    return {
+        "ok": True,
+        "folder": str(folder),
+        "total_images": len(images),
+        "tag_files": tag_files,
+        "tags": items,
+    }
+
+def list_images_with_tags(
+    folder: Path,
+    exts: List[str],
+    recursive: bool = False,
+    limit: int = 80,
+    tag_limit: int = 200,
+) -> dict:
+    if not folder or not folder.exists() or not folder.is_dir():
+        return {"ok": False, "error": f"Folder not found: {folder}"}
+
+    images = _list_images(folder, exts, recursive=recursive, exclude_dir=None)
+    total = len(images)
+    if limit and limit > 0:
+        images = images[:limit]
+
+    items = [_serialize_image_item(folder, img, tag_limit) for img in images]
+
+    return {"ok": True, "folder": str(folder), "total": total, "images": items}
+
+
+def add_tags(
+    txt_path: Path,
+    raw_tags: List[str],
+    backup: bool = True,
+    create_missing_txt: bool = False,
+) -> dict:
+    tags_to_add = _dedup_tags(raw_tags or [])
+    if not tags_to_add:
+        return {"ok": False, "error": "No tags provided"}
+
+    had_txt = txt_path.exists()
+    src = ""
+    current_tags: List[str] = []
+    if had_txt:
+        try:
+            src, _, _ = read_text_best_effort(txt_path)
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+        current_tags = _normalize_tags(parse_tag_list(src, dedupe=False), dedupe=False)
+    elif not create_missing_txt:
+        return {"ok": False, "error": "Missing .txt"}
+
+    next_tags = list(current_tags)
+    added: List[str] = []
+    for tag in tags_to_add:
+        if tag in next_tags:
+            continue
+        next_tags.append(tag)
+        added.append(tag)
+
+    if not had_txt and not next_tags:
+        return {"ok": False, "error": "No tags to write"}
+
+    content = join_tags(next_tags)
+    changed = (not had_txt) or (content.strip() != src.strip())
+    if changed:
+        if backup and had_txt:
+            try:
+                txt_path.with_suffix(txt_path.suffix + ".bak").write_text(src, encoding="utf-8")
+            except Exception as exc:
+                return {"ok": False, "error": str(exc)}
+        try:
+            txt_path.write_text(content, encoding="utf-8")
+            _invalidate_cache(txt_path)
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    return {
+        "ok": True,
+        "created": not had_txt,
+        "changed": changed,
+        "added": added,
+        "tags": next_tags,
+    }
+
+
+def remove_tag(txt_path: Path, tag: str, backup: bool = True) -> dict:
+    if not txt_path or not txt_path.exists() or not txt_path.is_file():
+        return {"ok": False, "error": "Missing .txt"}
+    try:
+        src, _, _ = read_text_best_effort(txt_path)
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+    tag = _sanitize_tag(tag)
+    taglist = _normalize_tags(parse_tag_list(src, dedupe=False), dedupe=False)
+    newtags = [t for t in taglist if t != tag]
+    removed = len(newtags) != len(taglist)
+    if not removed:
+        return {"ok": True, "removed": False, "tags": taglist}
+    if backup:
+        try:
+            txt_path.with_suffix(txt_path.suffix + ".bak").write_text(src, encoding="utf-8")
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+    try:
+        txt_path.write_text(join_tags(newtags), encoding="utf-8")
+        _invalidate_cache(txt_path)
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+    return {"ok": True, "removed": True, "tags": newtags}
+
+def handle(form, ctx):
     active_tab = "tags"
 
     # Raw inputs
-    raw_folder = readable_path(form.get("folder",""))
-    mode = (form.get("mode","insert") or "insert").lower()
-    tags_field = form.get("tags","")
-    exts = [e.strip().lower() for e in form.get("exts",".jpg,.jpeg,.png,.webp").split(",") if e.strip()]
-    backup = bool(form.get("backup"))
-    temp_dir_input = (form.get("temp_dir","") or "").strip()
+    raw_folder_text = (form.get("folder", "") or "").strip()
+    raw_folder = readable_path(raw_folder_text)
+    mode = (form.get("mode", "insert") or "insert").strip().lower()
+    tags_field = form.get("tags", "")
+    exts = parse_exts(form.get("exts"), default=[".jpg", ".jpeg", ".png", ".webp"])
+    backup = parse_bool(form.get("backup"), default=False)
+    create_missing_txt = parse_bool(form.get("create_missing_txt"), default=False)
 
     lines: List[str] = []
 
-    # Derive base and temp from whatever the user passed:
+    def _done(ok: bool, error: str = ""):
+        return build_tool_result(active_tab, lines, ok=ok, error=error)
+
+    # Derive base from whatever the user passed:
     # If they give <base>/_temp, base = parent; else base = given.
-    if not raw_folder:
+    if not raw_folder_text:
         lines.append("Folder not provided.")
-        return active_tab, log_join(lines)
+        return _done(False, "Folder not provided.")
 
-    base_folder = raw_folder.parent if raw_folder.name.lower() == "_temp" else raw_folder
-    temp_folder = readable_path(temp_dir_input) if temp_dir_input else (base_folder / "_temp")
+    if raw_folder.name.lower() == "_temp":
+        base_folder = raw_folder.parent
+    else:
+        base_folder = raw_folder
+    temp_folder = base_folder / "_temp"
 
-    # Ensure folders exist as appropriate per mode
+    def _parse_tag_input(raw: str) -> List[str]:
+        out: List[str] = []
+        seen: Set[str] = set()
+        for line in (raw or "").replace("\r", "\n").split("\n"):
+            for token in line.split(","):
+                tag = _sanitize_tag(token)
+                if not tag or tag in seen:
+                    continue
+                out.append(tag)
+                seen.add(tag)
+        return out
+
+    def _parse_replace_mapping(raw: str) -> dict:
+        mapping = {}
+        parts = [p.strip() for p in (raw or "").split(";") if p.strip()]
+        for p in parts:
+            if "->" not in p:
+                continue
+            old, new = [x.strip() for x in p.split("->", 1)]
+            old = _sanitize_tag(old)
+            new = _sanitize_tag(new)
+            if old:
+                mapping[old] = new
+        return mapping
+
+    add: List[str] = []
+    deltags: Set[str] = set()
+    mapping = {}
+    if mode == "insert":
+        add = _parse_tag_input(tags_field)
+    elif mode == "delete":
+        deltags = set(_parse_tag_input(tags_field))
+    elif mode == "replace":
+        mapping = _parse_replace_mapping(tags_field)
+
+    if mode not in {"move", "undo"} and mode not in EDIT_MODES:
+        lines.append(f"Unknown mode: {mode}")
+        return _done(False, f"Unknown mode: {mode}")
+
+    if not base_folder.exists() or not base_folder.is_dir():
+        lines.append(f"Base folder not found: {base_folder}")
+        return _done(False, f"Base folder not found: {base_folder}")
+
+    # Fixed path behavior:
+    # - move scans base (recursive), excludes base/_temp, and stages into base/_temp.
+    # - undo scans base/_temp (recursive) and restores to base.
+    # - edit modes always run on base/_temp (recursive).
     if mode == "move":
-        if not base_folder.exists() or not base_folder.is_dir():
-            lines.append(f"Base folder not found: {base_folder}")
-            return active_tab, log_join(lines)
-        # Lazily create temp on first move
-        temp_folder.mkdir(parents=True, exist_ok=True)
+        recursive_scan = True
+        exclude_dir = temp_folder
         scan_folder = base_folder
+        temp_folder.mkdir(parents=True, exist_ok=True)
     elif mode == "undo":
-        # For undo we require temp to exist; restore to base
         if not temp_folder.exists() or not temp_folder.is_dir():
             lines.append(f"Temp folder not found: {temp_folder}")
-            return active_tab, log_join(lines)
-        scan_folder = temp_folder
-    elif mode in EDIT_MODES:
-        # Edit inside temp; create it if missing so we don't hard fail
-        temp_folder.mkdir(parents=True, exist_ok=True)
+            return _done(False, f"Temp folder not found: {temp_folder}")
+        recursive_scan = True
+        exclude_dir = None
         scan_folder = temp_folder
     else:
-        lines.append(f"Unknown mode: {mode}")
-        return active_tab, log_join(lines)
-
-    # Helper to enumerate images inside a folder
-    def list_images(folder_path):
-        if not folder_path.exists() or not folder_path.is_dir():
-            return []
-        return [p for p in folder_path.iterdir() if p.is_file() and p.suffix.lower() in exts]
+        if not temp_folder.exists() or not temp_folder.is_dir():
+            lines.append(f"Temp folder not found: {temp_folder}")
+            return _done(False, f"Temp folder not found: {temp_folder}")
+        recursive_scan = True
+        exclude_dir = None
+        scan_folder = temp_folder
 
     # ---------- MOVE ----------
     if mode == "move":
-        images = list_images(scan_folder)
+        images = _list_images(scan_folder, exts, recursive=recursive_scan, exclude_dir=exclude_dir)
         processed = 0
-        want: Set[str] = set([t.strip() for t in tags_field.split(",") if t.strip()])
+        errors = 0
+        want: Set[str] = set(_parse_tag_input(tags_field))
         if not want:
             lines.append("Move skipped: no tags provided.")
-            return active_tab, log_join(lines)
+            return _done(False, "Move skipped: no tags provided.")
+        if not images:
+            lines.append(f"No image files with {exts} found in: {scan_folder}")
+            return _done(False, f"No images found in: {scan_folder}")
 
         for img in images:
             txt = img.with_suffix(".txt")
             if not txt.exists():
                 continue
-            src = txt.read_text(encoding="utf-8")
-            taglist = split_tags(src)
+            try:
+                src, _, _ = read_text_best_effort(txt)
+            except Exception as exc:
+                lines.append(f"[ERROR] reading {txt.name}: {exc}")
+                continue
+            taglist = _normalize_tags(parse_tag_list(src, dedupe=False), dedupe=False)
 
             matches = sorted([t for t in taglist if t in want])
             if matches:
-                stem, ext = img.stem, img.suffix
-                dest_img = temp_folder / img.name
-                dest_txt = temp_folder / txt.name
-                bump = 1
-                while dest_img.exists() or dest_txt.exists():
-                    new_stem = f"{stem}_{bump}"
-                    dest_img = temp_folder / f"{new_stem}{ext}"
-                    dest_txt = temp_folder / f"{new_stem}.txt"
-                    bump += 1
-                shutil.move(str(img), str(dest_img))
-                shutil.move(str(txt), str(dest_txt))
-                lines.append(f"{img.name}: moved to {temp_folder} (matched: {', '.join(matches)})")
+                rel_parent = img.parent.relative_to(base_folder)
+                dest_parent = temp_folder / rel_parent
+                dest_parent.mkdir(parents=True, exist_ok=True)
+                dest_img, dest_txt = _next_pair_target(dest_parent, img.stem, img.suffix.lower())
+                ok, error = _move_pair_transaction(
+                    img, txt, dest_img, dest_txt, require_txt=True
+                )
+                if not ok:
+                    lines.append(f"[ERROR] moving {img.name}: {error}")
+                    errors += 1
+                    continue
+                lines.append(
+                    f"{img.name}: moved to {dest_parent.relative_to(base_folder)} (matched: {', '.join(matches)})"
+                )
                 processed += 1
 
-        lines.append(f"Done. {processed} file(s) moved to {temp_folder}.")
-        return active_tab, log_join(lines)
+        lines.append(f"Done. {processed} file(s) moved to {temp_folder}. Errors: {errors}.")
+        return _done(errors == 0, "" if errors == 0 else f"{errors} move operation(s) failed.")
 
     # ---------- UNDO ----------
     if mode == "undo":
-        images_in_temp = list_images(scan_folder)
+        images_in_temp = _list_images(scan_folder, exts, recursive=recursive_scan)
         if not images_in_temp:
             lines.append(f"No image files with {exts} found in temp folder: {scan_folder}")
-            return active_tab, log_join(lines)
+            return _done(False, f"No image files found in temp folder: {scan_folder}")
 
         restored = 0
+        errors = 0
         for img in sorted(images_in_temp, key=lambda p: p.name.lower()):
             txt = img.with_suffix(".txt")
-            stem, ext = img.stem, img.suffix
-            dest_img = base_folder / img.name
-            dest_txt = base_folder / (stem + ".txt")
+            had_txt = txt.exists()
+            rel_parent = img.parent.relative_to(temp_folder)
+            dest_parent = base_folder / rel_parent
+            dest_parent.mkdir(parents=True, exist_ok=True)
+            dest_img, dest_txt = _next_pair_target(dest_parent, img.stem, img.suffix.lower())
+            ok, error = _move_pair_transaction(
+                img, txt, dest_img, dest_txt, require_txt=False
+            )
+            if not ok:
+                lines.append(f"[ERROR] restoring {img.name}: {error}")
+                errors += 1
+                continue
+            restored += 1
+            lines.append(
+                f"Restored: {dest_img.relative_to(base_folder)}{' (+ .txt)' if had_txt else ''}"
+            )
 
-            bump = 1
-            while dest_img.exists() or dest_txt.exists():
-                new_stem = f"{stem}_{bump}"
-                dest_img = base_folder / f"{new_stem}{ext}"
-                dest_txt = base_folder / f"{new_stem}.txt"
-                bump += 1
+        lines.append(f"Done. {restored} file(s) restored from {scan_folder} to {base_folder}. Errors: {errors}.")
+        return _done(errors == 0, "" if errors == 0 else f"{errors} restore operation(s) failed.")
 
-            try:
-                shutil.move(str(img), str(dest_img))
-                if txt.exists():
-                    shutil.move(str(txt), str(dest_txt))
-                restored += 1
-                lines.append(f"Restored: {dest_img.name}{' (+ .txt)' if dest_txt.exists() else ''}")
-            except Exception as e:
-                lines.append(f"[ERROR] restoring {img.name}: {e}")
-
-        lines.append(f"Done. {restored} file(s) restored from {scan_folder} to {base_folder}.")
-        return active_tab, log_join(lines)
-
-    # ---------- EDIT MODES IN TEMP (insert/delete/replace/dedup) ----------
-    images = list_images(scan_folder)
+    # ---------- EDIT MODES (insert/delete/replace/dedup) ----------
+    if mode in EDIT_MODES:
+        if mode == "insert" and not add:
+            lines.append("Insert skipped: no tags provided.")
+            return _done(False, "Insert skipped: no tags provided.")
+        if mode == "delete" and not deltags:
+            lines.append("Delete skipped: no tags provided.")
+            return _done(False, "Delete skipped: no tags provided.")
+        if mode == "replace" and not mapping:
+            lines.append("Replace skipped: no mappings provided.")
+            return _done(False, "Replace skipped: no mappings provided.")
+        images = _list_images(scan_folder, exts, recursive=recursive_scan, exclude_dir=exclude_dir)
     if not images:
         lines.append(f"No image files with {exts} found in: {scan_folder}")
-        return active_tab, log_join(lines)
+        return _done(False, f"No image files found in: {scan_folder}")
 
     processed = 0
+    errors = 0
+    missing_txt_skipped = 0
+    missing_txt_created = 0
     for img in images:
         txt = img.with_suffix(".txt")
         if not txt.exists():
+            if mode == "insert" and create_missing_txt:
+                try:
+                    txt.write_text(join_tags(add), encoding="utf-8")
+                    _invalidate_cache(txt)
+                    lines.append(f"{img.name}: created missing .txt with insert tags")
+                    processed += 1
+                    missing_txt_created += 1
+                except Exception as exc:
+                    lines.append(f"[ERROR] creating {txt.name}: {exc}")
+                    errors += 1
+            else:
+                missing_txt_skipped += 1
             continue
 
-        src = txt.read_text(encoding="utf-8")
-        taglist = split_tags(src)
+        try:
+            src, _, _ = read_text_best_effort(txt)
+        except Exception as exc:
+            lines.append(f"[ERROR] reading {txt.name}: {exc}")
+            errors += 1
+            continue
+        taglist = _normalize_tags(parse_tag_list(src, dedupe=False), dedupe=False)
 
+        newtags = list(taglist)
+        action_desc = ""
         if mode == "insert":
-            add = [t.strip() for t in tags_field.split(",") if t.strip()]
             for t in add:
-                if t not in taglist:
-                    taglist.append(t)
-            if backup:
-                txt.with_suffix(txt.suffix + ".bak").write_text(src, encoding="utf-8")
-            txt.write_text(join_tags(taglist), encoding="utf-8")
-            lines.append(f"{img.name}: insert -> {add}")
-
+                if t not in newtags:
+                    newtags.append(t)
+            action_desc = f"insert -> {add}"
         elif mode == "delete":
-            deltags = set([t.strip() for t in tags_field.split(",") if t.strip()])
             newtags = [t for t in taglist if t not in deltags]
-            if backup:
-                txt.with_suffix(txt.suffix + ".bak").write_text(src, encoding="utf-8")
-            txt.write_text(join_tags(newtags), encoding="utf-8")
-            lines.append(f"{img.name}: delete -> {sorted(deltags)}")
-
+            action_desc = f"delete -> {sorted(deltags)}"
         elif mode == "replace":
-            mapping = {}
-            parts = [p.strip() for p in tags_field.split(";") if p.strip()]
-            for p in parts:
-                if "->" in p:
-                    old, new = [x.strip() for x in p.split("->", 1)]
-                    mapping[old] = new
             newtags = [mapping.get(t, t) for t in taglist]
-            if backup:
-                txt.with_suffix(txt.suffix + ".bak").write_text(src, encoding="utf-8")
-            txt.write_text(join_tags(newtags), encoding="utf-8")
-            lines.append(f"{img.name}: replace -> {mapping}")
-
+            action_desc = f"replace -> {mapping}"
         elif mode == "dedup":
-            seen: Set[str] = set(); out: List[str] = []
-            for t in taglist:
-                if t not in seen:
-                    out.append(t); seen.add(t)
+            newtags = _dedup_tags(taglist)
+            action_desc = f"dedup -> {len(taglist)-len(newtags)} removed"
+
+        content = join_tags(newtags)
+        if content.strip() == src.strip():
+            continue
+        try:
             if backup:
                 txt.with_suffix(txt.suffix + ".bak").write_text(src, encoding="utf-8")
-            txt.write_text(join_tags(out), encoding="utf-8")
-            lines.append(f"{img.name}: dedup -> {len(taglist)-len(out)} removed")
+            txt.write_text(content, encoding="utf-8")
+            _invalidate_cache(txt)
+            lines.append(f"{img.name}: {action_desc}")
+        except Exception as exc:
+            lines.append(f"[ERROR] writing {txt.name}: {exc}")
+            errors += 1
+            continue
 
         processed += 1
 
-    lines.append(f"Done. {processed} files checked in {scan_folder}.")
-    return active_tab, log_join(lines)
+    if mode == "insert" and missing_txt_skipped:
+        lines.append(
+            f"Skipped {missing_txt_skipped} image(s) without paired .txt in {scan_folder}."
+        )
+    if mode == "insert" and missing_txt_created:
+        lines.append(
+            f"Created {missing_txt_created} new .txt file(s) for images that had no paired tags."
+        )
+
+    lines.append(f"Done. {processed} file(s) updated in {scan_folder}. Errors: {errors}.")
+    return _done(errors == 0, "" if errors == 0 else f"{errors} file update(s) failed.")
