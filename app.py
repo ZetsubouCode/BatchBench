@@ -1,4 +1,5 @@
 import os, json, re, sys, shutil
+from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict, Any
@@ -334,6 +335,32 @@ def _remove_empty_dirs(root: Path, keep: Optional[Path] = None) -> None:
             continue
 
 
+def _next_unique_dir(parent: Path, base_name: str) -> Tuple[Path, bool]:
+    candidate = parent / base_name
+    if not candidate.exists():
+        return candidate, False
+    bump = 1
+    while True:
+        next_candidate = parent / f"{base_name}_{bump}"
+        if not next_candidate.exists():
+            return next_candidate, True
+        bump += 1
+
+
+def _next_available_file(dst_parent: Path, file_name: str) -> Tuple[Path, bool]:
+    target = dst_parent / file_name
+    if not target.exists():
+        return target, False
+    stem = Path(file_name).stem
+    suffix = Path(file_name).suffix
+    bump = 1
+    while True:
+        candidate = dst_parent / f"{stem}_{bump}{suffix}"
+        if not candidate.exists():
+            return candidate, True
+        bump += 1
+
+
 def _bad_rel(rel: str) -> bool:
     rel_norm = str(rel).replace("\\", "/")
     parts = [p for p in Path(rel_norm).parts if p not in ("", ".", "./", ".\\")]
@@ -546,6 +573,160 @@ def api_tags_database_to_temp():
     result.setdefault("normalized_root", result.get("project_root", ""))
     return jsonify(result), code
 
+
+@app.post("/api/tags/dataset-zip")
+def api_tags_dataset_zip():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    result = tag_editor.export_dataset_zip(paths["project_root"])
+    code = 200 if result.get("ok") else 400
+    result.setdefault("normalized_root", str(paths["project_root"]))
+    result.setdefault("needs_init", False)
+    result.setdefault("warnings", [])
+    result.setdefault("info", [])
+    return jsonify(result), code
+
+
+@app.post("/api/tags/temp-move-all")
+def api_tags_temp_move_all():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    root = paths["dataset_root"]
+    temp_dir = paths["temp_root"]
+    if not root.exists() or not root.is_dir():
+        return _json_error(f"Dataset folder not found: {root}", 400, normalized_root=str(paths["project_root"]), needs_init=True)
+    if not temp_dir.exists() or not temp_dir.is_dir():
+        return _json_error("_temp folder not found", 404, normalized_root=str(paths["project_root"]), needs_init=True)
+
+    exts = _parse_exts(payload.get("exts"))
+    extset = {ext.lower() for ext in exts or []}
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    dst_dir, dst_renamed = _next_unique_dir(root, f"_moved_{stamp}")
+    try:
+        dst_dir.mkdir(parents=True, exist_ok=False)
+    except Exception as exc:
+        return _json_error(f"Failed to create destination folder: {exc}", 500, normalized_root=str(paths["project_root"]))
+
+    image_files = []
+    for path in temp_dir.rglob("*"):
+        if not path.is_file():
+            continue
+        if extset and path.suffix.lower() in extset:
+            image_files.append(path)
+    image_files.sort(key=lambda p: _rel_to_root(root, p).lower())
+
+    moved: List[Dict[str, Any]] = []
+    errors: List[Dict[str, Any]] = []
+    collisions: List[str] = []
+    logs: List[str] = [
+        f"[move-all] source _temp: {temp_dir}",
+        f"[move-all] destination: {dst_dir}",
+    ]
+    if dst_renamed:
+        logs.append(f"[move-all] destination renamed to avoid collision: {dst_dir.name}")
+
+    moved_images = 0
+    moved_txt = 0
+    moved_other = 0
+
+    for src_path in image_files:
+        src_rel = _rel_to_root(root, src_path)
+        had_txt = src_path.with_suffix(".txt").exists()
+        rel_parent = src_path.parent.relative_to(temp_dir)
+        dst_parent = dst_dir if rel_parent == Path(".") else dst_dir / rel_parent
+        try:
+            dst_parent.mkdir(parents=True, exist_ok=True)
+        except Exception as exc:
+            errors.append({"src": src_rel, "error": f"Cannot create destination folder: {exc}"})
+            continue
+        dst_rel = _rel_to_root(root, dst_parent)
+        result, code = _move_file_with_sidecars(root, src_rel, dst_rel)
+        if code == 200 and result.get("ok"):
+            moved_images += 1
+            if had_txt:
+                moved_txt += 1
+            dst_rel_file = result.get("rel") or src_rel
+            if Path(dst_rel_file).name != Path(src_rel).name:
+                collisions.append(f"{src_rel} -> {dst_rel_file}")
+            moved.append(
+                {
+                    "src": src_rel,
+                    "rel": dst_rel_file,
+                    "moved": bool(result.get("moved", True)),
+                    "warnings": result.get("warnings") or [],
+                }
+            )
+            logs.append(f"[move-all] moved image: {src_rel} -> {dst_rel_file}")
+            for warn in result.get("warnings") or []:
+                logs.append(f"[move-all][warn] {warn}")
+        else:
+            error_msg = result.get("error") or f"HTTP {code}"
+            errors.append({"src": src_rel, "error": error_msg})
+            logs.append(f"[move-all][error] {src_rel}: {error_msg}")
+
+    # Move remaining non-image files so _temp contents are fully moved out.
+    remaining_files = [p for p in temp_dir.rglob("*") if p.is_file()]
+    remaining_files.sort(key=lambda p: _rel_to_root(root, p).lower())
+    for src_path in remaining_files:
+        src_rel = _rel_to_root(root, src_path)
+        rel_parent = src_path.parent.relative_to(temp_dir)
+        dst_parent = dst_dir if rel_parent == Path(".") else dst_dir / rel_parent
+        try:
+            dst_parent.mkdir(parents=True, exist_ok=True)
+        except Exception as exc:
+            errors.append({"src": src_rel, "error": f"Cannot create destination folder: {exc}"})
+            logs.append(f"[move-all][error] {src_rel}: cannot create destination folder: {exc}")
+            continue
+        dst_path, renamed = _next_available_file(dst_parent, src_path.name)
+        try:
+            shutil.move(str(src_path), str(dst_path))
+        except Exception as exc:
+            errors.append({"src": src_rel, "error": str(exc)})
+            logs.append(f"[move-all][error] {src_rel}: {exc}")
+            continue
+        moved_other += 1
+        if src_path.suffix.lower() == ".txt":
+            moved_txt += 1
+        dst_rel_file = _rel_to_root(root, dst_path)
+        moved.append({"src": src_rel, "rel": dst_rel_file, "moved": True, "warnings": []})
+        logs.append(f"[move-all] moved file: {src_rel} -> {dst_rel_file}")
+        if renamed:
+            collisions.append(f"{src_rel} -> {dst_rel_file}")
+
+    _remove_empty_dirs(temp_dir, keep=temp_dir)
+    skipped = [_rel_to_root(root, p) for p in temp_dir.rglob("*") if p.is_file()]
+    logs.append(f"[move-all] images moved: {moved_images}")
+    logs.append(f"[move-all] txt moved: {moved_txt}")
+    logs.append(f"[move-all] other files moved: {moved_other}")
+    logs.append(f"[move-all] collisions/renamed: {len(collisions)}")
+    logs.append(f"[move-all] skipped files: {len(skipped)}")
+    logs.append(f"[move-all] errors: {len(errors)}")
+
+    return jsonify(
+        {
+            "ok": len(errors) == 0,
+            "moved": moved,
+            "errors": errors,
+            "collisions": collisions,
+            "skipped": skipped,
+            "destination": _rel_to_root(root, dst_dir),
+            "source_temp": str(temp_dir),
+            "moved_images": moved_images,
+            "moved_txt": moved_txt,
+            "moved_other": moved_other,
+            "logs": logs,
+            "normalized_root": str(paths["project_root"]),
+            "needs_init": False,
+            "warnings": [],
+            "info": [],
+        }
+    )
+
+
 @app.post("/api/tags/scan")
 def api_tags_scan():
     payload = request.get_json(silent=True) or {}
@@ -624,6 +805,10 @@ def api_tags_tag_remove():
     paths, error = _resolve_project_root_from_payload(payload)
     if error:
         return error
+    if area != "dataset":
+        rel_norm = rel.replace("\\", "/").lstrip("/")
+        if rel_norm.lower().startswith("_temp/"):
+            rel = rel_norm[6:]
     base_root = paths["temp_root"] if area != "dataset" else paths["dataset_root"]
     target = _resolve_rel_under(base_root, rel)
     if not target or not target.exists() or not target.is_file():
@@ -662,6 +847,10 @@ def api_tags_tag_add():
     paths, error = _resolve_project_root_from_payload(payload)
     if error:
         return error
+    if area != "dataset":
+        rel_norm = rel.replace("\\", "/").lstrip("/")
+        if rel_norm.lower().startswith("_temp/"):
+            rel = rel_norm[6:]
     base_root = paths["temp_root"] if area != "dataset" else paths["dataset_root"]
     target = _resolve_rel_under(base_root, rel)
     if not target or not target.exists() or not target.is_file():
@@ -704,6 +893,8 @@ def api_tags_cheatsheet():
         return error
     root = paths["project_root"]
     target = _resolve_rel_under(root, rel)
+    if (not target or not target.exists() or not target.is_file()) and paths["dataset_root"].exists():
+        target = _resolve_rel_under(paths["dataset_root"], rel)
     if not target or not target.exists() or not target.is_file():
         return _json_error("Cheat sheet file not found", 404, normalized_root=str(root))
     if target.suffix.lower() != ".txt":
@@ -718,10 +909,11 @@ def api_tags_cheatsheet():
     except Exception as exc:
         return _json_error(str(exc), 500, normalized_root=str(root))
     parsed = _parse_cheatsheet_content(content)
+    rel_out = rel.replace("\\", "/").lstrip("/")
     return jsonify(
         {
             "ok": True,
-            "rel": _rel_to_root(root, target),
+            "rel": rel_out or _rel_to_root(root, target),
             "content": content,
             "trigger": parsed.get("trigger") or "",
             "sections": parsed.get("sections") or [],

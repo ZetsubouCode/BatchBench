@@ -229,6 +229,28 @@ class TagEditorTransactionTests(unittest.TestCase):
             self.assertTrue(meta.get("ok"), msg=meta)
             self.assertEqual((temp / "sample.txt").read_text(encoding="utf-8").strip(), "cat")
 
+    def test_handle_requires_project_initialization_for_project_root_flow(self):
+        with tempfile.TemporaryDirectory() as td:
+            project = Path(td) / "project_init_guard"
+            dataset = project / "dataset"
+            temp = dataset / "_temp"
+            temp.mkdir(parents=True, exist_ok=True)
+            (temp / "sample.png").write_bytes(b"img")
+            (temp / "sample.txt").write_text("cat\n", encoding="utf-8")
+
+            _, _, meta = tag_editor.handle(
+                {
+                    "folder": str(project),
+                    "mode": "insert",
+                    "tags": "dog",
+                    "exts": ".png",
+                },
+                {},
+            )
+
+            self.assertFalse(meta.get("ok"), msg=meta)
+            self.assertIn("Project initialization required", (meta.get("error") or ""))
+
 
 if __name__ == "__main__":
     unittest.main()

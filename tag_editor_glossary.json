@@ -1,6 +1,7 @@
 {
   "version": 1,
   "categories": {
+    "Unsorted": [],
     "Armor": [
       "bracer",
       "breastplate",
@@ -27,6 +28,7 @@
       "warm_colored"
     ],
     "Lighting and Effects": [
+      "blank_censor",
       "bloom"
     ],
     "Manhwa and Manga": [
@@ -36,11 +38,13 @@
       "cover_page",
       "emphasis_lines",
       "halftone_background",
+      "motion_lines",
       "narration",
+      "projected_inset",
       "sound_effects",
-      "speech_bubble"
+      "speech_bubble",
+      "speed_lines"
     ],
-    "Unsorted": [],
     "bangs": [
       "wispy_bangs"
     ],
@@ -51,7 +55,17 @@
     "niche clothes": [
       "chest_sarashi",
       "loincloth"
+    ],
+    "sex": [
+      "fingering",
+      "full_nelson",
+      "grabbing_own_breast",
+      "hand_on_own_crotch",
+      "hand_under_clothes",
+      "hand_under_shirt",
+      "reverse_suspended_congress",
+      "spread_legs"
     ]
   },
-  "updated_at": 1773341349571
+  "updated_at": 1773484188328
 }

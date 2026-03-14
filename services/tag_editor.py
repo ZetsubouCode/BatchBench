@@ -1,8 +1,10 @@
 from collections import Counter, OrderedDict
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 import re
 import shutil
+import zipfile
 
 from utils.dataset import join_tags
 from utils.io import readable_path
@@ -194,6 +196,25 @@ def _copy_pair_with_txt(src_img: Path, dst_img: Path, dst_txt: Path, txt_content
         return False, str(exc)
 
 
+def _copy_image_only(src_img: Path, dst_img: Path) -> Tuple[bool, str]:
+    try:
+        shutil.copy2(src_img, dst_img)
+        return True, ""
+    except Exception as exc:
+        return False, str(exc)
+
+
+def _next_unique_file(path: Path) -> Tuple[Path, bool]:
+    if not path.exists():
+        return path, False
+    bump = 1
+    while True:
+        candidate = path.with_name(f"{path.stem}_{bump}{path.suffix}")
+        if not candidate.exists():
+            return candidate, True
+        bump += 1
+
+
 def _created_ts(path: Path) -> float:
     try:
         return float(path.stat().st_ctime)
@@ -251,6 +272,10 @@ def _clean_messages(*items: str) -> List[str]:
 
 def _is_image_file(path: Path, extset: Set[str]) -> bool:
     return path.is_file() and path.suffix.lower() in extset
+
+
+def _image_name_index(images: List[Path]) -> Set[str]:
+    return {img.name.lower() for img in images if img and img.is_file()}
 
 
 def resolve_project_paths(raw_folder: Path) -> Dict[str, Any]:
@@ -330,19 +355,41 @@ def inspect_project_layout(project_root: Path, exts: List[str]) -> Dict[str, Any
             elif path.is_file():
                 root_non_images += 1
 
+    database_images = _list_images(paths["database_root"], exts, recursive=True)
+    dataset_images = _list_images(paths["dataset_root"], exts, recursive=True, exclude_dir=paths["temp_root"])
+    database_names = _image_name_index(database_images)
+    dataset_names = _image_name_index(dataset_images)
+    missing_root_in_database = [img.name for img in root_images if img.name.lower() not in database_names]
+    missing_root_in_dataset = [img.name for img in root_images if img.name.lower() not in dataset_names]
+    dataset_missing_txt_files = [
+        img.relative_to(paths["dataset_root"]).with_suffix(".txt").as_posix()
+        for img in dataset_images
+        if not img.with_suffix(".txt").exists()
+    ]
+    dataset_missing_txt = len(dataset_missing_txt_files)
+    dataset_existing_txt = max(0, len(dataset_images) - dataset_missing_txt)
+
+    if missing_root_in_database:
+        missing.append(f"database(root images:{len(missing_root_in_database)})")
+    if missing_root_in_dataset:
+        missing.append(f"dataset(root images:{len(missing_root_in_dataset)})")
+    if dataset_missing_txt:
+        missing.append(f"dataset(txt pairs:{dataset_missing_txt})")
+
     trigger_word = extract_trigger_word(paths["prompt_path"])
     preview_examples: List[Dict[str, str]] = []
     conflict_count = 0
+    missing_database_name_index = {name.lower() for name in missing_root_in_database}
     for img in root_images:
+        if img.name.lower() not in missing_database_name_index:
+            continue
         if paths["database_root"].exists():
-            dst_img, dst_txt, _ = _next_pair_target(paths["database_root"], img.stem, img.suffix.lower())
-            if paths["database_root"].joinpath(img.name).exists() or paths["database_root"].joinpath(f"{img.stem}.txt").exists():
+            dst_img = paths["database_root"] / img.name
+            if paths["database_root"].joinpath(img.name).exists():
                 conflict_count += 1
-            preview_examples.append(
-                {"source": img.name, "image": dst_img.relative_to(root).as_posix(), "txt": dst_txt.relative_to(root).as_posix()}
-            )
+            preview_examples.append({"source": img.name, "image": dst_img.relative_to(root).as_posix()})
         else:
-            preview_examples.append({"source": img.name, "image": f"database/{img.name}", "txt": f"database/{img.stem}.txt"})
+            preview_examples.append({"source": img.name, "image": f"database/{img.name}"})
 
     ready = root.exists() and root.is_dir() and not missing
     warnings: List[str] = []
@@ -350,6 +397,8 @@ def inspect_project_layout(project_root: Path, exts: List[str]) -> Dict[str, Any
         warnings.append("No valid image extensions supplied; root-level image scan skipped.")
     if root.exists() and root.is_dir() and not root_images and not ready:
         warnings.append("No root-level source images detected for initialization preview.")
+    if dataset_missing_txt:
+        warnings.append(f"Dataset has {dataset_missing_txt} image(s) without paired .txt.")
     return {
         "ok": True,
         **_make_serializable_path_info(paths),
@@ -365,15 +414,24 @@ def inspect_project_layout(project_root: Path, exts: List[str]) -> Dict[str, Any
         "prompt_exists": prompt_exists,
         "root_image_count": len(root_images),
         "root_non_image_count": root_non_images,
+        "database_image_count": len(database_images),
+        "dataset_image_count": len(dataset_images),
         "root_images": [img.name for img in root_images[:20]],
+        "missing_root_in_database": missing_root_in_database[:50],
+        "missing_root_in_dataset": missing_root_in_dataset[:50],
+        "missing_dataset_txt": dataset_missing_txt_files[:100],
         "trigger_word": trigger_word,
         "trigger_detected": bool(trigger_word),
         "init_preview": {
             "create_dirs": [part for part in ["database", "dataset", "dataset/_temp"] if part in missing],
             "create_prompt": not prompt_exists,
             "root_images_found": len(root_images),
-            "copy_images": len(root_images),
-            "generate_txt": len(root_images),
+            "database_images_found": len(database_images),
+            "dataset_images_found": len(dataset_images),
+            "copy_images": len(missing_root_in_database),
+            "copy_dataset_images": len(missing_root_in_dataset),
+            "generate_txt": dataset_missing_txt + len(missing_root_in_dataset),
+            "existing_txt": dataset_existing_txt,
             "skip_images": 0,
             "conflict_rename": conflict_count,
             "examples": preview_examples[:5],
@@ -382,6 +440,12 @@ def inspect_project_layout(project_root: Path, exts: List[str]) -> Dict[str, Any
         "info": _clean_messages(
             f"Normalized legacy input to project root: {root}" if paths["normalized_from_legacy"] else "",
             f"Trigger word detected: {trigger_word}" if trigger_word else "",
+            (
+                f"Missing root images -> database: {len(missing_root_in_database)}, "
+                f"dataset: {len(missing_root_in_dataset)}"
+                if root_images
+                else ""
+            ),
         ),
     }
 
@@ -401,6 +465,7 @@ def initialize_project_layout(project_root: Path, exts: List[str], create_prompt
     errors: List[str] = []
     created_dirs: List[str] = []
     copied: List[Dict[str, str]] = []
+    copied_dataset: List[Dict[str, str]] = []
     generated_txt: List[str] = []
     skipped: List[str] = []
     renamed: List[Dict[str, str]] = []
@@ -430,23 +495,78 @@ def initialize_project_layout(project_root: Path, exts: List[str], create_prompt
                 errors.append(f"prompt.txt: {exc}")
 
     trigger_word = extract_trigger_word(paths["prompt_path"])
-    txt_content = trigger_word.strip()
     extset = _normalize_exts(exts)
     root_images = [path for path in sorted(root.iterdir(), key=lambda p: p.name.lower()) if _is_image_file(path, extset)]
+    txt_content = trigger_word.strip()
+
+    database_images_before = _list_images(paths["database_root"], exts, recursive=True)
+    database_name_index = _image_name_index(database_images_before)
+    dataset_images_before = _list_images(paths["dataset_root"], exts, recursive=True, exclude_dir=paths["temp_root"])
+    dataset_name_index = _image_name_index(dataset_images_before)
+
+    # Initialization ensures root-level source images exist in database/.
     for src_img in root_images:
-        dst_img, dst_txt, renamed_flag = _next_pair_target(paths["database_root"], src_img.stem, src_img.suffix.lower())
+        src_key = src_img.name.lower()
+        if src_key in database_name_index:
+            skipped.append(f"database/{src_img.name}: already exists")
+            logs.append(f"[skip] database/{src_img.name} already exists")
+            continue
+        dst_img = paths["database_root"] / src_img.name
+        renamed_flag = False
+        if dst_img.exists():
+            dst_img, renamed_flag = _next_unique_file(dst_img)
         if renamed_flag:
-            renamed.append({"source": src_img.name, "target": dst_img.name})
-            logs.append(f"[rename] {src_img.name} -> {dst_img.name}")
-        ok, error = _copy_pair_with_txt(src_img, dst_img, dst_txt, txt_content)
+            renamed.append({"source": src_img.name, "target": dst_img.name, "scope": "database"})
+            logs.append(f"[rename][database] {src_img.name} -> {dst_img.name}")
+        ok, error = _copy_image_only(src_img, dst_img)
         if not ok:
             errors.append(f"{src_img.name}: {error}")
             logs.append(f"[error] copy {src_img.name}: {error}")
             continue
+        database_name_index.add(dst_img.name.lower())
         copied.append({"source": src_img.name, "image": dst_img.name})
-        generated_txt.append(dst_txt.name)
         logs.append(f"[copy] {src_img.name} -> database/{dst_img.name}")
-        logs.append(f"[txt] database/{dst_txt.name}" + (f" (trigger: {trigger_word})" if trigger_word else " (empty)"))
+
+    # Initialization also ensures root-level source images exist in dataset/.
+    for src_img in root_images:
+        src_key = src_img.name.lower()
+        if src_key in dataset_name_index:
+            skipped.append(f"dataset/{src_img.name}: image already exists")
+            logs.append(f"[skip] dataset/{src_img.name} image already exists")
+            continue
+        dst_img = paths["dataset_root"] / src_img.name
+        renamed_flag = False
+        if dst_img.exists():
+            dst_img, renamed_flag = _next_unique_file(dst_img)
+        if renamed_flag:
+            renamed.append({"source": src_img.name, "target": dst_img.name, "scope": "dataset"})
+            logs.append(f"[rename][dataset] {src_img.name} -> {dst_img.name}")
+        ok, error = _copy_image_only(src_img, dst_img)
+        if not ok:
+            errors.append(f"dataset/{src_img.name}: {error}")
+            logs.append(f"[error] copy dataset/{src_img.name}: {error}")
+            continue
+        dataset_name_index.add(dst_img.name.lower())
+        rel_img = dst_img.relative_to(paths["dataset_root"]).as_posix()
+        copied_dataset.append({"source": src_img.name, "image": rel_img})
+        logs.append(f"[copy] {src_img.name} -> dataset/{rel_img}")
+
+    # Captions are generated for dataset images (excluding _temp).
+    dataset_images = _list_images(paths["dataset_root"], exts, recursive=True, exclude_dir=paths["temp_root"])
+    for img in dataset_images:
+        txt_path = img.with_suffix(".txt")
+        rel_txt = txt_path.relative_to(paths["dataset_root"]).as_posix()
+        if txt_path.exists():
+            skipped.append(f"dataset/{rel_txt}: already exists")
+            logs.append(f"[skip] dataset/{rel_txt} already exists")
+            continue
+        try:
+            txt_path.write_text(txt_content, encoding="utf-8")
+            generated_txt.append(rel_txt)
+            logs.append(f"[txt] dataset/{rel_txt}" + (f" (trigger: {trigger_word})" if trigger_word else " (empty)"))
+        except Exception as exc:
+            errors.append(f"dataset/{rel_txt}: {exc}")
+            logs.append(f"[error] txt dataset/{rel_txt}: {exc}")
 
     return {
         "ok": len(errors) == 0,
@@ -454,6 +574,7 @@ def initialize_project_layout(project_root: Path, exts: List[str], create_prompt
         "trigger_word": trigger_word,
         "created_dirs": created_dirs,
         "copied": copied,
+        "copied_dataset": copied_dataset,
         "generated_txt": generated_txt,
         "skipped": skipped,
         "renamed": renamed,
@@ -465,12 +586,66 @@ def initialize_project_layout(project_root: Path, exts: List[str], create_prompt
         "logs": logs,
         "summary": {
             "created_dirs": len(created_dirs),
-            "copied_images": len(copied),
+            "copied_images": len(copied) + len(copied_dataset),
+            "copied_database_images": len(copied),
+            "copied_dataset_images": len(copied_dataset),
             "generated_txt": len(generated_txt),
             "skipped": len(skipped),
             "renamed": len(renamed),
             "errors": len(errors),
         },
+    }
+
+
+def export_dataset_zip(project_root: Path) -> Dict[str, Any]:
+    paths = resolve_project_paths(project_root)
+    dataset_root = paths["dataset_root"]
+    if not dataset_root.exists() or not dataset_root.is_dir():
+        return {"ok": False, "error": f"Dataset folder not found: {dataset_root}", **_make_serializable_path_info(paths)}
+
+    parent_dir = dataset_root.parent
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    zip_path, renamed = _next_unique_file(parent_dir / f"{dataset_root.name}__{stamp}.zip")
+    zipped = 0
+    excluded_temp = 0
+    logs: List[str] = [
+        f"[zip] source dataset: {dataset_root}",
+        f"[zip] output zip: {zip_path}",
+        "[zip] exclude rule: dataset/_temp/**",
+    ]
+
+    try:
+        with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            for path in sorted(dataset_root.rglob("*"), key=lambda p: str(p).lower()):
+                if not path.is_file():
+                    continue
+                rel = path.relative_to(dataset_root)
+                rel_parts = [part.lower() for part in rel.parts]
+                if rel_parts and rel_parts[0] == "_temp":
+                    excluded_temp += 1
+                    continue
+                zf.write(path, rel.as_posix())
+                zipped += 1
+    except Exception as exc:
+        try:
+            if zip_path.exists():
+                zip_path.unlink()
+        except Exception:
+            pass
+        return {"ok": False, "error": f"Dataset zip failed: {exc}", **_make_serializable_path_info(paths)}
+
+    if renamed:
+        logs.append(f"[zip] output renamed to avoid collision: {zip_path.name}")
+    logs.append(f"[zip] files added: {zipped}")
+    logs.append(f"[zip] files excluded from _temp: {excluded_temp}")
+    return {
+        "ok": True,
+        **_make_serializable_path_info(paths),
+        "zip_path": str(zip_path),
+        "zip_name": zip_path.name,
+        "files_zipped": zipped,
+        "excluded_temp_files": excluded_temp,
+        "logs": logs,
     }
 
 
@@ -713,6 +888,7 @@ def handle(form, ctx):
     paths = resolve_project_paths(raw_folder)
     dataset_root = paths["dataset_root"]
     temp_folder = paths["temp_root"]
+    compatibility_mode = False
     if (not dataset_root.exists() or not dataset_root.is_dir()) and raw_folder.exists() and raw_folder.is_dir():
         direct_dataset = None
         direct_temp = None
@@ -725,6 +901,7 @@ def handle(form, ctx):
         if direct_dataset and direct_temp:
             dataset_root = direct_dataset
             temp_folder = direct_temp
+            compatibility_mode = True
             lines.append(f"Compatibility mode: treating {raw_folder} as dataset root.")
     if not dataset_root.exists() or not dataset_root.is_dir():
         lines.append(f"Dataset folder not found: {dataset_root}")
@@ -732,6 +909,17 @@ def handle(form, ctx):
     if not temp_folder.exists() or not temp_folder.is_dir():
         lines.append(f"Temp folder not found: {temp_folder}")
         return _done(False, f"Temp folder not found: {temp_folder}")
+    if (not compatibility_mode) and (not paths.get("normalized_from_legacy")):
+        project_state = inspect_project_layout(paths["project_root"], exts)
+        if not project_state.get("ok"):
+            error = project_state.get("error") or "Project setup validation failed."
+            lines.append(error)
+            return _done(False, error)
+        if not project_state.get("ready"):
+            missing_items = project_state.get("missing") or []
+            missing_msg = ", ".join(missing_items) if missing_items else "project setup incomplete"
+            lines.append(f"Project initialization required: {missing_msg}")
+            return _done(False, "Project initialization required. Use Initialize Project first.")
 
     def _parse_tag_input(raw: str) -> List[str]:
         out: List[str] = []

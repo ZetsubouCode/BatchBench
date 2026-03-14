@@ -230,17 +230,47 @@
   .left-drawer .gallery-cheatsheet-sections { max-height:360px; }
   .left-drawer .gallery-cheatsheet-tags { max-height:220px; }
   .left-drawer .gallery-cheatsheet-content { font-size:.9rem; line-height:1.5; max-height:280px; padding:.7rem .75rem; }
-  .gallery-modal-img { max-width:100%; max-height:70vh; transform-origin:center; transition:transform .15s ease; }
+  .gallery-modal-img {
+    max-width:100%;
+    max-height:70vh;
+    transform-origin:center;
+    transform:translate3d(0, 0, 0) scale(1);
+    border-radius:.55rem;
+    cursor:zoom-in;
+    will-change:transform;
+    transition:transform .12s ease, box-shadow .12s ease, filter .12s ease;
+  }
   .gallery-modal-nav { display:flex; align-items:center; justify-content:space-between; gap:.75rem; margin-bottom:.55rem; }
   .gallery-modal-index { font-size:.8rem; color:var(--bb-muted); min-width:5.5rem; text-align:center; }
   .gallery-modal-error { font-size:.78rem; color:#ffc6ce; min-height:1.1rem; text-align:center; }
   .gallery-modal-stage { position:relative; display:flex; align-items:center; justify-content:center; min-height:72vh; border:1px solid var(--bb-border); border-radius:.75rem; background:rgba(7,13,24,.9); overflow:hidden; }
-  .gallery-modal-stage-inner { display:flex; justify-content:center; align-items:center; width:100%; padding:1.5rem 4.5rem; }
+  .gallery-modal-stage.is-selected { border-color:#88c8ff; box-shadow:0 0 0 2px rgba(136,200,255,.65), 0 0 28px rgba(82,162,255,.32); }
+  .gallery-modal-stage.is-selected::after { content:""; position:absolute; inset:0; border-radius:.75rem; pointer-events:none; box-shadow:inset 0 0 0 2px rgba(136,200,255,.65); }
+  .gallery-modal-stage-inner { display:flex; justify-content:center; align-items:center; width:100%; padding:1.5rem 4.5rem; cursor:default; touch-action:none; user-select:none; }
+  .gallery-modal-stage-inner.is-pannable { cursor:grab; }
+  .gallery-modal-stage-inner.is-panning { cursor:grabbing; }
+  .gallery-modal-img.is-selected { box-shadow:0 0 0 3px rgba(136,200,255,.7), 0 0 38px rgba(95,174,255,.38); filter:saturate(1.05); }
   .gallery-modal-arrow { position:absolute; top:50%; transform:translateY(-50%); width:56px; height:56px; border-radius:999px; border:1px solid rgba(255,255,255,.14); background:rgba(10,18,32,.88); color:#f5fbff; display:flex; align-items:center; justify-content:center; font-size:2rem; line-height:1; z-index:2; box-shadow:0 10px 28px rgba(0,0,0,.35); }
   .gallery-modal-arrow:hover { background:rgba(18,30,56,.95); border-color:rgba(127,215,255,.5); }
   .gallery-modal-arrow:disabled { opacity:.35; cursor:not-allowed; }
   .gallery-modal-arrow.is-prev { left:1rem; }
   .gallery-modal-arrow.is-next { right:1rem; }
+  .gallery-preview-selected-badge {
+    position:absolute;
+    top:1rem;
+    right:1rem;
+    z-index:3;
+    font-size:.68rem;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    font-weight:700;
+    color:#eaf5ff;
+    border:1px solid #88c8ff;
+    border-radius:999px;
+    padding:.25rem .55rem;
+    background:rgba(20,54,90,.92);
+    box-shadow:0 6px 16px rgba(0,0,0,.35);
+  }
   .gallery-modal-select { min-width:120px; }
   .gallery-modal-select.is-selected { border-color:#7aa2ff; color:#eaf3ff; background:#1b2b4a; }
   .gallery-modal-shortcut { font-size:.74rem; color:var(--bb-muted); }
@@ -397,8 +427,8 @@
         <label class="form-label">Project Root</label>
         <div class="input-group">
           <input id="folder_tags" name="folder" type="text" class="form-control" data-root-sync="1"
-                 placeholder="H:\_Training DATA\No mans land\unnamed B" data-bs-toggle="tooltip"
-                 data-bs-title="Project root that contains database/, dataset/, dataset/_temp, and prompt.txt">
+                 placeholder="Paste image folder path (this becomes Project Root)" data-bs-toggle="tooltip"
+                 data-bs-title="Paste the source image folder path. The app uses it as project root and checks database/, dataset/, dataset/_temp, and prompt.txt.">
           <button class="btn btn-outline-light btn-browse" type="button" data-target="folder_tags"
                   data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
         </div>
@@ -642,6 +672,10 @@
         </div>
         <div class="sidebar-runbar">
           <button class="btn btn-primary" id="btn-run" type="submit" form="tags-form">Run</button>
+          <button type="button" class="btn btn-outline-info" id="btn-dataset-zip"
+                  data-bs-toggle="tooltip" data-bs-title="Zip dataset/ to project root (exclude dataset/_temp)">
+            Zip Dataset
+          </button>
           <button type="button" class="btn btn-outline-warning d-none" id="btn-undo"
                   data-bs-toggle="tooltip" data-bs-title="Restore files from dataset/_temp back to dataset/">â†¶</button>
           <button type="button" class="btn btn-outline-secondary" id="btn-clear"
@@ -688,6 +722,9 @@
         </div>
         <button type="button" class="btn btn-sm btn-warning mt-2 w-100" id="workdir-send-selected">
           Send selected dataset items to _temp
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-info mt-2 w-100" id="workdir-move-all-temp">
+          Move all from _temp to new folder
         </button>
         <button type="button" class="btn btn-sm btn-outline-warning mt-2 w-100" id="workdir-return-temp">
           Return all files from subfolders to dataset root
@@ -741,9 +778,10 @@
           <button type="button" class="btn btn-sm btn-outline-light gallery-modal-select" id="gallery-preview-select">Select</button>
           <span class="gallery-modal-shortcut">Shortcuts: <span class="code-chip">Space</span> select, <span class="code-chip">A</span>/<span class="code-chip">D</span> navigate</span>
         </div>
-        <div class="gallery-modal-stage">
+        <div class="gallery-modal-stage" id="gallery-preview-stage">
           <button type="button" class="gallery-modal-arrow is-prev" id="gallery-preview-prev" aria-label="Previous image">&#8249;</button>
-          <div class="gallery-modal-stage-inner">
+          <div class="gallery-preview-selected-badge d-none" id="gallery-preview-selected-badge">Selected</div>
+          <div class="gallery-modal-stage-inner" id="gallery-preview-stage-inner">
             <img id="gallery-preview-img" class="gallery-modal-img" src="" alt="">
           </div>
           <button type="button" class="gallery-modal-arrow is-next" id="gallery-preview-next" aria-label="Next image">&#8250;</button>
@@ -971,6 +1009,9 @@
     gridCols: 'gallery-grid-cols',
     modal: 'galleryPreviewModal',
     modalImg: 'gallery-preview-img',
+    modalStage: 'gallery-preview-stage',
+    modalStageInner: 'gallery-preview-stage-inner',
+    modalSelectedBadge: 'gallery-preview-selected-badge',
     modalName: 'gallery-preview-name',
     modalTags: 'gallery-preview-tags',
     modalError: 'gallery-preview-error',
@@ -1006,6 +1047,7 @@
     rootDrop: 'workdir-root-drop',
     tempDrop: 'workdir-temp-drop',
     sendSelected: 'workdir-send-selected',
+    moveAllTemp: 'workdir-move-all-temp',
     returnTemp: 'workdir-return-temp'
   };
   const LEFT = {
@@ -1073,6 +1115,12 @@
     cheatsheetTags: [],
     cheatsheetContent: '',
     previewSource: 'dataset',
+    panX: 0,
+    panY: 0,
+    panPointerId: null,
+    panStartX: 0,
+    panStartY: 0,
+    isPanning: false,
     selectionAnchorRel: '',
     marqueeActive: false,
     marqueeStartX: 0,
@@ -1829,6 +1877,7 @@
     editorPanel.querySelector('#btn-undo')?.remove();
     const runBar = editorPanel.querySelector('.sidebar-runbar');
     const runBtn = editorPanel.querySelector('#btn-run');
+    const zipBtn = editorPanel.querySelector('#btn-dataset-zip');
     const clearBtn = editorPanel.querySelector('#btn-clear');
     const backupWrap = editorPanel.querySelector('#backup')?.closest('.form-check');
     if (runBtn && clearBtn && backupWrap){
@@ -1843,7 +1892,11 @@
         inlineActions.className = 'composer-inline-actions';
         inlineTools.appendChild(inlineActions);
       }
-      inlineActions.append(runBtn, clearBtn);
+      if (zipBtn){
+        inlineActions.append(runBtn, zipBtn, clearBtn);
+      } else {
+        inlineActions.append(runBtn, clearBtn);
+      }
       backupWrap.classList.remove('mt-2');
       backupWrap.classList.add('composer-inline-backup');
       inlineTools.appendChild(backupWrap);
@@ -1935,9 +1988,9 @@
     let compactText = 'Project root not checked yet.';
     if (!getProjectRootInput()){
       summaryText = 'Project root not set.';
-      compactText = 'Set a project root to begin.';
+      compactText = 'Paste the source image folder path to begin.';
     } else if (projectState.ready){
-      summaryText = 'Ready: database/, dataset/, dataset/_temp, and prompt.txt detected.';
+      summaryText = 'Ready: required folders/files, mirrored images, and dataset .txt pairs are complete.';
       compactText = 'Workspace ready. Open this panel only when you need to change paths or re-check structure.';
     } else if (projectState.needsInit){
       summaryText = missingItems.length
@@ -1956,7 +2009,8 @@
     if (!projectState.ready && preview){
       const previewParts = [];
       if ((preview.create_dirs || []).length) previewParts.push(`create ${(preview.create_dirs || []).join(', ')}`);
-      if ((preview.copy_images || 0) > 0) previewParts.push(`copy ${preview.copy_images} root image(s)`);
+      if ((preview.copy_images || 0) > 0) previewParts.push(`copy ${preview.copy_images} image(s) to database`);
+      if ((preview.copy_dataset_images || 0) > 0) previewParts.push(`copy ${preview.copy_dataset_images} image(s) to dataset`);
       if ((preview.generate_txt || 0) > 0) previewParts.push(`generate ${preview.generate_txt} txt file(s)`);
       if ((preview.conflict_rename || 0) > 0) previewParts.push(`${preview.conflict_rename} rename conflict(s)`);
       if (previewParts.length) noteParts.push(`Init will ${previewParts.join(', ')}.`);
@@ -1990,7 +2044,8 @@
     const cueItems = [];
     missingItems.forEach(item=> cueItems.push({ label: `Missing ${item}`, tone: 'is-missing' }));
     (preview?.create_dirs || []).forEach(item=> cueItems.push({ label: `Will create ${item}`, tone: 'is-warning' }));
-    if ((preview?.copy_images || 0) > 0) cueItems.push({ label: `Copy ${preview.copy_images} root image(s)`, tone: 'is-warning' });
+    if ((preview?.copy_images || 0) > 0) cueItems.push({ label: `Copy ${preview.copy_images} image(s) to database`, tone: 'is-warning' });
+    if ((preview?.copy_dataset_images || 0) > 0) cueItems.push({ label: `Copy ${preview.copy_dataset_images} image(s) to dataset`, tone: 'is-warning' });
     if ((preview?.generate_txt || 0) > 0) cueItems.push({ label: `Generate ${preview.generate_txt} txt`, tone: 'is-warning' });
     if ((preview?.conflict_rename || 0) > 0) cueItems.push({ label: `${preview.conflict_rename} rename conflict(s)`, tone: 'is-warning' });
     if (!getProjectRootInput() && !cueItems.length) cueItems.push({ label: 'Set project root first', tone: 'is-warning' });
@@ -2005,7 +2060,7 @@
     if (planWrap && plan){
       if (preview && projectState.needsInit){
         planWrap.classList.remove('d-none');
-        plan.textContent = `Init preview: ${preview.root_images_found || 0} root image(s), ${preview.copy_images || 0} copy, ${preview.generate_txt || 0} txt, ${preview.conflict_rename || 0} rename conflict(s), ${preview.skip_images || 0} skipped.`;
+        plan.textContent = `Init preview: ${preview.root_images_found || 0} root image(s), ${preview.copy_images || 0} copy to database, ${preview.copy_dataset_images || 0} copy to dataset, ${preview.generate_txt || 0} txt, ${preview.conflict_rename || 0} rename conflict(s), ${preview.skip_images || 0} skipped.`;
       } else {
         planWrap.classList.add('d-none');
         plan.textContent = '';
@@ -2107,7 +2162,7 @@
     if (preview && preview.ready) return;
     const initPreview = preview?.init_preview || {};
     const confirmed = await showConfirm(
-      `Initialize project root? Create dirs: ${(initPreview.create_dirs || []).join(', ') || 'none'} | Copy images: ${initPreview.copy_images || 0} | Generate txt: ${initPreview.generate_txt || 0} | Rename conflicts: ${initPreview.conflict_rename || 0}`,
+      `Initialize project root? Create dirs: ${(initPreview.create_dirs || []).join(', ') || 'none'} | Copy to database: ${initPreview.copy_images || 0} | Copy to dataset: ${initPreview.copy_dataset_images || 0} | Generate txt: ${initPreview.generate_txt || 0} | Rename conflicts: ${initPreview.conflict_rename || 0}`,
       'Initialize Project'
     );
     if (!confirmed) return;
@@ -3029,6 +3084,20 @@
     return getPreviewItems().find(item => item.rel === rel) || null;
   }
 
+  function syncGalleryPreviewSelectionState(item){
+    const stage = get(GALLERY.modalStage);
+    const img = get(GALLERY.modalImg);
+    const badge = get(GALLERY.modalSelectedBadge);
+    const selectable = galleryState.previewSource !== 'temp';
+    const selected = !!(selectable && item && galleryState.selected?.has(item.rel || ''));
+    if (stage) stage.classList.toggle('is-selected', selected);
+    if (img) img.classList.toggle('is-selected', selected);
+    if (badge){
+      badge.classList.toggle('d-none', !selected);
+      badge.textContent = selected ? 'Selected' : '';
+    }
+  }
+
   function renderGalleryModalSelectButton(item){
     const btn = get(GALLERY.modalSelect);
     if (!btn) return;
@@ -3038,6 +3107,7 @@
     btn.textContent = selectable ? (isSelected ? 'Deselect' : 'Select') : 'Preview only';
     btn.classList.toggle('is-selected', isSelected);
     btn.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+    syncGalleryPreviewSelectionState(item);
   }
 
   function toggleCurrentPreviewSelection(){
@@ -3370,14 +3440,114 @@
     }
   }
 
-  function setGalleryZoom(value){
+  function computeGalleryPanBounds(){
+    const img = get(GALLERY.modalImg);
+    const stageInner = get(GALLERY.modalStageInner);
+    if (!img || !stageInner){
+      return { maxX: 0, maxY: 0 };
+    }
+    const baseWidth = img.clientWidth || 0;
+    const baseHeight = img.clientHeight || 0;
+    const viewWidth = stageInner.clientWidth || 0;
+    const viewHeight = stageInner.clientHeight || 0;
+    if (baseWidth <= 0 || baseHeight <= 0 || viewWidth <= 0 || viewHeight <= 0){
+      return { maxX: 0, maxY: 0 };
+    }
+    const scaledWidth = baseWidth * galleryState.zoom;
+    const scaledHeight = baseHeight * galleryState.zoom;
+    return {
+      maxX: Math.max(0, (scaledWidth - viewWidth) / 2),
+      maxY: Math.max(0, (scaledHeight - viewHeight) / 2)
+    };
+  }
+
+  function applyGalleryZoomPan(){
+    const img = get(GALLERY.modalImg);
+    const stage = get(GALLERY.modalStage);
+    const stageInner = get(GALLERY.modalStageInner);
+    if (!img) return;
+    const { maxX, maxY } = computeGalleryPanBounds();
+    galleryState.panX = Math.max(-maxX, Math.min(maxX, galleryState.panX || 0));
+    galleryState.panY = Math.max(-maxY, Math.min(maxY, galleryState.panY || 0));
+    if (galleryState.zoom <= 1){
+      galleryState.panX = 0;
+      galleryState.panY = 0;
+    }
+    img.style.transform = `translate3d(${galleryState.panX}px, ${galleryState.panY}px, 0) scale(${galleryState.zoom})`;
+    const label = get(GALLERY.zoomLabel);
+    if (label) label.textContent = `${Math.round(galleryState.zoom * 100)}%`;
+    const pannable = galleryState.zoom > 1.001;
+    if (stage) stage.classList.toggle('is-zoomed', pannable);
+    if (stageInner){
+      stageInner.classList.toggle('is-pannable', pannable);
+      stageInner.classList.toggle('is-panning', !!galleryState.isPanning);
+    }
+    img.style.cursor = pannable ? (galleryState.isPanning ? 'grabbing' : 'grab') : 'zoom-in';
+  }
+
+  function setGalleryZoom(value, options={}){
     const img = get(GALLERY.modalImg);
     if (!img) return;
     const next = Math.max(0.2, Math.min(5, value));
     galleryState.zoom = next;
-    img.style.transform = `scale(${next})`;
-    const label = get(GALLERY.zoomLabel);
-    if (label) label.textContent = `${Math.round(next * 100)}%`;
+    if (options.resetPan || next <= 1.001){
+      galleryState.panX = 0;
+      galleryState.panY = 0;
+      galleryState.isPanning = false;
+      galleryState.panPointerId = null;
+    }
+    applyGalleryZoomPan();
+  }
+
+  function resetGalleryZoomPan(){
+    galleryState.zoom = 1;
+    galleryState.panX = 0;
+    galleryState.panY = 0;
+    galleryState.isPanning = false;
+    galleryState.panPointerId = null;
+    applyGalleryZoomPan();
+  }
+
+  function startGalleryPan(event){
+    if (galleryState.zoom <= 1.001) return;
+    const stageInner = get(GALLERY.modalStageInner);
+    if (!stageInner) return;
+    if (typeof event.button === 'number' && event.button !== 0) return;
+    galleryState.isPanning = true;
+    galleryState.panPointerId = event.pointerId;
+    galleryState.panStartX = event.clientX - (galleryState.panX || 0);
+    galleryState.panStartY = event.clientY - (galleryState.panY || 0);
+    stageInner.classList.add('is-panning');
+    try {
+      stageInner.setPointerCapture(event.pointerId);
+    } catch (_err) {}
+    event.preventDefault();
+  }
+
+  function moveGalleryPan(event){
+    if (!galleryState.isPanning) return;
+    if (galleryState.panPointerId != null && event.pointerId !== galleryState.panPointerId) return;
+    galleryState.panX = event.clientX - galleryState.panStartX;
+    galleryState.panY = event.clientY - galleryState.panStartY;
+    applyGalleryZoomPan();
+    event.preventDefault();
+  }
+
+  function stopGalleryPan(event){
+    if (!galleryState.isPanning) return;
+    if (galleryState.panPointerId != null && event && event.pointerId !== galleryState.panPointerId) return;
+    const stageInner = get(GALLERY.modalStageInner);
+    galleryState.isPanning = false;
+    if (stageInner){
+      stageInner.classList.remove('is-panning');
+      if (galleryState.panPointerId != null){
+        try {
+          stageInner.releasePointerCapture(galleryState.panPointerId);
+        } catch (_err) {}
+      }
+    }
+    galleryState.panPointerId = null;
+    applyGalleryZoomPan();
   }
 
   function setGalleryPreviewError(message){
@@ -3448,6 +3618,7 @@
       setGalleryManualControlsEnabled(false);
       renderGalleryGlossaryQuick();
       renderGalleryModalSelectButton(null);
+      resetGalleryZoomPan();
       return;
     }
 
@@ -3462,7 +3633,10 @@
       img.dataset.previewKey = previewKey;
     }
     img.alt = item.name || item.rel || 'image';
-    img.onload = ()=> setGalleryPreviewError('');
+    img.onload = ()=>{
+      setGalleryPreviewError('');
+      applyGalleryZoomPan();
+    };
     img.onerror = ()=> setGalleryPreviewError(`Failed to load preview: ${item.rel || item.name || 'file'}`);
     if (title) title.textContent = `Image preview (${index + 1}/${total})`;
     name.textContent = item.rel || item.name || '';
@@ -3501,6 +3675,7 @@
       }
     };
     fillGalleryTags(tags, item.tags || [], item.has_txt, 0, ctx);
+    applyGalleryZoomPan();
   }
 
   function openGalleryPreviewByRel(rel, source='dataset'){
@@ -3508,7 +3683,7 @@
     galleryState.previewSource = source === 'temp' ? 'temp' : 'dataset';
     galleryState.previewRel = rel;
     renderGalleryPreviewModal(rel);
-    setGalleryZoom(1);
+    resetGalleryZoomPan();
     const modal = ensureGalleryPreviewModal();
     modal?.show();
   }
@@ -3568,7 +3743,7 @@
     galleryState.previewIndex = next;
     galleryState.previewRel = items[next]?.rel || '';
     renderGalleryPreviewModal();
-    setGalleryZoom(1);
+    resetGalleryZoomPan();
   }
 
   function getWorkdirRoot(){
@@ -4139,6 +4314,89 @@
     await loadGallery();
     await loadWorkdirRoot();
     await scanTagViz();
+  }
+
+  async function moveAllFromTempToNewFolder(){
+    const root = getResolvedProjectRoot();
+    if (!root){
+      setWorkdirStatus('Project root not set.');
+      return;
+    }
+    const ok = await showConfirm(
+      'Move all files from dataset/_temp into a new timestamped folder under dataset/?',
+      'Move all from _temp'
+    );
+    if (!ok) return;
+    setFormBusy(true);
+    setWorkdirStatus('Moving all files from _temp...');
+    try{
+      const res = await fetch('/api/tags/temp-move-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folder: root, exts: get(IDS.exts)?.value || '' })
+      });
+      let data = null;
+      try{ data = await res.json(); }catch(_){}
+      if (!res.ok || !data){
+        const err = (data && data.error) ? data.error : `HTTP ${res.status}`;
+        setWorkdirStatus(`Move all failed: ${err}`);
+        return;
+      }
+      (data.logs || []).forEach(line => appendTagsLog(line));
+      const movedItems = Array.isArray(data.moved) ? data.moved : [];
+      const errors = Array.isArray(data.errors) ? data.errors : [];
+      removeGallerySelection(movedItems.map(item => item.src).filter(Boolean));
+      if (errors.length){
+        setWorkdirStatus(
+          movedItems.length
+            ? `Moved ${movedItems.length} item(s) to ${data.destination || '(new folder)'}, with ${errors.length} error(s).`
+            : `Move all failed: ${errors[0]?.error || 'Unknown error'}`
+        );
+      } else {
+        setWorkdirStatus(`Moved ${movedItems.length} item(s) to ${data.destination || '(new folder)'}.`);
+      }
+      await loadGallery();
+      await loadWorkdirRoot();
+      await scanTagViz();
+    } catch (err) {
+      console.error(err);
+      setWorkdirStatus(`Move all failed: ${err && err.message ? err.message : 'Unknown error'}`);
+    } finally {
+      setFormBusy(false);
+    }
+  }
+
+  async function zipDatasetFolder(){
+    const root = getResolvedProjectRoot();
+    if (!root){
+      showStatus('Project root not set.');
+      return;
+    }
+    setFormBusy(true);
+    showStatus('Creating dataset zip...');
+    try{
+      const res = await fetch('/api/tags/dataset-zip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folder: root })
+      });
+      let data = null;
+      try{ data = await res.json(); }catch(_){}
+      if (!res.ok || !data || !data.ok){
+        const err = (data && data.error) ? data.error : `HTTP ${res.status}`;
+        showStatus(`Zip failed: ${err}`);
+        return;
+      }
+      (data.logs || []).forEach(line => appendTagsLog(line));
+      const zipName = data.zip_name || data.zip_path || 'dataset zip';
+      showStatus(`Zip created: ${zipName}`);
+      setWorkdirStatus(`Dataset zip ready: ${zipName}`);
+    } catch (err) {
+      console.error(err);
+      showStatus(`Zip failed: ${err && err.message ? err.message : 'Unknown error'}`);
+    } finally {
+      setFormBusy(false);
+    }
   }
 
   function bindWorkdirQuickDrop(elementId, dstRel){
@@ -5499,9 +5757,13 @@
   function setFormBusy(isBusy){
     formBusy = !!isBusy;
     const runBtn = get('btn-run');
+    const zipBtn = get('btn-dataset-zip');
     const clearBtn = get('btn-clear');
+    const moveAllBtn = get(WORKDIR.moveAllTemp);
     if (runBtn) runBtn.disabled = formBusy;
+    if (zipBtn) zipBtn.disabled = formBusy;
     if (clearBtn) clearBtn.disabled = formBusy;
+    if (moveAllBtn) moveAllBtn.disabled = formBusy;
   }
   function showLog(text){
     const wrap = get(IDS.logWrap), pre = get(IDS.logPre);
@@ -5838,6 +6100,7 @@
     get(PROJECT.refresh)?.addEventListener('click', async ()=>{ await loadProjectState({ silent: false }); await loadGallery(); await loadWorkdirRoot(); await scanTagViz(); });
     get(PROJECT.initPreview)?.addEventListener('click', previewProjectInit);
     get(GALLERY.refresh)?.addEventListener('click', loadGallery);
+    get('btn-dataset-zip')?.addEventListener('click', zipDatasetFolder);
     get(WORKDIR.sendSelected)?.addEventListener('click', sendSelectedGalleryItemsToTemp);
     get(GALLERY.loadMore)?.addEventListener('click', ()=>{
       const total = (galleryState.items || []).length;
@@ -5886,7 +6149,7 @@
     });
     get(GALLERY.zoomIn)?.addEventListener('click', ()=> setGalleryZoom(galleryState.zoom + 0.2));
     get(GALLERY.zoomOut)?.addEventListener('click', ()=> setGalleryZoom(galleryState.zoom - 0.2));
-    get(GALLERY.zoomReset)?.addEventListener('click', ()=> setGalleryZoom(1));
+    get(GALLERY.zoomReset)?.addEventListener('click', resetGalleryZoomPan);
     get(GALLERY.modalSelect)?.addEventListener('click', toggleCurrentPreviewSelection);
     get(GALLERY.modalAddBtn)?.addEventListener('click', handleGalleryManualAdd);
     get(GALLERY.modalAddInput)?.addEventListener('keydown', (e)=>{
@@ -5910,17 +6173,28 @@
     get(GALLERY.modalGlossaryOpen)?.addEventListener('click', ()=> openDanbooruOffcanvas('glossary', true));
     get(GALLERY.modalPrev)?.addEventListener('click', ()=> stepGalleryPreview(-1));
     get(GALLERY.modalNext)?.addEventListener('click', ()=> stepGalleryPreview(1));
-    get(GALLERY.modalImg)?.addEventListener('wheel', (e)=>{
+    get(GALLERY.modalStageInner)?.addEventListener('wheel', (e)=>{
       e.preventDefault();
       const delta = e.deltaY < 0 ? 0.15 : -0.15;
       setGalleryZoom(galleryState.zoom + delta);
     }, { passive: false });
+    get(GALLERY.modalStageInner)?.addEventListener('pointerdown', startGalleryPan);
+    get(GALLERY.modalStageInner)?.addEventListener('pointermove', moveGalleryPan);
+    get(GALLERY.modalStageInner)?.addEventListener('pointerup', stopGalleryPan);
+    get(GALLERY.modalStageInner)?.addEventListener('pointercancel', stopGalleryPan);
+    get(GALLERY.modalStageInner)?.addEventListener('lostpointercapture', stopGalleryPan);
     get(GALLERY.modal)?.addEventListener('hidden.bs.modal', ()=>{
       setGalleryPreviewError('');
       setGalleryManualStatus('');
       galleryState.previewRel = '';
       galleryState.previewIndex = -1;
       galleryState.previewSource = 'dataset';
+      resetGalleryZoomPan();
+    });
+    window.addEventListener('resize', ()=>{
+      if (isGalleryPreviewOpen()){
+        applyGalleryZoomPan();
+      }
     });
     document.addEventListener('keydown', (e)=>{
       const target = e.target;
@@ -5996,6 +6270,7 @@
     });
     bindWorkdirQuickDrop(WORKDIR.rootDrop, '');
     bindWorkdirQuickDrop(WORKDIR.tempDrop, '_temp');
+    get(WORKDIR.moveAllTemp)?.addEventListener('click', moveAllFromTempToNewFolder);
     get(WORKDIR.returnTemp)?.addEventListener('click', returnAllTempToRoot);
     get(IDS.tags)?.addEventListener('input', ()=>{
       if (tagsSyncLocked) return;

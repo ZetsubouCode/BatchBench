@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 from app import app
@@ -188,6 +189,63 @@ class TagEditorFileApiTests(unittest.TestCase):
             self.assertEqual(sections[0]["tags"], ["blue_sky", "long_hair"])
             self.assertEqual(sections[0]["conditionals"], [["smiling", "looking_at_viewer"]])
             self.assertEqual(sections[1]["category"], "outfit")
+
+    def test_dataset_zip_excludes_temp_and_writes_next_to_dataset(self):
+        with tempfile.TemporaryDirectory() as td:
+            project = Path(td) / "project_a"
+            dataset = project / "dataset"
+            temp = dataset / "_temp"
+            nested = dataset / "set_1"
+            nested.mkdir(parents=True, exist_ok=True)
+            temp.mkdir(parents=True, exist_ok=True)
+            (dataset / "root.png").write_bytes(b"img")
+            (nested / "nested.png").write_bytes(b"img")
+            (temp / "hidden.png").write_bytes(b"img")
+
+            resp = self.client.post(
+                "/api/tags/dataset-zip",
+                json={"folder": str(project)},
+            )
+
+            self.assertEqual(resp.status_code, 200)
+            data = resp.get_json()
+            self.assertTrue(data.get("ok"), msg=data)
+            zip_path = Path(data.get("zip_path") or "")
+            self.assertTrue(zip_path.exists())
+            self.assertEqual(zip_path.parent, dataset.parent)
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                names = set(zf.namelist())
+            self.assertIn("root.png", names)
+            self.assertIn("set_1/nested.png", names)
+            self.assertNotIn("_temp/hidden.png", names)
+
+    def test_temp_move_all_moves_content_to_timestamped_folder(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / "dataset"
+            temp = root / "_temp"
+            nested = temp / "batch_a" / "variant"
+            nested.mkdir(parents=True, exist_ok=True)
+            (nested / "sample.png").write_bytes(b"img")
+            (nested / "sample.txt").write_text("tag_a", encoding="utf-8")
+            (temp / "notes.md").write_text("memo", encoding="utf-8")
+
+            resp = self.client.post(
+                "/api/tags/temp-move-all",
+                json={"folder": str(root), "exts": ".png,.jpg,.jpeg,.webp"},
+            )
+
+            self.assertEqual(resp.status_code, 200)
+            data = resp.get_json()
+            self.assertTrue(data.get("ok"), msg=data)
+            dst_rel = data.get("destination") or ""
+            self.assertTrue(dst_rel.startswith("_moved_"), msg=data)
+            dst_root = root / dst_rel
+            self.assertTrue((dst_root / "batch_a" / "variant" / "sample.png").exists())
+            self.assertTrue((dst_root / "batch_a" / "variant" / "sample.txt").exists())
+            self.assertTrue((dst_root / "notes.md").exists())
+            self.assertFalse((temp / "batch_a" / "variant" / "sample.png").exists())
+            self.assertFalse((temp / "batch_a" / "variant" / "sample.txt").exists())
+            self.assertFalse((temp / "notes.md").exists())
 
 
 if __name__ == "__main__":
