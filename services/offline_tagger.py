@@ -1,9 +1,31 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 import re
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
+from services.offline_tagger_rules import (
+    BUCKET_APPEARANCE_IDENTITY,
+    BUCKET_BACKGROUND_PLACE,
+    BUCKET_CLOTHING_OUTFIT,
+    BUCKET_LIMB_ACTION,
+    BUCKET_OBJECT_PROP,
+    BUCKET_POSE_ACTION,
+    BUCKET_UNKNOWN,
+    COMPILED_REGEX_ALLOW_BACKGROUND,
+    COMPILED_REGEX_ALLOW_LIMB,
+    COMPILED_REGEX_ALLOW_OBJECT,
+    COMPILED_REGEX_ALLOW_POSE,
+    COMPILED_REGEX_DENY_APPEARANCE,
+    COMPILED_REGEX_DENY_CLOTHING,
+    EXACT_ALLOW_BACKGROUND,
+    EXACT_ALLOW_LIMB,
+    EXACT_ALLOW_OBJECT,
+    EXACT_ALLOW_POSE,
+    EXACT_DENY_APPEARANCE,
+    EXACT_DENY_CLOTHING,
+    normalize_rule_tag,
+)
 from utils.io import readable_path
 from utils.dataset import split_tags, join_tags
 from utils.parse import (
@@ -26,6 +48,7 @@ DEFAULT_CHARACTER_THRESHOLD = 0.75
 DEFAULT_THRESHOLD_MODE = "mcut"
 DEFAULT_MIN_THRESHOLD_FLOOR = 0.2
 DEFAULT_TAG_FOCUS_MODE = "all"
+DEFAULT_OUTPUT_PROFILE = "background_pose_only"
 
 DEFAULT_MAX_GENERAL_TAGS = 0
 DEFAULT_MAX_CHARACTER_TAGS = 0
@@ -46,6 +69,10 @@ DEFAULT_COLOR_MIN_VALUE = 0.15
 DEFAULT_COLOR_KEEP_IF_SCORE_GE = 0.92
 DEFAULT_COLOR_DOWNSCALE = 256
 DEFAULT_DEBUG_COLOR_SANITY = False
+DEFAULT_ENABLE_DANBOORU_SAFENET = False
+DEFAULT_DANBOORU_SAFENET_MAX_LOOKUPS = 120
+DEFAULT_SELECTIVE_MIN_KEEP_TAGS = 2
+DEFAULT_SELECTIVE_UNKNOWN_FALLBACK_MAX = 2
 
 DEFAULT_NON_CHARACTER_REGEX = [
     r"(?:^|[ _])(background|scenery|landscape|cityscape)(?:$|[ _])",
@@ -56,6 +83,15 @@ DEFAULT_NON_CHARACTER_REGEX = [
     r"(?:^|[ _])(car|bus|train|airplane|ship|bicycle)(?:$|[ _])",
     r" background$",
 ]
+
+OUTPUT_PROFILE_STANDARD_FULL = "standard_full"
+OUTPUT_PROFILE_BACKGROUND_POSE_ONLY = "background_pose_only"
+OUTPUT_PROFILE_CUSTOM_SELECTIVE = "custom_selective"
+VALID_OUTPUT_PROFILES = {
+    OUTPUT_PROFILE_STANDARD_FULL,
+    OUTPUT_PROFILE_BACKGROUND_POSE_ONLY,
+    OUTPUT_PROFILE_CUSTOM_SELECTIVE,
+}
 
 TAGGER_POLICY = {
     "force_wd_bgr_fix": True,
@@ -75,6 +111,15 @@ TAGGER_POLICY = {
     "mcut_min_general_tags": DEFAULT_MCUT_MIN_GENERAL_TAGS,
     "mcut_min_character_tags": DEFAULT_MCUT_MIN_CHARACTER_TAGS,
     "mcut_min_meta_tags": DEFAULT_MCUT_MIN_META_TAGS,
+    "output_profile": DEFAULT_OUTPUT_PROFILE,
+    "selective_keep_background_place": True,
+    "selective_keep_object_prop": True,
+    "selective_keep_pose_action": True,
+    "selective_keep_appearance": False,
+    "selective_keep_clothing": False,
+    "selective_keep_character_names": False,
+    "selective_keep_rating_meta": False,
+    "selective_keep_unknown_general": False,
     "tag_focus_mode": DEFAULT_TAG_FOCUS_MODE,
     "include_general": True,
     "include_character": True,
@@ -116,6 +161,7 @@ TAGGER_POLICY = {
     "color_keep_if_score_ge": DEFAULT_COLOR_KEEP_IF_SCORE_GE,
     "color_downscale": DEFAULT_COLOR_DOWNSCALE,
     "debug_color_sanity": DEFAULT_DEBUG_COLOR_SANITY,
+    "danbooru_safenet": DEFAULT_ENABLE_DANBOORU_SAFENET,
 }
 
 DEPRECATED_KEYS = {
@@ -208,6 +254,15 @@ class TaggerOptions:
     mcut_min_general_tags: int
     mcut_min_character_tags: int
     mcut_min_meta_tags: int
+    output_profile: str
+    selective_keep_background_place: bool
+    selective_keep_object_prop: bool
+    selective_keep_pose_action: bool
+    selective_keep_appearance: bool
+    selective_keep_clothing: bool
+    selective_keep_character_names: bool
+    selective_keep_rating_meta: bool
+    selective_keep_unknown_general: bool
     tag_focus_mode: str
     include_general: bool
     include_character: bool
@@ -253,6 +308,7 @@ class TaggerOptions:
     color_keep_if_score_ge: float
     color_downscale: int
     debug_color_sanity: bool
+    danbooru_safenet: bool
 
 
 @dataclass
@@ -337,6 +393,53 @@ def _effective_opts(form_opts: Dict[str, Any], policy: Dict[str, Any]) -> Tagger
     threshold_mode = (form_opts.get("threshold_mode") or policy.get("threshold_mode") or DEFAULT_THRESHOLD_MODE).strip().lower()
     if threshold_mode not in {"fixed", "mcut"}:
         threshold_mode = DEFAULT_THRESHOLD_MODE
+    output_profile = (
+        form_opts.get("output_profile")
+        or policy.get("output_profile")
+        or DEFAULT_OUTPUT_PROFILE
+    ).strip().lower()
+    if output_profile not in VALID_OUTPUT_PROFILES:
+        output_profile = DEFAULT_OUTPUT_PROFILE
+    selective_keep_background_place = (
+        _parse_bool(_fallback("selective_keep_background_place"))
+        if "selective_keep_background_place" in form_opts
+        else bool(policy.get("selective_keep_background_place", True))
+    )
+    selective_keep_object_prop = (
+        _parse_bool(_fallback("selective_keep_object_prop"))
+        if "selective_keep_object_prop" in form_opts
+        else bool(policy.get("selective_keep_object_prop", True))
+    )
+    selective_keep_pose_action = (
+        _parse_bool(_fallback("selective_keep_pose_action"))
+        if "selective_keep_pose_action" in form_opts
+        else bool(policy.get("selective_keep_pose_action", True))
+    )
+    selective_keep_appearance = (
+        _parse_bool(_fallback("selective_keep_appearance"))
+        if "selective_keep_appearance" in form_opts
+        else bool(policy.get("selective_keep_appearance", False))
+    )
+    selective_keep_clothing = (
+        _parse_bool(_fallback("selective_keep_clothing"))
+        if "selective_keep_clothing" in form_opts
+        else bool(policy.get("selective_keep_clothing", False))
+    )
+    selective_keep_character_names = (
+        _parse_bool(_fallback("selective_keep_character_names"))
+        if "selective_keep_character_names" in form_opts
+        else bool(policy.get("selective_keep_character_names", False))
+    )
+    selective_keep_rating_meta = (
+        _parse_bool(_fallback("selective_keep_rating_meta"))
+        if "selective_keep_rating_meta" in form_opts
+        else bool(policy.get("selective_keep_rating_meta", False))
+    )
+    selective_keep_unknown_general = (
+        _parse_bool(_fallback("selective_keep_unknown_general"))
+        if "selective_keep_unknown_general" in form_opts
+        else bool(policy.get("selective_keep_unknown_general", False))
+    )
     tag_focus_mode = (form_opts.get("tag_focus_mode") or policy.get("tag_focus_mode") or DEFAULT_TAG_FOCUS_MODE).strip().lower()
     if tag_focus_mode not in {"all", "character", "non_character"}:
         tag_focus_mode = DEFAULT_TAG_FOCUS_MODE
@@ -420,6 +523,15 @@ def _effective_opts(form_opts: Dict[str, Any], policy: Dict[str, Any]) -> Tagger
             0,
             _parse_int(_fallback("mcut_min_meta_tags"), int(policy.get("mcut_min_meta_tags", DEFAULT_MCUT_MIN_META_TAGS))),
         ),
+        output_profile=output_profile,
+        selective_keep_background_place=selective_keep_background_place,
+        selective_keep_object_prop=selective_keep_object_prop,
+        selective_keep_pose_action=selective_keep_pose_action,
+        selective_keep_appearance=selective_keep_appearance,
+        selective_keep_clothing=selective_keep_clothing,
+        selective_keep_character_names=selective_keep_character_names,
+        selective_keep_rating_meta=selective_keep_rating_meta,
+        selective_keep_unknown_general=selective_keep_unknown_general,
         tag_focus_mode=tag_focus_mode,
         include_general=include_general,
         include_character=include_character,
@@ -473,6 +585,9 @@ def _effective_opts(form_opts: Dict[str, Any], policy: Dict[str, Any]) -> Tagger
         color_keep_if_score_ge=float(policy.get("color_keep_if_score_ge", DEFAULT_COLOR_KEEP_IF_SCORE_GE)),
         color_downscale=max(16, int(policy.get("color_downscale", DEFAULT_COLOR_DOWNSCALE))),
         debug_color_sanity=bool(policy.get("debug_color_sanity", DEFAULT_DEBUG_COLOR_SANITY)),
+        danbooru_safenet=_parse_bool(_fallback("danbooru_safenet"))
+        if "danbooru_safenet" in form_opts
+        else bool(policy.get("danbooru_safenet", DEFAULT_ENABLE_DANBOORU_SAFENET)),
     )
 
 
@@ -544,6 +659,20 @@ def _has_safetensors(path: Path) -> bool:
     return any(path.rglob("*.safetensors"))
 
 
+def _cache_lookup_model_bundle(model_id: str, device: str, backend: str) -> Optional[Dict[str, Any]]:
+    key = (model_id, device, backend)
+    cached = _MODEL_CACHE.get(key)
+    if cached is not None:
+        return cached
+    requested = (device or "").strip().lower()
+    if requested in {"", "auto"}:
+        for candidate_device in ("cuda", "cpu", "mps"):
+            cached = _MODEL_CACHE.get((model_id, candidate_device, backend))
+            if cached is not None:
+                return cached
+    return None
+
+
 def _ensure_model_local(model_id: str, local_only: bool) -> Path:
     model_path = Path(model_id)
     if model_path.exists():
@@ -556,16 +685,27 @@ def _ensure_model_local(model_id: str, local_only: bool) -> Path:
     except Exception as exc:
         raise RuntimeError("Missing huggingface_hub; cannot download model files.") from exc
 
+    local_dir = None
     try:
         local_dir = snapshot_download(
             repo_id=model_id,
             allow_patterns=_DOWNLOAD_PATTERNS,
-            local_files_only=local_only,
+            local_files_only=True,
         )
-    except Exception as exc:
+    except Exception:
+        local_dir = None
+
+    if local_dir is None:
         if local_only:
-            raise RuntimeError("Model files not found locally. Disable local-only to download.") from exc
-        raise RuntimeError("Failed to download model files from Hugging Face.") from exc
+            raise RuntimeError("Model files not found locally. Disable local-only to download.")
+        try:
+            local_dir = snapshot_download(
+                repo_id=model_id,
+                allow_patterns=_DOWNLOAD_PATTERNS,
+                local_files_only=False,
+            )
+        except Exception as exc:
+            raise RuntimeError("Failed to download model files from Hugging Face.") from exc
 
     model_path = Path(local_dir)
     if not _has_safetensors(model_path):
@@ -600,8 +740,9 @@ def _find_onnx_model(model_path: Path) -> Optional[Path]:
 def _load_model_bundle(model_id: str, device: str, local_only: bool, backend: str):
     backend = (backend or DEFAULT_BACKEND).strip().lower()
     cache_key = (model_id, device, backend)
-    if cache_key in _MODEL_CACHE:
-        return _MODEL_CACHE[cache_key]
+    cached_bundle = _cache_lookup_model_bundle(model_id, device, backend)
+    if cached_bundle is not None:
+        return cached_bundle
 
     try:
         from transformers import AutoConfig, AutoImageProcessor, AutoModelForImageClassification
@@ -681,7 +822,9 @@ def _load_model_bundle(model_id: str, device: str, local_only: bool, backend: st
 
     actual_key = (model_id, resolved_device, backend)
     if actual_key in _MODEL_CACHE:
-        return _MODEL_CACHE[actual_key]
+        cached = _MODEL_CACHE[actual_key]
+        _MODEL_CACHE[cache_key] = cached
+        return cached
 
     bundle = {
         "backend": backend,
@@ -701,6 +844,7 @@ def _load_model_bundle(model_id: str, device: str, local_only: bool, backend: st
         "tag_meta_count": tag_meta_count,
     }
     _MODEL_CACHE[actual_key] = bundle
+    _MODEL_CACHE[cache_key] = bundle
     return bundle
 
 
@@ -914,6 +1058,360 @@ def _split_general_focus(
     return subject_general, non_character_general
 
 
+@dataclass
+class SelectiveRules:
+    output_profile: str
+    general_allow_buckets: set
+    include_character: bool
+    include_rating_meta: bool
+    drop_unknown_general: bool
+
+
+@dataclass
+class DanbooruSafeNetState:
+    enabled: bool
+    max_lookups: int
+    lookups: int = 0
+    resolved: int = 0
+    errors: int = 0
+    skipped: int = 0
+    cache: Dict[str, str] = field(default_factory=dict)
+
+
+def _resolve_output_profile(raw: str) -> str:
+    profile = (raw or "").strip().lower()
+    if profile in VALID_OUTPUT_PROFILES:
+        return profile
+    return DEFAULT_OUTPUT_PROFILE
+
+
+def _resolve_selective_rules(opts: TaggerOptions) -> Optional[SelectiveRules]:
+    profile = _resolve_output_profile(opts.output_profile)
+    if profile == OUTPUT_PROFILE_STANDARD_FULL:
+        return None
+    if profile == OUTPUT_PROFILE_BACKGROUND_POSE_ONLY:
+        return SelectiveRules(
+            output_profile=profile,
+            general_allow_buckets={
+                BUCKET_BACKGROUND_PLACE,
+                BUCKET_OBJECT_PROP,
+                BUCKET_POSE_ACTION,
+                BUCKET_LIMB_ACTION,
+            },
+            include_character=False,
+            include_rating_meta=False,
+            drop_unknown_general=True,
+        )
+    allow_buckets = set()
+    if opts.selective_keep_background_place:
+        allow_buckets.add(BUCKET_BACKGROUND_PLACE)
+    if opts.selective_keep_object_prop:
+        allow_buckets.add(BUCKET_OBJECT_PROP)
+    if opts.selective_keep_pose_action:
+        allow_buckets.add(BUCKET_POSE_ACTION)
+        allow_buckets.add(BUCKET_LIMB_ACTION)
+    if opts.selective_keep_appearance:
+        allow_buckets.add(BUCKET_APPEARANCE_IDENTITY)
+    if opts.selective_keep_clothing:
+        allow_buckets.add(BUCKET_CLOTHING_OUTFIT)
+    return SelectiveRules(
+        output_profile=profile,
+        general_allow_buckets=allow_buckets,
+        include_character=bool(opts.selective_keep_character_names),
+        include_rating_meta=bool(opts.selective_keep_rating_meta),
+        drop_unknown_general=not bool(opts.selective_keep_unknown_general),
+    )
+
+
+def _enabled_bucket_labels(rules: Optional[SelectiveRules]) -> str:
+    if rules is None:
+        return "all (standard_full)"
+    ordered = [
+        BUCKET_BACKGROUND_PLACE,
+        BUCKET_OBJECT_PROP,
+        BUCKET_POSE_ACTION,
+        BUCKET_LIMB_ACTION,
+        BUCKET_APPEARANCE_IDENTITY,
+        BUCKET_CLOTHING_OUTFIT,
+    ]
+    enabled = [bucket for bucket in ordered if bucket in rules.general_allow_buckets]
+    return ", ".join(enabled) if enabled else "(none)"
+
+
+def _bucket_count_template() -> Dict[str, int]:
+    return {
+        BUCKET_BACKGROUND_PLACE: 0,
+        BUCKET_OBJECT_PROP: 0,
+        BUCKET_POSE_ACTION: 0,
+        BUCKET_LIMB_ACTION: 0,
+        BUCKET_APPEARANCE_IDENTITY: 0,
+        BUCKET_CLOTHING_OUTFIT: 0,
+        BUCKET_UNKNOWN: 0,
+    }
+
+
+def classify_general_tag(tag: str) -> str:
+    norm = normalize_rule_tag(tag)
+    if not norm:
+        return BUCKET_UNKNOWN
+    if norm in EXACT_ALLOW_POSE:
+        return BUCKET_POSE_ACTION
+    if norm in EXACT_ALLOW_LIMB:
+        return BUCKET_LIMB_ACTION
+    if norm in EXACT_ALLOW_BACKGROUND:
+        return BUCKET_BACKGROUND_PLACE
+    if norm in EXACT_ALLOW_OBJECT:
+        return BUCKET_OBJECT_PROP
+    if norm in EXACT_DENY_CLOTHING:
+        return BUCKET_CLOTHING_OUTFIT
+    if norm in EXACT_DENY_APPEARANCE:
+        return BUCKET_APPEARANCE_IDENTITY
+    if _matches_any(norm, COMPILED_REGEX_ALLOW_POSE):
+        return BUCKET_POSE_ACTION
+    if _matches_any(norm, COMPILED_REGEX_ALLOW_LIMB):
+        return BUCKET_LIMB_ACTION
+    if _matches_any(norm, COMPILED_REGEX_ALLOW_BACKGROUND):
+        return BUCKET_BACKGROUND_PLACE
+    if _matches_any(norm, COMPILED_REGEX_ALLOW_OBJECT):
+        return BUCKET_OBJECT_PROP
+    if _matches_any(norm, COMPILED_REGEX_DENY_CLOTHING):
+        return BUCKET_CLOTHING_OUTFIT
+    if _matches_any(norm, COMPILED_REGEX_DENY_APPEARANCE):
+        return BUCKET_APPEARANCE_IDENTITY
+    return BUCKET_UNKNOWN
+
+
+_DB_CLOTHING_HINTS = (
+    "clothing",
+    "outfit",
+    "garment",
+    "uniform",
+    "dress",
+    "shirt",
+    "skirt",
+    "jacket",
+    "coat",
+    "pants",
+    "shorts",
+    "shoes",
+    "boots",
+    "socks",
+    "thighhigh",
+    "bikini",
+    "swimsuit",
+    "underwear",
+    "gloves",
+    "hat",
+    "cap",
+    "ribbon",
+    "necktie",
+    "scarf",
+)
+_DB_APPEARANCE_HINTS = (
+    "hair",
+    "eyes",
+    "skin",
+    "breasts",
+    "female",
+    "male",
+    "girl",
+    "boy",
+    "face",
+    "freckles",
+    "fang",
+    "ears",
+    "hairstyle",
+    "eyecolor",
+)
+_DB_POSE_HINTS = (
+    "pose",
+    "posture",
+    "standing",
+    "sitting",
+    "kneeling",
+    "lying",
+    "running",
+    "jumping",
+    "crouching",
+    "leaning",
+    "arms",
+    "legs",
+    "gesture",
+    "pointing",
+)
+_DB_BACKGROUND_HINTS = (
+    "background",
+    "scenery",
+    "landscape",
+    "indoors",
+    "outdoors",
+    "room",
+    "classroom",
+    "office",
+    "forest",
+    "street",
+    "building",
+    "sky",
+    "cloud",
+    "night",
+    "day",
+    "river",
+    "mountain",
+    "beach",
+    "park",
+    "garden",
+)
+_DB_OBJECT_HINTS = (
+    "object",
+    "weapon",
+    "prop",
+    "holding",
+    "chair",
+    "table",
+    "book",
+    "cup",
+    "phone",
+    "sword",
+    "gun",
+    "staff",
+    "umbrella",
+    "bag",
+    "car",
+    "bicycle",
+    "train",
+    "food",
+    "drink",
+    "instrument",
+    "tool",
+)
+
+
+def _text_has_any(text: str, hints: Tuple[str, ...]) -> bool:
+    for hint in hints:
+        if hint in text:
+            return True
+    return False
+
+
+def _lookup_danbooru_bucket(tag: str) -> str:
+    try:
+        from services import danbooru_client
+    except Exception:
+        return BUCKET_UNKNOWN
+    data = danbooru_client.lookup_tag_info(
+        tag,
+        include_related=True,
+        include_preview=False,
+    )
+    if not data.get("ok") or not data.get("found"):
+        return BUCKET_UNKNOWN
+
+    info = data.get("info") or {}
+    category_name = str(info.get("category_name") or "").strip().lower()
+    if category_name == "character":
+        return BUCKET_APPEARANCE_IDENTITY
+    if category_name in {"artist", "copyright", "meta", "deprecated"}:
+        return BUCKET_UNKNOWN
+
+    text_parts = [normalize_rule_tag(tag)]
+    wiki = data.get("wiki") or {}
+    text_parts.append(normalize_rule_tag(wiki.get("title") or ""))
+    text_parts.append(normalize_rule_tag(wiki.get("body") or ""))
+    related = data.get("related") or []
+    if isinstance(related, list):
+        for item in related[:24]:
+            text_parts.append(normalize_rule_tag(item))
+    hay = " ".join(part for part in text_parts if part)
+
+    if _text_has_any(hay, _DB_CLOTHING_HINTS):
+        return BUCKET_CLOTHING_OUTFIT
+    if _text_has_any(hay, _DB_APPEARANCE_HINTS):
+        return BUCKET_APPEARANCE_IDENTITY
+    if _text_has_any(hay, _DB_POSE_HINTS):
+        return BUCKET_POSE_ACTION
+    if _text_has_any(hay, _DB_BACKGROUND_HINTS):
+        return BUCKET_BACKGROUND_PLACE
+    if _text_has_any(hay, _DB_OBJECT_HINTS):
+        return BUCKET_OBJECT_PROP
+    return BUCKET_UNKNOWN
+
+
+def _classify_general_tag_with_safenet(tag: str, state: Optional[DanbooruSafeNetState]) -> str:
+    bucket = classify_general_tag(tag)
+    if bucket != BUCKET_UNKNOWN or state is None or not state.enabled:
+        return bucket
+    key = normalize_rule_tag(tag)
+    cached = state.cache.get(key)
+    if cached is not None:
+        return cached
+    if state.lookups >= state.max_lookups:
+        state.skipped += 1
+        state.cache[key] = BUCKET_UNKNOWN
+        return BUCKET_UNKNOWN
+    state.lookups += 1
+    try:
+        resolved = _lookup_danbooru_bucket(tag)
+    except Exception:
+        state.errors += 1
+        resolved = BUCKET_UNKNOWN
+    if resolved != BUCKET_UNKNOWN:
+        state.resolved += 1
+    state.cache[key] = resolved
+    return resolved
+
+
+def filter_general_tags_selective(
+    tags_with_scores: List[Tuple[str, float]],
+    selective_config: SelectiveRules,
+    safenet_state: Optional[DanbooruSafeNetState] = None,
+    debug: bool = False,
+) -> Tuple[List[Tuple[str, float]], Dict[str, Dict[str, int]]]:
+    kept: List[Tuple[str, float]] = []
+    kept_counts = _bucket_count_template()
+    dropped_counts = _bucket_count_template()
+    dropped_unknown_candidates: List[Tuple[str, float]] = []
+    for tag, score in tags_with_scores:
+        bucket = _classify_general_tag_with_safenet(tag, safenet_state)
+        if bucket == BUCKET_UNKNOWN:
+            is_allowed = not selective_config.drop_unknown_general
+        else:
+            is_allowed = bucket in selective_config.general_allow_buckets
+        if is_allowed:
+            kept.append((tag, score))
+            kept_counts[bucket] = kept_counts.get(bucket, 0) + 1
+        else:
+            dropped_counts[bucket] = dropped_counts.get(bucket, 0) + 1
+            if bucket == BUCKET_UNKNOWN:
+                dropped_unknown_candidates.append((tag, score))
+
+    unknown_fallback_kept = 0
+    if selective_config.drop_unknown_general:
+        kept_total = len(kept)
+        if kept_total < DEFAULT_SELECTIVE_MIN_KEEP_TAGS and dropped_unknown_candidates:
+            need = DEFAULT_SELECTIVE_MIN_KEEP_TAGS - kept_total
+            fallback_take = min(DEFAULT_SELECTIVE_UNKNOWN_FALLBACK_MAX, max(0, need))
+            if fallback_take > 0:
+                restore = dropped_unknown_candidates[:fallback_take]
+                kept.extend(restore)
+                unknown_fallback_kept = len(restore)
+                kept_counts[BUCKET_UNKNOWN] = kept_counts.get(BUCKET_UNKNOWN, 0) + unknown_fallback_kept
+                dropped_counts[BUCKET_UNKNOWN] = max(
+                    0,
+                    dropped_counts.get(BUCKET_UNKNOWN, 0) - unknown_fallback_kept,
+                )
+                kept.sort(key=lambda x: x[1], reverse=True)
+
+    details: Dict[str, Dict[str, int]] = {"kept": kept_counts, "dropped": dropped_counts}
+    if debug:
+        details["config"] = {
+            "drop_unknown_general": 1 if selective_config.drop_unknown_general else 0,
+            "unknown_fallback_kept": unknown_fallback_kept,
+        }
+        if safenet_state is not None and safenet_state.enabled:
+            details["config"]["danbooru_safenet"] = 1
+    return kept, details
+
+
 def _apply_excludes(tags: List[str], exclude_tags: set, exclude_regex: List[re.Pattern]) -> List[str]:
     if not exclude_tags and not exclude_regex:
         return tags
@@ -938,6 +1436,14 @@ def _apply_trigger_tag(tags: List[str], trigger_tag: str) -> List[str]:
     return out
 
 
+def _is_literal_overwrite(write_mode: str) -> bool:
+    return (write_mode or "").strip().lower() == "overwrite"
+
+
+def _effective_skip_empty(write_mode: str, skip_empty: bool) -> bool:
+    return bool(skip_empty and not _is_literal_overwrite(write_mode))
+
+
 def _build_tags(
     probs,
     labels: List[str],
@@ -950,6 +1456,8 @@ def _build_tags(
     stats: Optional[Dict[str, int]] = None,
     color_presence: Optional[Dict[str, float]] = None,
     color_debug: Optional[List[str]] = None,
+    danbooru_safenet_state: Optional[DanbooruSafeNetState] = None,
+    debug_state: Optional[Dict[str, Any]] = None,
 ) -> List[str]:
     general: List[Tuple[str, float]] = []
     characters: List[Tuple[str, float]] = []
@@ -1045,10 +1553,28 @@ def _build_tags(
     if opts.character_topk > 0 and len(characters) > opts.character_topk:
         characters = characters[: opts.character_topk]
 
-    if opts.max_general_tags > 0 and len(general) > opts.max_general_tags:
-        general = general[: opts.max_general_tags]
     if opts.max_character_tags > 0 and len(characters) > opts.max_character_tags:
         characters = characters[: opts.max_character_tags]
+
+    selective_rules = _resolve_selective_rules(opts)
+    profile = selective_rules.output_profile if selective_rules else OUTPUT_PROFILE_STANDARD_FULL
+    using_selective = selective_rules is not None
+    selective_counts = {"kept": _bucket_count_template(), "dropped": _bucket_count_template()}
+    selective_config_stats: Dict[str, int] = {}
+    dropped_character_count = 0
+    dropped_meta_count = 0
+    dropped_rating_count = 0
+
+    if using_selective:
+        general, selective_counts = filter_general_tags_selective(
+            general,
+            selective_rules,
+            safenet_state=danbooru_safenet_state,
+            debug=True,
+        )
+        selective_config_stats = selective_counts.get("config") or {}
+    if opts.max_general_tags > 0 and len(general) > opts.max_general_tags:
+        general = general[: opts.max_general_tags]
 
     split_patterns = non_character_regex
     if split_patterns is None:
@@ -1056,11 +1582,17 @@ def _build_tags(
     subject_general, non_character_general = _split_general_focus(general, split_patterns)
 
     meta_bucket: List[Tuple[str, float]] = []
-    if opts.include_meta:
+    include_meta = opts.include_meta if not using_selective else selective_rules.include_rating_meta
+    include_artist = opts.include_artist if not using_selective else selective_rules.include_rating_meta
+    include_copyright = opts.include_copyright if not using_selective else selective_rules.include_rating_meta
+    include_character = opts.include_character if not using_selective else selective_rules.include_character
+    include_rating = opts.include_rating if not using_selective else selective_rules.include_rating_meta
+
+    if include_meta:
         meta_bucket += meta
-    if opts.include_artist:
+    if include_artist:
         meta_bucket += artists
-    if opts.include_copyright:
+    if include_copyright:
         meta_bucket += copyrights
     meta_bucket.sort(key=lambda x: x[1], reverse=True)
     if opts.max_meta_tags > 0 and len(meta_bucket) > opts.max_meta_tags:
@@ -1070,11 +1602,24 @@ def _build_tags(
     emitted_general: List[Tuple[str, float]] = []
     emitted_character: List[Tuple[str, float]] = []
     emitted_meta: List[Tuple[str, float]] = []
-    if focus_mode == "character":
+    if using_selective:
+        if opts.include_general:
+            emitted_general = general
+            tags.extend([t for t, _ in emitted_general])
+        if include_character:
+            emitted_character = characters
+            tags.extend([t for t, _ in emitted_character])
+        if include_meta or include_artist or include_copyright:
+            emitted_meta = meta_bucket
+            tags.extend([t for t, _ in emitted_meta])
+        dropped_character_count = len(characters) - len(emitted_character)
+        dropped_meta_count = (len(meta) + len(artists) + len(copyrights)) - len(emitted_meta)
+        dropped_rating_count = 1 if (ratings and not include_rating) else 0
+    elif focus_mode == "character":
         if opts.include_general:
             emitted_general = subject_general
             tags.extend([t for t, _ in emitted_general])
-        if opts.include_character:
+        if include_character:
             emitted_character = characters
             tags.extend([t for t, _ in emitted_character])
     elif focus_mode == "non_character":
@@ -1087,7 +1632,7 @@ def _build_tags(
         if opts.include_general:
             emitted_general = general
             tags.extend([t for t, _ in emitted_general])
-        if opts.include_character:
+        if include_character:
             emitted_character = characters
             tags.extend([t for t, _ in emitted_character])
         emitted_meta = meta_bucket
@@ -1100,7 +1645,7 @@ def _build_tags(
     if opts.max_tags > 0 and len(tags) > opts.max_tags:
         tags = tags[: opts.max_tags]
 
-    if opts.include_rating and ratings:
+    if include_rating and ratings:
         rating_tag = max(ratings, key=lambda x: x[1])[0]
         tags = [rating_tag] + tags
 
@@ -1110,11 +1655,30 @@ def _build_tags(
         stats["meta"] = stats.get("meta", 0) + len(emitted_meta)
         stats["subject_general"] = stats.get("subject_general", 0) + len(subject_general)
         stats["non_character_general"] = stats.get("non_character_general", 0) + len(non_character_general)
-        stats["rating"] = stats.get("rating", 0) + (1 if (opts.include_rating and ratings) else 0)
+        stats["rating"] = stats.get("rating", 0) + (1 if (include_rating and ratings) else 0)
         if emitted_general:
             stats["images_with_general"] = stats.get("images_with_general", 0) + 1
         if emitted_character:
             stats["images_with_character"] = stats.get("images_with_character", 0) + 1
+        if using_selective:
+            for bucket, count in selective_counts["kept"].items():
+                key = f"selective_kept_{bucket}"
+                stats[key] = stats.get(key, 0) + count
+            for bucket, count in selective_counts["dropped"].items():
+                key = f"selective_dropped_{bucket}"
+                stats[key] = stats.get(key, 0) + count
+            stats["selective_unknown_fallback_kept"] = (
+                stats.get("selective_unknown_fallback_kept", 0)
+                + int(selective_config_stats.get("unknown_fallback_kept", 0))
+            )
+            stats["selective_dropped_character"] = stats.get("selective_dropped_character", 0) + dropped_character_count
+            stats["selective_dropped_meta"] = stats.get("selective_dropped_meta", 0) + dropped_meta_count
+            stats["selective_dropped_rating"] = stats.get("selective_dropped_rating", 0) + dropped_rating_count
+            stats["selective_dropped_meta_rating"] = (
+                stats.get("selective_dropped_meta_rating", 0)
+                + dropped_meta_count
+                + dropped_rating_count
+            )
 
     out: List[str] = []
     seen = set()
@@ -1125,6 +1689,28 @@ def _build_tags(
             seen.add(fmt)
 
     out = _apply_excludes(out, exclude_tags, exclude_regex)
+    if debug_state is not None:
+        debug_state["output_profile"] = profile
+        if using_selective:
+            debug_state["enabled_buckets"] = sorted(selective_rules.general_allow_buckets)
+            debug_state["drop_unknown_general"] = selective_rules.drop_unknown_general
+            debug_state["kept_counts"] = dict(selective_counts["kept"])
+            debug_state["dropped_counts"] = dict(selective_counts["dropped"])
+            debug_state["unknown_fallback_kept"] = int(selective_config_stats.get("unknown_fallback_kept", 0))
+            debug_state["dropped_character"] = dropped_character_count
+            debug_state["dropped_meta"] = dropped_meta_count
+            debug_state["dropped_rating"] = dropped_rating_count
+            debug_state["dropped_meta_rating"] = dropped_meta_count + dropped_rating_count
+        else:
+            debug_state["enabled_buckets"] = []
+            debug_state["drop_unknown_general"] = False
+            debug_state["kept_counts"] = _bucket_count_template()
+            debug_state["dropped_counts"] = _bucket_count_template()
+            debug_state["unknown_fallback_kept"] = 0
+            debug_state["dropped_character"] = 0
+            debug_state["dropped_meta"] = 0
+            debug_state["dropped_rating"] = 0
+            debug_state["dropped_meta_rating"] = 0
     return out
 
 
@@ -1202,6 +1788,31 @@ def _load_normalizer_excludes(
     return remove_tags, remove_regex, None
 
 
+def _sum_buckets(counts: Dict[str, int], keys: List[str]) -> int:
+    total = 0
+    for key in keys:
+        total += int(counts.get(key, 0))
+    return total
+
+
+def _format_preview_reason(debug_state: Dict[str, Any]) -> str:
+    kept = debug_state.get("kept_counts") or {}
+    dropped = debug_state.get("dropped_counts") or {}
+    kept_bg = int(kept.get(BUCKET_BACKGROUND_PLACE, 0))
+    kept_obj = int(kept.get(BUCKET_OBJECT_PROP, 0))
+    kept_pose = _sum_buckets(kept, [BUCKET_POSE_ACTION, BUCKET_LIMB_ACTION])
+    drop_clothes = int(dropped.get(BUCKET_CLOTHING_OUTFIT, 0))
+    drop_appearance = int(dropped.get(BUCKET_APPEARANCE_IDENTITY, 0))
+    drop_unknown = int(dropped.get(BUCKET_UNKNOWN, 0))
+    rescued_unknown = int(debug_state.get("unknown_fallback_kept", 0))
+    rescue_text = f" fallback_unknown={rescued_unknown}" if rescued_unknown > 0 else ""
+    return (
+        f"kept(bg={kept_bg},obj={kept_obj},pose={kept_pose}) "
+        f"dropped(clothes={drop_clothes},appearance={drop_appearance},unknown={drop_unknown})"
+        f"{rescue_text}"
+    )
+
+
 def run_tagger(
     opts: TaggerOptions, deprecated_keys: Optional[List[str]] = None
 ) -> Tuple[bool, List[str]]:
@@ -1219,6 +1830,7 @@ def run_tagger(
         opts.keep_existing_tags = False
     if (opts.threshold_mode or "").strip().lower() not in {"fixed", "mcut"}:
         opts.threshold_mode = DEFAULT_THRESHOLD_MODE
+    opts.output_profile = _resolve_output_profile(opts.output_profile)
     if (opts.tag_focus_mode or "").strip().lower() not in {"all", "character", "non_character"}:
         opts.tag_focus_mode = DEFAULT_TAG_FOCUS_MODE
     if (opts.backend or "").strip().lower() not in {"transformers", "onnx"}:
@@ -1236,6 +1848,21 @@ def run_tagger(
     opts.color_min_value = max(0.0, min(float(opts.color_min_value), 1.0))
     opts.color_keep_if_score_ge = max(0.0, min(float(opts.color_keep_if_score_ge), 1.0))
     opts.color_downscale = max(16, int(opts.color_downscale or DEFAULT_COLOR_DOWNSCALE))
+    opts.selective_keep_background_place = bool(opts.selective_keep_background_place)
+    opts.selective_keep_object_prop = bool(opts.selective_keep_object_prop)
+    opts.selective_keep_pose_action = bool(opts.selective_keep_pose_action)
+    opts.selective_keep_appearance = bool(opts.selective_keep_appearance)
+    opts.selective_keep_clothing = bool(opts.selective_keep_clothing)
+    opts.selective_keep_character_names = bool(opts.selective_keep_character_names)
+    opts.selective_keep_rating_meta = bool(opts.selective_keep_rating_meta)
+    opts.selective_keep_unknown_general = bool(opts.selective_keep_unknown_general)
+    opts.danbooru_safenet = bool(opts.danbooru_safenet)
+    selective_rules = _resolve_selective_rules(opts)
+    effective_profile = selective_rules.output_profile if selective_rules else OUTPUT_PROFILE_STANDARD_FULL
+    danbooru_safenet_state = DanbooruSafeNetState(
+        enabled=bool(opts.danbooru_safenet and selective_rules is not None),
+        max_lookups=DEFAULT_DANBOORU_SAFENET_MAX_LOOKUPS,
+    )
 
     if not opts.dataset_path.exists() or not opts.dataset_path.is_dir():
         lines.append(f"Dataset folder not found: {opts.dataset_path}")
@@ -1258,6 +1885,17 @@ def run_tagger(
     lines.append(
         f"Output mode: {'skip_if_exists' if opts.write_mode == 'skip' else opts.write_mode}"
     )
+    lines.append(f"Output profile: {effective_profile}")
+    if selective_rules:
+        lines.append(f"Enabled buckets: {_enabled_bucket_labels(selective_rules)}")
+        lines.append(f"Drop unknown general tags: {'yes' if selective_rules.drop_unknown_general else 'no'}")
+        if selective_rules.drop_unknown_general:
+            lines.append(
+                "Sparse fallback: "
+                f"restore top unknown tags when kept<{DEFAULT_SELECTIVE_MIN_KEEP_TAGS} "
+                f"(max_restore={DEFAULT_SELECTIVE_UNKNOWN_FALLBACK_MAX})"
+            )
+        lines.append(f"Danbooru safe-net: {'on' if danbooru_safenet_state.enabled else 'off'}")
     if opts.max_general_tags > 0 or opts.max_character_tags > 0:
         lines.append(
             f"Tag caps: general={opts.max_general_tags or 'unlimited'}, "
@@ -1310,16 +1948,23 @@ def run_tagger(
         f"artist={category_ids.artist}, "
         f"copyright={category_ids.copyright}"
     )
-    lines.append(f"Include general tags: {'on' if opts.include_general else 'off'}")
-    lines.append(f"Include character tags: {'on' if opts.include_character else 'off'}")
-    lines.append(f"Include rating tags: {'on' if opts.include_rating else 'off'}")
-    lines.append(f"Tag focus mode: {opts.tag_focus_mode}")
-    lines.append(
-        "Include meta/artist/copyright: "
+    effective_include_character = opts.include_character if not selective_rules else selective_rules.include_character
+    effective_include_rating = opts.include_rating if not selective_rules else selective_rules.include_rating_meta
+    effective_meta_scope = (
         f"{'on' if opts.include_meta else 'off'} / "
         f"{'on' if opts.include_artist else 'off'} / "
         f"{'on' if opts.include_copyright else 'off'}"
     )
+    if selective_rules:
+        effective_meta_scope = "on / on / on" if selective_rules.include_rating_meta else "off / off / off"
+    lines.append(f"Include general tags: {'on' if opts.include_general else 'off'}")
+    lines.append(f"Include character tags: {'on' if effective_include_character else 'off'}")
+    lines.append(f"Include rating tags: {'on' if effective_include_rating else 'off'}")
+    if selective_rules:
+        lines.append("Tag focus mode: auto (profile managed)")
+    else:
+        lines.append(f"Tag focus mode: {opts.tag_focus_mode}")
+    lines.append(f"Include meta/artist/copyright: {effective_meta_scope}")
     lines.append(
         f"Threshold floor: {opts.min_threshold_floor} (policy)"
     )
@@ -1458,6 +2103,7 @@ def run_tagger(
         for idx, (path, row) in enumerate(zip(batch_paths, probs)):
             color_presence = color_presence_list[idx] if idx < len(color_presence_list) else None
             color_debug = [] if opts.debug_color_sanity else None
+            image_debug: Dict[str, Any] = {}
             tags = _build_tags(
                 row,
                 labels,
@@ -1470,18 +2116,26 @@ def run_tagger(
                 stats=tag_stats,
                 color_presence=color_presence,
                 color_debug=color_debug,
+                danbooru_safenet_state=danbooru_safenet_state,
+                debug_state=image_debug,
             )
             if opts.debug_color_sanity and color_debug:
                 color_drop_total += len(color_debug)
                 color_drop_images += 1
             tags = _apply_trigger_tag(tags, opts.trigger_tag)
-            if opts.skip_empty and not tags:
+            skip_empty_effective = _effective_skip_empty(opts.write_mode, opts.skip_empty)
+            if skip_empty_effective and not tags:
                 processed += 1
                 _report_progress()
                 continue
 
             if opts.preview_limit > 0 and sample_count < opts.preview_limit:
-                samples.append(f"{path.name}: {', '.join(tags)}")
+                if opts.preview_only and image_debug.get("output_profile") != OUTPUT_PROFILE_STANDARD_FULL:
+                    samples.append(path.name)
+                    samples.append(_format_preview_reason(image_debug))
+                    samples.append(f"final: {', '.join(tags)}")
+                else:
+                    samples.append(f"{path.name}: {', '.join(tags)}")
                 if opts.debug_color_sanity and color_debug:
                     for item in color_debug:
                         samples.append(f"  [color_sanity] dropped {item}")
@@ -1496,7 +2150,7 @@ def run_tagger(
             existing_main: List[str] = []
             existing_optional: List[str] = []
             existing_warning: Optional[str] = None
-            if txt_path.exists():
+            if not _is_literal_overwrite(opts.write_mode) and txt_path.exists():
                 existing_main, existing_optional, existing_warning = _read_tag_file(txt_path)
 
             if opts.write_mode == "overwrite":
@@ -1513,7 +2167,7 @@ def run_tagger(
                 merged_main = sorted(merged_main)
             merged_main = _apply_trigger_tag(merged_main, opts.trigger_tag)
 
-            if merged_main or not opts.skip_empty:
+            if merged_main or not skip_empty_effective:
                 text = _format_tag_file(
                     merged_main,
                     existing_optional,
@@ -1545,9 +2199,38 @@ def run_tagger(
             f"images_with_general={tag_stats.get('images_with_general', 0)}, "
             f"images_with_character={tag_stats.get('images_with_character', 0)}"
         )
+        if selective_rules:
+            lines.append(
+                "Selective kept counts: "
+                f"background_place={tag_stats.get('selective_kept_background_place', 0)}, "
+                f"object_prop={tag_stats.get('selective_kept_object_prop', 0)}, "
+                f"pose_action={tag_stats.get('selective_kept_pose_action', 0)}, "
+                f"limb_action={tag_stats.get('selective_kept_limb_action', 0)}"
+            )
+            lines.append(
+                "Selective dropped counts: "
+                f"appearance_identity={tag_stats.get('selective_dropped_appearance_identity', 0)}, "
+                f"clothing_outfit={tag_stats.get('selective_dropped_clothing_outfit', 0)}, "
+                f"unknown={tag_stats.get('selective_dropped_unknown', 0)}"
+            )
+            lines.append(
+                f"Selective unknown fallback kept: {tag_stats.get('selective_unknown_fallback_kept', 0)}"
+            )
+            lines.append(f"Selective dropped character tags: {tag_stats.get('selective_dropped_character', 0)}")
+            lines.append(
+                f"Selective dropped meta/rating tags: {tag_stats.get('selective_dropped_meta_rating', 0)}"
+            )
     if opts.debug_color_sanity:
         lines.append(
             f"Color sanity drops: {color_drop_total} tags across {color_drop_images} images."
+        )
+    if danbooru_safenet_state.enabled:
+        lines.append(
+            "Danbooru safe-net stats: "
+            f"lookups={danbooru_safenet_state.lookups}, "
+            f"resolved={danbooru_safenet_state.resolved}, "
+            f"errors={danbooru_safenet_state.errors}, "
+            f"lookup_cap_skips={danbooru_safenet_state.skipped}"
         )
 
     if opts.preview_only:
@@ -1587,6 +2270,15 @@ def handle(form, ctx):
         "recursive",
         "include_character",
         "include_rating",
+        "selective_keep_background_place",
+        "selective_keep_object_prop",
+        "selective_keep_pose_action",
+        "selective_keep_appearance",
+        "selective_keep_clothing",
+        "selective_keep_character_names",
+        "selective_keep_rating_meta",
+        "selective_keep_unknown_general",
+        "danbooru_safenet",
         "preview_only",
         "dedupe",
         "sort_tags",

@@ -3,6 +3,7 @@ from collections import Counter
 from dataclasses import replace
 from pathlib import Path
 import re
+from unittest.mock import patch
 
 from PIL import Image
 
@@ -29,6 +30,15 @@ class OfflineTaggerTests(unittest.TestCase):
             mcut_min_general_tags=8,
             mcut_min_character_tags=0,
             mcut_min_meta_tags=0,
+            output_profile="standard_full",
+            selective_keep_background_place=True,
+            selective_keep_object_prop=True,
+            selective_keep_pose_action=True,
+            selective_keep_appearance=False,
+            selective_keep_clothing=False,
+            selective_keep_character_names=False,
+            selective_keep_rating_meta=False,
+            selective_keep_unknown_general=False,
             tag_focus_mode="all",
             include_general=True,
             include_character=False,
@@ -74,6 +84,7 @@ class OfflineTaggerTests(unittest.TestCase):
             color_keep_if_score_ge=0.92,
             color_downscale=256,
             debug_color_sanity=False,
+            danbooru_safenet=False,
         )
         return replace(base, **overrides)
 
@@ -280,6 +291,232 @@ class OfflineTaggerTests(unittest.TestCase):
 
         tags = offline_tagger._apply_trigger_tag([], "trigger")
         self.assertEqual(tags, ["trigger"])
+
+    def test_effective_skip_empty_disables_for_overwrite(self):
+        self.assertTrue(offline_tagger._effective_skip_empty("append", True))
+        self.assertTrue(offline_tagger._effective_skip_empty("skip", True))
+        self.assertFalse(offline_tagger._effective_skip_empty("overwrite", True))
+        self.assertFalse(offline_tagger._effective_skip_empty("overwrite", False))
+
+    def test_is_literal_overwrite(self):
+        self.assertTrue(offline_tagger._is_literal_overwrite("overwrite"))
+        self.assertTrue(offline_tagger._is_literal_overwrite(" Overwrite "))
+        self.assertFalse(offline_tagger._is_literal_overwrite("append"))
+
+    def test_cache_lookup_model_bundle_prefers_exact(self):
+        offline_tagger._MODEL_CACHE.clear()
+        try:
+            bundle_exact = {"backend": "transformers", "device": "cpu", "model": object()}
+            bundle_other = {"backend": "transformers", "device": "cuda", "model": object()}
+            offline_tagger._MODEL_CACHE[("repo", "cpu", "transformers")] = bundle_exact
+            offline_tagger._MODEL_CACHE[("repo", "cuda", "transformers")] = bundle_other
+            got = offline_tagger._cache_lookup_model_bundle("repo", "cpu", "transformers")
+            self.assertIs(got, bundle_exact)
+        finally:
+            offline_tagger._MODEL_CACHE.clear()
+
+    def test_cache_lookup_model_bundle_resolves_auto_alias(self):
+        offline_tagger._MODEL_CACHE.clear()
+        try:
+            bundle_cpu = {"backend": "transformers", "device": "cpu", "model": object()}
+            offline_tagger._MODEL_CACHE[("repo", "cpu", "transformers")] = bundle_cpu
+            got = offline_tagger._cache_lookup_model_bundle("repo", "auto", "transformers")
+            self.assertIs(got, bundle_cpu)
+        finally:
+            offline_tagger._MODEL_CACHE.clear()
+
+    def test_classify_general_tag_priority(self):
+        self.assertEqual(
+            offline_tagger.classify_general_tag("blue_sky"),
+            offline_tagger.BUCKET_BACKGROUND_PLACE,
+        )
+        self.assertEqual(
+            offline_tagger.classify_general_tag("blue_hair"),
+            offline_tagger.BUCKET_APPEARANCE_IDENTITY,
+        )
+        self.assertEqual(
+            offline_tagger.classify_general_tag("hair_ribbon"),
+            offline_tagger.BUCKET_CLOTHING_OUTFIT,
+        )
+        self.assertEqual(
+            offline_tagger.classify_general_tag("holding_sword"),
+            offline_tagger.BUCKET_OBJECT_PROP,
+        )
+
+    def test_output_profile_background_pose_only(self):
+        labels = [
+            "forest",
+            "blue_sky",
+            "sword",
+            "standing",
+            "arms_up",
+            "blue_hair",
+            "dress",
+            "char_a",
+            "meta_tag",
+            "rating:safe",
+        ]
+        categories = [0, 0, 0, 0, 0, 0, 0, 3, 4, 9]
+        probs = [0.95, 0.93, 0.92, 0.91, 0.9, 0.89, 0.88, 0.94, 0.93, 0.99]
+        opts = self._opts(
+            output_profile="background_pose_only",
+            include_general=True,
+            include_character=True,
+            include_meta=True,
+            include_rating=True,
+        )
+        category_ids = offline_tagger.CategoryIds(general=0, character=3, meta=4, rating=9)
+        tags = offline_tagger._build_tags(
+            probs,
+            labels,
+            categories,
+            opts,
+            category_ids,
+            exclude_tags=set(),
+            exclude_regex=[],
+        )
+        self.assertIn("forest", tags)
+        self.assertIn("blue_sky", tags)
+        self.assertIn("sword", tags)
+        self.assertIn("standing", tags)
+        self.assertIn("arms_up", tags)
+        self.assertNotIn("blue_hair", tags)
+        self.assertNotIn("dress", tags)
+        self.assertNotIn("char_a", tags)
+        self.assertNotIn("meta_tag", tags)
+        self.assertNotIn("rating:safe", tags)
+
+    def test_output_profile_custom_selective_appearance_on_clothing_off(self):
+        labels = ["forest", "standing", "blue_hair", "dress"]
+        categories = [0, 0, 0, 0]
+        probs = [0.95, 0.9, 0.89, 0.88]
+        opts = self._opts(
+            output_profile="custom_selective",
+            selective_keep_background_place=True,
+            selective_keep_object_prop=False,
+            selective_keep_pose_action=True,
+            selective_keep_appearance=True,
+            selective_keep_clothing=False,
+        )
+        category_ids = offline_tagger.CategoryIds(general=0)
+        tags = offline_tagger._build_tags(
+            probs,
+            labels,
+            categories,
+            opts,
+            category_ids,
+            exclude_tags=set(),
+            exclude_regex=[],
+        )
+        self.assertIn("blue_hair", tags)
+        self.assertIn("forest", tags)
+        self.assertIn("standing", tags)
+        self.assertNotIn("dress", tags)
+
+    def test_output_profile_custom_selective_background_only(self):
+        labels = ["forest", "sword", "standing", "blue_hair", "dress"]
+        categories = [0, 0, 0, 0, 0]
+        probs = [0.95, 0.94, 0.93, 0.92, 0.91]
+        opts = self._opts(
+            output_profile="custom_selective",
+            selective_keep_background_place=True,
+            selective_keep_object_prop=False,
+            selective_keep_pose_action=False,
+            selective_keep_appearance=False,
+            selective_keep_clothing=False,
+        )
+        category_ids = offline_tagger.CategoryIds(general=0)
+        tags = offline_tagger._build_tags(
+            probs,
+            labels,
+            categories,
+            opts,
+            category_ids,
+            exclude_tags=set(),
+            exclude_regex=[],
+        )
+        self.assertEqual(tags, ["forest"])
+
+    def test_selective_sparse_unknown_fallback_keeps_top_unknown(self):
+        labels = ["unknown_a", "unknown_b", "unknown_c"]
+        categories = [0, 0, 0]
+        probs = [0.95, 0.85, 0.75]
+        opts = self._opts(output_profile="background_pose_only")
+        category_ids = offline_tagger.CategoryIds(general=0)
+        debug_state = {}
+        tags = offline_tagger._build_tags(
+            probs,
+            labels,
+            categories,
+            opts,
+            category_ids,
+            exclude_tags=set(),
+            exclude_regex=[],
+            debug_state=debug_state,
+        )
+        self.assertEqual(tags, ["unknown_a", "unknown_b"])
+        self.assertEqual(debug_state.get("unknown_fallback_kept"), 2)
+
+    def test_selective_sparse_unknown_fallback_not_used_when_already_dense(self):
+        labels = ["forest", "standing", "unknown_a"]
+        categories = [0, 0, 0]
+        probs = [0.95, 0.92, 0.9]
+        opts = self._opts(output_profile="background_pose_only")
+        category_ids = offline_tagger.CategoryIds(general=0)
+        tags = offline_tagger._build_tags(
+            probs,
+            labels,
+            categories,
+            opts,
+            category_ids,
+            exclude_tags=set(),
+            exclude_regex=[],
+        )
+        self.assertEqual(tags, ["forest", "standing"])
+
+    def test_output_profile_safenet_rescues_unknown_background(self):
+        labels = ["forest", "standing", "castle_ruins"]
+        categories = [0, 0, 0]
+        probs = [0.97, 0.96, 0.95]
+        category_ids = offline_tagger.CategoryIds(general=0)
+
+        opts_off = self._opts(
+            output_profile="background_pose_only",
+            danbooru_safenet=False,
+        )
+        tags_off = offline_tagger._build_tags(
+            probs,
+            labels,
+            categories,
+            opts_off,
+            category_ids,
+            exclude_tags=set(),
+            exclude_regex=[],
+        )
+        self.assertEqual(tags_off, ["forest", "standing"])
+
+        opts_on = self._opts(
+            output_profile="background_pose_only",
+            danbooru_safenet=True,
+        )
+        state = offline_tagger.DanbooruSafeNetState(enabled=True, max_lookups=5)
+        with patch(
+            "services.offline_tagger._lookup_danbooru_bucket",
+            return_value=offline_tagger.BUCKET_BACKGROUND_PLACE,
+        ):
+            tags_on = offline_tagger._build_tags(
+                probs,
+                labels,
+                categories,
+                opts_on,
+                category_ids,
+                exclude_tags=set(),
+                exclude_regex=[],
+                danbooru_safenet_state=state,
+            )
+        self.assertEqual(tags_on, ["forest", "standing", "castle_ruins"])
+        self.assertEqual(state.lookups, 1)
+        self.assertEqual(state.resolved, 1)
 
     def test_normalizer_keeps_trigger_first(self):
         preset = {"rules": {"trim": True, "dedup": True, "sort": {"enabled": True, "priority_groups": []}}}

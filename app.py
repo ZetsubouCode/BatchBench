@@ -5,8 +5,10 @@ from pathlib import Path
 from typing import List, Tuple, Optional, Dict, Any
 from flask import Flask, render_template, request, flash, jsonify, redirect, url_for, session, send_file
 from dotenv import load_dotenv
+from PIL import Image
 
 from utils.io import readable_path, readable_path_or_none, windows_drives, default_browse_root
+from utils.image_ops import apply_preset
 from utils.parse import parse_bool, parse_int, parse_float, parse_exts, parse_tag_list
 from utils.tool_result import unpack_tool_result
 
@@ -34,6 +36,19 @@ NORMALIZE_PRESET_ROOT = Path(__file__).parent / "presets"
 NORMALIZE_PRESET_ROOT.mkdir(parents=True, exist_ok=True)
 SERVER_UPLOAD_IMAGE_EXTS = {ext.lower() for ext in normalizer.DEFAULT_IMAGE_EXTS}
 BROWSE_STRICT_MODE = parse_bool(os.getenv("BROWSE_STRICT_MODE"), default=False)
+BATCH_ADJUST_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
+BATCH_ADJUST_PARAM_KEYS = [
+    "exposure_ev",
+    "brightness",
+    "contrast",
+    "highlights",
+    "shadows",
+    "saturation",
+    "warmth",
+    "tint",
+    "sharpness",
+    "vignette",
+]
 
 
 def _parse_path_list(raw: str) -> List[Path]:
@@ -76,7 +91,7 @@ def _is_allowed_path(path: Path) -> bool:
 
 # Load presets if present
 PRESET_FILES = {}
-for name in ["preset_keep_warm_balanced.json", "preset_neutral_daylight.json", "custom.json"]:
+for name in ["preset_keep_warm_balanced.json", "preset_neutral_daylight.json", "preset_greyscale.json", "custom.json"]:
     p = Path(__file__).parent / name
     if p.exists():
         try:
@@ -103,6 +118,19 @@ def _parse_float(val: Any) -> Optional[float]:
 
 def _parse_int(val: Any, default: int) -> int:
     return parse_int(val, default=default)
+
+
+def _parse_batch_adjust_cfg(payload: Dict[str, Any]) -> Dict[str, float]:
+    src = payload.get("cfg") if isinstance(payload.get("cfg"), dict) else payload
+    if not isinstance(src, dict):
+        src = {}
+    cfg: Dict[str, float] = {}
+    for key in BATCH_ADJUST_PARAM_KEYS:
+        val = _parse_float(src.get(key))
+        if val is None:
+            continue
+        cfg[key] = val
+    return cfg
 
 
 def _safe_child(root: Path, rel: str) -> Optional[Path]:
@@ -945,6 +973,89 @@ def api_tags_image():
     return send_file(target, conditional=True)
 
 
+@app.get("/api/batch-adjust/list-images")
+def api_batch_adjust_list_images():
+    folder = (request.args.get("folder") or "").strip()
+    recursive = _parse_bool(request.args.get("recursive"), True)
+    limit = _parse_int(request.args.get("limit"), 400)
+    limit = max(1, min(2000, limit))
+    root = readable_path(folder) if folder else readable_path(WORK_DIR)
+
+    if not _is_allowed_path(root):
+        return jsonify({"ok": False, "error": f"Path is outside allowed roots: {root}"}), 403
+    if not root.exists() or not root.is_dir():
+        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
+
+    images = blur_brush.list_images(root, recursive=recursive, exts=sorted(BATCH_ADJUST_IMAGE_EXTS))
+    return jsonify(
+        {
+            "ok": True,
+            "folder": str(root),
+            "recursive": recursive,
+            "total": len(images),
+            "returned": min(len(images), limit),
+            "images": images[:limit],
+        }
+    )
+
+
+@app.post("/api/batch-adjust/preview")
+def api_batch_adjust_preview():
+    payload = request.get_json(silent=True) or {}
+    folder = (payload.get("folder") or "").strip()
+    rel = (payload.get("rel") or payload.get("path") or "").strip()
+    preview_max_side = _parse_int(payload.get("preview_max_side"), 960)
+    preview_max_side = max(128, min(2048, preview_max_side))
+
+    if not rel:
+        return jsonify({"ok": False, "error": "rel is required"}), 400
+    if _bad_rel(rel):
+        return jsonify({"ok": False, "error": "Invalid path"}), 400
+
+    root = readable_path(folder) if folder else readable_path(WORK_DIR)
+    if not _is_allowed_path(root):
+        return jsonify({"ok": False, "error": f"Path is outside allowed roots: {root}"}), 403
+    if not root.exists() or not root.is_dir():
+        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
+
+    target = _safe_child(root, rel)
+    if not target or not target.exists() or not target.is_file():
+        return jsonify({"ok": False, "error": "File not found"}), 404
+    if target.suffix.lower() not in BATCH_ADJUST_IMAGE_EXTS:
+        return jsonify({"ok": False, "error": "Unsupported image format"}), 400
+
+    cfg = _parse_batch_adjust_cfg(payload)
+    try:
+        with Image.open(target) as src:
+            out = apply_preset(src.convert("RGB"), cfg)
+            w, h = out.size
+            long_side = max(w, h)
+            if long_side > preview_max_side:
+                scale = float(preview_max_side) / float(long_side)
+                nw = max(1, int(round(w * scale)))
+                nh = max(1, int(round(h * scale)))
+                try:
+                    resample = Image.Resampling.LANCZOS
+                except Exception:
+                    resample = Image.LANCZOS
+                out = out.resize((nw, nh), resample=resample)
+
+            buf = BytesIO()
+            out.save(buf, "JPEG", quality=92, optimize=True)
+            payload_bytes = buf.getvalue()
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    resp = send_file(
+        BytesIO(payload_bytes),
+        mimetype="image/jpeg",
+        conditional=False,
+        download_name="batch_adjust_preview.jpg",
+    )
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
 @app.get("/api/blur_brush/list-images")
 def api_blur_brush_list_images():
     folder = (request.args.get("folder") or "").strip()
@@ -1231,6 +1342,77 @@ def api_tags_rmdir():
     except Exception as exc:
         return _json_error(str(exc), 500, normalized_root=str(paths["project_root"]))
     return jsonify({"ok": True, "normalized_root": str(paths["project_root"]), "needs_init": False, "warnings": [], "info": []})
+
+
+@app.post("/api/tags/cleanup-subdirs")
+def api_tags_cleanup_subdirs():
+    payload = request.get_json(silent=True) or {}
+    keep_temp = _parse_bool(payload.get("keep_temp"), True)
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    root = paths["dataset_root"]
+    if not root.exists() or not root.is_dir():
+        return _json_error(f"Dataset folder not found: {root}", 400, normalized_root=str(paths["project_root"]), needs_init=True)
+
+    top_dirs: List[Path] = []
+    try:
+        for entry in sorted([x for x in root.iterdir() if x.is_dir()], key=lambda x: x.name.lower()):
+            if keep_temp and entry.name.lower() == "_temp":
+                continue
+            top_dirs.append(entry)
+    except Exception as exc:
+        return _json_error(str(exc), 500, normalized_root=str(paths["project_root"]))
+
+    blocked: List[str] = []
+    removable: List[Path] = []
+    for folder in top_dirs:
+        rel = _rel_to_root(root, folder)
+        try:
+            has_files = any(p.is_file() for p in folder.rglob("*"))
+        except Exception as exc:
+            return _json_error(str(exc), 500, normalized_root=str(paths["project_root"]))
+        if has_files:
+            blocked.append(rel)
+        else:
+            removable.append(folder)
+
+    if blocked:
+        return jsonify(
+            {
+                "ok": True,
+                "cleaned": False,
+                "removed": [],
+                "blocked": blocked,
+                "warning": "Some folders contain files. Cleanup was not applied.",
+                "normalized_root": str(paths["project_root"]),
+                "needs_init": False,
+                "warnings": [],
+                "info": [],
+            }
+        )
+
+    removed: List[str] = []
+    for folder in removable:
+        rel = _rel_to_root(root, folder)
+        try:
+            shutil.rmtree(folder)
+            removed.append(rel)
+        except Exception as exc:
+            return _json_error(str(exc), 500, normalized_root=str(paths["project_root"]))
+
+    return jsonify(
+        {
+            "ok": True,
+            "cleaned": True,
+            "removed": removed,
+            "blocked": [],
+            "normalized_root": str(paths["project_root"]),
+            "needs_init": False,
+            "warnings": [],
+            "info": [],
+        }
+    )
 
 
 @app.post("/api/tags/move")

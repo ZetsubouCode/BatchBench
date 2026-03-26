@@ -243,7 +243,7 @@
   .gallery-modal-nav { display:flex; align-items:center; justify-content:space-between; gap:.75rem; margin-bottom:.55rem; }
   .gallery-modal-index { font-size:.8rem; color:var(--bb-muted); min-width:5.5rem; text-align:center; }
   .gallery-modal-error { font-size:.78rem; color:#ffc6ce; min-height:1.1rem; text-align:center; }
-  .gallery-modal-stage { position:relative; display:flex; align-items:center; justify-content:center; min-height:72vh; border:1px solid var(--bb-border); border-radius:.75rem; background:rgba(7,13,24,.9); overflow:hidden; }
+  .gallery-modal-stage { position:relative; display:flex; align-items:center; justify-content:center; min-height:58vh; border:1px solid var(--bb-border); border-radius:.75rem; background:rgba(7,13,24,.9); overflow:hidden; }
   .gallery-modal-stage.is-selected { border-color:#88c8ff; box-shadow:0 0 0 2px rgba(136,200,255,.65), 0 0 28px rgba(82,162,255,.32); }
   .gallery-modal-stage.is-selected::after { content:""; position:absolute; inset:0; border-radius:.75rem; pointer-events:none; box-shadow:inset 0 0 0 2px rgba(136,200,255,.65); }
   .gallery-modal-stage-inner { display:flex; justify-content:center; align-items:center; width:100%; padding:1.5rem 4.5rem; cursor:default; touch-action:none; user-select:none; }
@@ -274,6 +274,9 @@
   .gallery-modal-select { min-width:120px; }
   .gallery-modal-select.is-selected { border-color:#7aa2ff; color:#eaf3ff; background:#1b2b4a; }
   .gallery-modal-shortcut { font-size:.74rem; color:var(--bb-muted); }
+  .gallery-preview-layout { display:grid; grid-template-columns:minmax(0, 1fr) minmax(300px, 360px); gap:.85rem; align-items:start; max-height:78vh; }
+  .gallery-preview-main { min-width:0; display:flex; flex-direction:column; gap:.35rem; }
+  .gallery-preview-side { min-width:0; max-height:78vh; overflow:auto; padding-right:.1rem; }
   .gallery-zoom { display:flex; align-items:center; gap:.5rem; }
   .gallery-zoom-label { font-size:.85rem; color:var(--bb-muted); min-width:4ch; text-align:right; }
   .gallery-manual-tags { border-top:1px solid var(--bb-border); padding-top:.75rem; }
@@ -384,6 +387,8 @@
     .tag-editor-left-rail { position:static; margin-bottom:.65rem; }
     .left-drawer { left:.75rem; right:.75rem; width:auto; top:1rem; bottom:1rem; }
     .workdir-temp-list { grid-template-columns:1fr; }
+    .gallery-preview-layout { grid-template-columns:1fr; max-height:none; }
+    .gallery-preview-side { max-height:none; overflow:visible; padding-right:0; }
   }
 
   @media (max-width: 767.98px) {
@@ -559,7 +564,7 @@
                 <option value="created_desc">Created newest</option>
               </select>
             </div>
-            <div class="input-group input-group-sm" style="width:130px;">
+            <div class="input-group input-group-sm" style="min-width:180px;max-width:220px;">
               <span class="input-group-text">Grid</span>
               <select class="form-select" id="gallery-grid-cols">
                 <option value="2">2 / row</option>
@@ -586,8 +591,6 @@
             <div class="gallery-status" id="gallery-cheatsheet-status"></div>
             <div class="gallery-cheatsheet-trigger" id="gallery-cheatsheet-trigger">Trigger word not detected.</div>
             <div class="gallery-cheatsheet-sections" id="gallery-cheatsheet-sections"></div>
-            <div class="gallery-cheatsheet-tags" id="gallery-cheatsheet-tags"></div>
-            <div class="gallery-cheatsheet-content" id="gallery-cheatsheet-content">Cheat sheet not loaded.</div>
           </div>
           <div class="gallery-drop mt-3" id="gallery-drop" data-bs-toggle="tooltip" data-bs-title="Drop files here to copy into dataset/">
             Drop files here, or <span class="text-decoration-underline">click to select</span> for dataset/
@@ -729,6 +732,9 @@
         <button type="button" class="btn btn-sm btn-outline-warning mt-2 w-100" id="workdir-return-temp">
           Return all files from subfolders to dataset root
         </button>
+        <button type="button" class="btn btn-sm btn-outline-danger mt-2 w-100" id="workdir-cleanup-subdirs">
+          Remove empty subfolders (keep _temp)
+        </button>
         <div class="workdir-status mt-2" id="workdir-status"></div>
         <div class="workdir-temp-meta">
           <div class="small text-muted">Active _temp items</div>
@@ -778,46 +784,52 @@
           <button type="button" class="btn btn-sm btn-outline-light gallery-modal-select" id="gallery-preview-select">Select</button>
           <span class="gallery-modal-shortcut">Shortcuts: <span class="code-chip">Space</span> select, <span class="code-chip">A</span>/<span class="code-chip">D</span> navigate</span>
         </div>
-        <div class="gallery-modal-stage" id="gallery-preview-stage">
-          <button type="button" class="gallery-modal-arrow is-prev" id="gallery-preview-prev" aria-label="Previous image">&#8249;</button>
-          <div class="gallery-preview-selected-badge d-none" id="gallery-preview-selected-badge">Selected</div>
-          <div class="gallery-modal-stage-inner" id="gallery-preview-stage-inner">
-            <img id="gallery-preview-img" class="gallery-modal-img" src="" alt="">
-          </div>
-          <button type="button" class="gallery-modal-arrow is-next" id="gallery-preview-next" aria-label="Next image">&#8250;</button>
-        </div>
-        <div class="gallery-modal-error mt-2" id="gallery-preview-error"></div>
-        <div class="d-flex align-items-center justify-content-between mt-3">
-          <div class="small text-muted" id="gallery-preview-name"></div>
-          <div class="gallery-zoom">
-            <span class="gallery-zoom-label" id="gallery-zoom-label">100%</span>
-            <button type="button" class="btn btn-sm btn-outline-light" id="gallery-zoom-out">-</button>
-            <button type="button" class="btn btn-sm btn-outline-light" id="gallery-zoom-in">+</button>
-            <button type="button" class="btn btn-sm btn-outline-secondary" id="gallery-zoom-reset">Reset</button>
-          </div>
-        </div>
-        <div class="gallery-tags mt-2" id="gallery-preview-tags"></div>
-        <div class="gallery-manual-tags mt-3">
-          <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap">
-            <div class="small fw-semibold">Manual tags</div>
-            <div class="small text-muted" id="gallery-preview-temp-note">Manual add is available for items inside _temp.</div>
-          </div>
-          <div class="input-group input-group-sm mt-2">
-            <input type="text" class="form-control gallery-manual-input" id="gallery-preview-add-tags" placeholder="Add tags, comma separated">
-            <button type="button" class="btn btn-outline-light" id="gallery-preview-add-btn">Add tags</button>
-          </div>
-          <div class="gallery-manual-note mt-2" id="gallery-preview-add-status"></div>
-          <div class="gallery-glossary-box mt-3">
-            <div class="gallery-glossary-top">
-              <div class="gallery-glossary-title">Glossary quick pick</div>
-              <button type="button" class="btn btn-sm btn-outline-secondary" id="gallery-preview-open-glossary">Open full glossary</button>
+        <div class="gallery-preview-layout">
+          <div class="gallery-preview-main">
+            <div class="gallery-modal-stage" id="gallery-preview-stage">
+              <button type="button" class="gallery-modal-arrow is-prev" id="gallery-preview-prev" aria-label="Previous image">&#8249;</button>
+              <div class="gallery-preview-selected-badge d-none" id="gallery-preview-selected-badge">Selected</div>
+              <div class="gallery-modal-stage-inner" id="gallery-preview-stage-inner">
+                <img id="gallery-preview-img" class="gallery-modal-img" src="" alt="">
+              </div>
+              <button type="button" class="gallery-modal-arrow is-next" id="gallery-preview-next" aria-label="Next image">&#8250;</button>
             </div>
-            <div class="gallery-glossary-controls">
-              <input type="text" class="form-control form-control-sm" id="gallery-preview-glossary-search" placeholder="Search glossary tags">
-              <select class="form-select form-select-sm" id="gallery-preview-glossary-filter"></select>
-              <button type="button" class="btn btn-sm btn-outline-light" id="gallery-preview-glossary-clear">Clear</button>
+            <div class="gallery-modal-error mt-2" id="gallery-preview-error"></div>
+          </div>
+          <div class="gallery-preview-side">
+            <div class="d-flex align-items-center justify-content-between mt-1">
+              <div class="small text-muted" id="gallery-preview-name"></div>
+              <div class="gallery-zoom">
+                <span class="gallery-zoom-label" id="gallery-zoom-label">100%</span>
+                <button type="button" class="btn btn-sm btn-outline-light" id="gallery-zoom-out">-</button>
+                <button type="button" class="btn btn-sm btn-outline-light" id="gallery-zoom-in">+</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="gallery-zoom-reset">Reset</button>
+              </div>
             </div>
-            <div class="gallery-glossary-list" id="gallery-preview-glossary-list"></div>
+            <div class="gallery-tags mt-2" id="gallery-preview-tags"></div>
+            <div class="gallery-manual-tags mt-3">
+              <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap">
+                <div class="small fw-semibold">Manual tags</div>
+                <div class="small text-muted" id="gallery-preview-temp-note">Manual add is available for items inside _temp.</div>
+              </div>
+              <div class="input-group input-group-sm mt-2">
+                <input type="text" class="form-control gallery-manual-input" id="gallery-preview-add-tags" placeholder="Add tags, comma separated">
+                <button type="button" class="btn btn-outline-light" id="gallery-preview-add-btn">Add tags</button>
+              </div>
+              <div class="gallery-manual-note mt-2" id="gallery-preview-add-status"></div>
+              <div class="gallery-glossary-box mt-3">
+                <div class="gallery-glossary-top">
+                  <div class="gallery-glossary-title">Glossary quick pick</div>
+                  <button type="button" class="btn btn-sm btn-outline-secondary" id="gallery-preview-open-glossary">Open full glossary</button>
+                </div>
+                <div class="gallery-glossary-controls">
+                  <input type="text" class="form-control form-control-sm" id="gallery-preview-glossary-search" placeholder="Search glossary tags">
+                  <select class="form-select form-select-sm" id="gallery-preview-glossary-filter"></select>
+                  <button type="button" class="btn btn-sm btn-outline-light" id="gallery-preview-glossary-clear">Clear</button>
+                </div>
+                <div class="gallery-glossary-list" id="gallery-preview-glossary-list"></div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -996,8 +1008,6 @@
     cheatStatus: 'gallery-cheatsheet-status',
     cheatTrigger: 'gallery-cheatsheet-trigger',
     cheatSections: 'gallery-cheatsheet-sections',
-    cheatTags: 'gallery-cheatsheet-tags',
-    cheatContent: 'gallery-cheatsheet-content',
     drop: 'gallery-drop',
     input: 'gallery-upload-input',
     loadMore: 'gallery-load-more',
@@ -1048,7 +1058,8 @@
     tempDrop: 'workdir-temp-drop',
     sendSelected: 'workdir-send-selected',
     moveAllTemp: 'workdir-move-all-temp',
-    returnTemp: 'workdir-return-temp'
+    returnTemp: 'workdir-return-temp',
+    cleanupSubdirs: 'workdir-cleanup-subdirs'
   };
   const LEFT = {
     cheatBtn: 'left-drawer-cheatsheet-toggle',
@@ -1112,8 +1123,6 @@
     cheatsheetFile: 'prompt.txt',
     cheatsheetTrigger: '',
     cheatsheetSections: [],
-    cheatsheetTags: [],
-    cheatsheetContent: '',
     previewSource: 'dataset',
     panX: 0,
     panY: 0,
@@ -2009,7 +2018,7 @@
     if (!projectState.ready && preview){
       const previewParts = [];
       if ((preview.create_dirs || []).length) previewParts.push(`create ${(preview.create_dirs || []).join(', ')}`);
-      if ((preview.copy_images || 0) > 0) previewParts.push(`copy ${preview.copy_images} image(s) to database`);
+      if ((preview.copy_images || 0) > 0) previewParts.push(`move ${preview.copy_images} root image(s) to database`);
       if ((preview.copy_dataset_images || 0) > 0) previewParts.push(`copy ${preview.copy_dataset_images} image(s) to dataset`);
       if ((preview.generate_txt || 0) > 0) previewParts.push(`generate ${preview.generate_txt} txt file(s)`);
       if ((preview.conflict_rename || 0) > 0) previewParts.push(`${preview.conflict_rename} rename conflict(s)`);
@@ -2044,7 +2053,7 @@
     const cueItems = [];
     missingItems.forEach(item=> cueItems.push({ label: `Missing ${item}`, tone: 'is-missing' }));
     (preview?.create_dirs || []).forEach(item=> cueItems.push({ label: `Will create ${item}`, tone: 'is-warning' }));
-    if ((preview?.copy_images || 0) > 0) cueItems.push({ label: `Copy ${preview.copy_images} image(s) to database`, tone: 'is-warning' });
+    if ((preview?.copy_images || 0) > 0) cueItems.push({ label: `Move ${preview.copy_images} root image(s) to database`, tone: 'is-warning' });
     if ((preview?.copy_dataset_images || 0) > 0) cueItems.push({ label: `Copy ${preview.copy_dataset_images} image(s) to dataset`, tone: 'is-warning' });
     if ((preview?.generate_txt || 0) > 0) cueItems.push({ label: `Generate ${preview.generate_txt} txt`, tone: 'is-warning' });
     if ((preview?.conflict_rename || 0) > 0) cueItems.push({ label: `${preview.conflict_rename} rename conflict(s)`, tone: 'is-warning' });
@@ -2060,7 +2069,7 @@
     if (planWrap && plan){
       if (preview && projectState.needsInit){
         planWrap.classList.remove('d-none');
-        plan.textContent = `Init preview: ${preview.root_images_found || 0} root image(s), ${preview.copy_images || 0} copy to database, ${preview.copy_dataset_images || 0} copy to dataset, ${preview.generate_txt || 0} txt, ${preview.conflict_rename || 0} rename conflict(s), ${preview.skip_images || 0} skipped.`;
+        plan.textContent = `Init preview: ${preview.root_images_found || 0} root image(s), ${preview.copy_dataset_images || 0} copy to dataset, ${preview.generate_txt || 0} txt, ${preview.copy_images || 0} move to database, ${preview.conflict_rename || 0} rename conflict(s), ${preview.skip_images || 0} skipped.`;
       } else {
         planWrap.classList.add('d-none');
         plan.textContent = '';
@@ -2162,7 +2171,7 @@
     if (preview && preview.ready) return;
     const initPreview = preview?.init_preview || {};
     const confirmed = await showConfirm(
-      `Initialize project root? Create dirs: ${(initPreview.create_dirs || []).join(', ') || 'none'} | Copy to database: ${initPreview.copy_images || 0} | Copy to dataset: ${initPreview.copy_dataset_images || 0} | Generate txt: ${initPreview.generate_txt || 0} | Rename conflicts: ${initPreview.conflict_rename || 0}`,
+      `Initialize project root? Create dirs: ${(initPreview.create_dirs || []).join(', ') || 'none'} | Copy to dataset: ${initPreview.copy_dataset_images || 0} | Generate txt: ${initPreview.generate_txt || 0} | Move root images to database: ${initPreview.copy_images || 0} | Rename conflicts: ${initPreview.conflict_rename || 0}`,
       'Initialize Project'
     );
     if (!confirmed) return;
@@ -2244,6 +2253,36 @@
       if (selectedSet.has(tag)) score += 1;
     });
     return score;
+  }
+
+  function syncGallerySelectionFromTagExplorer(options={}){
+    const render = options.render !== false;
+    const selectedTags = new Set(
+      Array.from(tagVizState.selected || [])
+        .map(normalizeDanbooruTag)
+        .filter(Boolean)
+    );
+    if (!selectedTags.size){
+      galleryState.selected = new Set();
+      setGallerySelectionAnchor('');
+      updateGallerySelectionCount();
+      if (render) renderGalleryItems();
+      return;
+    }
+    const next = new Set();
+    (galleryState.items || []).forEach(item=>{
+      const rel = String(item?.rel || '').trim();
+      if (!rel) return;
+      const tags = Array.isArray(item?.tags) ? item.tags : [];
+      const hasMatch = tags.some(tag => selectedTags.has(normalizeDanbooruTag(tag)));
+      if (hasMatch) next.add(rel);
+    });
+    galleryState.selected = next;
+    if (galleryState.selectionAnchorRel && !next.has(galleryState.selectionAnchorRel)){
+      setGallerySelectionAnchor('');
+    }
+    updateGallerySelectionCount();
+    if (render) renderGalleryItems();
   }
 
   function getSelectedGalleryRels(){
@@ -2685,8 +2724,6 @@
   function renderCheatsheetPanel(){
     const triggerEl = get(GALLERY.cheatTrigger);
     const sectionsWrap = get(GALLERY.cheatSections);
-    const tagsWrap = get(GALLERY.cheatTags);
-    const contentEl = get(GALLERY.cheatContent);
     const fileInput = get(GALLERY.cheatFile);
     if (fileInput) fileInput.value = galleryState.cheatsheetFile || 'prompt.txt';
     if (triggerEl){
@@ -2756,21 +2793,6 @@
         sectionsWrap.appendChild(empty);
       }
     }
-    if (tagsWrap){
-      tagsWrap.innerHTML = '';
-      const tags = Array.isArray(galleryState.cheatsheetTags) ? galleryState.cheatsheetTags : [];
-      if (tags.length){
-        tags.forEach(tag=> tagsWrap.appendChild(createCheatsheetChip(tag)));
-      } else {
-        const empty = document.createElement('div');
-        empty.className = 'gallery-glossary-empty';
-        empty.textContent = 'No cheat sheet tags loaded.';
-        tagsWrap.appendChild(empty);
-      }
-    }
-    if (contentEl){
-      contentEl.textContent = galleryState.cheatsheetContent || 'Cheat sheet not loaded.';
-    }
     refreshCheatsheetChipSelectionCue();
   }
 
@@ -2784,8 +2806,6 @@
     if (!root){
       galleryState.cheatsheetTrigger = '';
       galleryState.cheatsheetSections = [];
-      galleryState.cheatsheetTags = [];
-      galleryState.cheatsheetContent = '';
       renderCheatsheetPanel();
       setCheatsheetStatus('Project root not set.');
       return;
@@ -2793,8 +2813,6 @@
     if (!rel){
       galleryState.cheatsheetTrigger = '';
       galleryState.cheatsheetSections = [];
-      galleryState.cheatsheetTags = [];
-      galleryState.cheatsheetContent = '';
       renderCheatsheetPanel();
       setCheatsheetStatus('Enter a root-level .txt filename.');
       return;
@@ -2812,23 +2830,17 @@
         const err = (data && data.error) ? data.error : `HTTP ${res.status}`;
         galleryState.cheatsheetTrigger = '';
         galleryState.cheatsheetSections = [];
-        galleryState.cheatsheetTags = [];
-        galleryState.cheatsheetContent = '';
         renderCheatsheetPanel();
         setCheatsheetStatus(err);
         return;
       }
       galleryState.cheatsheetTrigger = String(data.trigger || '').trim();
       galleryState.cheatsheetSections = Array.isArray(data.sections) ? data.sections : [];
-      galleryState.cheatsheetTags = Array.isArray(data.tags) ? data.tags : [];
-      galleryState.cheatsheetContent = String(data.content || '').trim();
       renderCheatsheetPanel();
-      setCheatsheetStatus(`Loaded ${galleryState.cheatsheetSections.length} section(s) and ${galleryState.cheatsheetTags.length} tag(s) from the project root.`);
+      setCheatsheetStatus(`Loaded ${galleryState.cheatsheetSections.length} section(s) from the project root.`);
     } catch (err) {
       galleryState.cheatsheetTrigger = '';
       galleryState.cheatsheetSections = [];
-      galleryState.cheatsheetTags = [];
-      galleryState.cheatsheetContent = '';
       renderCheatsheetPanel();
       setCheatsheetStatus(`Cheat sheet load failed: ${err && err.message ? err.message : 'Unknown error'}`);
     }
@@ -2939,7 +2951,7 @@
           const data = result.data || {};
           if (data.removed) setGalleryStatus(`Removed "${tag}".`);
           else setGalleryStatus(`Tag "${tag}" not found.`);
-          if (ctx?.onRemoved) ctx.onRemoved(data.tags || [], data);
+          if (ctx?.onRemoved) await ctx.onRemoved(data.tags || [], data);
         });
         chip.appendChild(btn);
       } else {
@@ -3375,6 +3387,9 @@
       galleryState.items.forEach((item, idx)=>{
         if (item) item._idx = idx;
       });
+      if (tagVizState.selected?.size){
+        syncGallerySelectionFromTagExplorer({ render: false });
+      }
       renderGalleryItems();
       const shown = Math.min(galleryState.items.length, galleryState.visibleCount);
       setGalleryCount(galleryState.total, shown);
@@ -3669,7 +3684,7 @@
           srcItem.has_txt = true;
         }
         fillGalleryTags(tags, item.tags || [], item.has_txt, 0, ctx);
-        if (previewArea === 'temp') renderTempItems();
+        if (previewArea === 'temp') await refreshTempItemsAfterTagMutation();
         else renderGalleryItems();
         await scanTagViz();
       }
@@ -3729,7 +3744,7 @@
     setGalleryManualControlsEnabled(true);
     setGalleryManualStatus(data.added && data.added.length ? `Added ${data.added.length} tag(s).` : 'No new tags added.');
     renderGalleryPreviewModal(item.rel || '');
-    if (area === 'temp') renderTempItems();
+    if (area === 'temp') await refreshTempItemsAfterTagMutation();
     else renderGalleryItems();
     await scanTagViz();
   }
@@ -3913,6 +3928,13 @@
     } catch (_err) {
       workdirState.tempItems = [];
       renderTempItems();
+    }
+  }
+
+  async function refreshTempItemsAfterTagMutation(){
+    await loadTempItems();
+    if (isGalleryPreviewOpen() && galleryState.previewSource === 'temp'){
+      renderGalleryPreviewModal(galleryState.previewRel || '');
     }
   }
 
@@ -4366,6 +4388,60 @@
     }
   }
 
+  async function cleanupWorkspaceSubfolders(){
+    const root = getResolvedProjectRoot();
+    if (!root){
+      setWorkdirStatus('Project root not set.');
+      return;
+    }
+    if (projectState.needsInit && !projectState.ready){
+      setWorkdirStatus('Initialize the project to load dataset workspace.');
+      return;
+    }
+    const ok = await showConfirm(
+      'Remove all dataset subfolders except _temp? Folders that contain files will not be removed.',
+      'Remove subfolders'
+    );
+    if (!ok) return;
+    setWorkdirStatus('Checking subfolders...');
+    try{
+      const res = await fetch('/api/tags/cleanup-subdirs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folder: root, keep_temp: true })
+      });
+      let data = null;
+      try{ data = await res.json(); }catch(_){}
+      if (!res.ok || !data){
+        const err = (data && data.error) ? data.error : `HTTP ${res.status}`;
+        setWorkdirStatus(`Cleanup failed: ${err}`);
+        return;
+      }
+      const blocked = Array.isArray(data.blocked) ? data.blocked : [];
+      const removed = Array.isArray(data.removed) ? data.removed : [];
+      if (blocked.length){
+        setWorkdirStatus(`Cleanup blocked: ${blocked.length} folder(s) contain files.`);
+        showWarning('Cleanup skipped because some folders contain files.', {
+          list: blocked.slice(0, 30),
+          actions: [
+            {
+              label: 'Close',
+              className: 'btn btn-outline-light btn-sm',
+              onClick: clearWarning
+            }
+          ]
+        });
+      } else {
+        clearWarning();
+        setWorkdirStatus(removed.length ? `Removed ${removed.length} subfolder(s).` : 'No removable subfolders found.');
+      }
+      await loadWorkdirRoot();
+      await loadGallery();
+    } catch (err) {
+      setWorkdirStatus(`Cleanup failed: ${err && err.message ? err.message : 'Unknown error'}`);
+    }
+  }
+
   async function zipDatasetFolder(){
     const root = getResolvedProjectRoot();
     if (!root){
@@ -4514,6 +4590,32 @@
       });
     });
     return parts;
+  }
+
+  function firstComposerTag(raw){
+    const mode = getModeOrDefault();
+    const text = String(raw || '');
+    if (mode === 'replace'){
+      const parts = text.split(';').map(token => token.trim()).filter(Boolean);
+      for (const token of parts){
+        if (!token.includes('->')) continue;
+        const left = normalizeDanbooruTag(((token || '').split('->', 2)[0] || '').trim());
+        if (left) return left;
+      }
+      return '';
+    }
+    const tags = splitTagList(text);
+    for (const token of tags){
+      const normalized = normalizeDanbooruTag(token);
+      if (normalized) return normalized;
+    }
+    return '';
+  }
+
+  function getDanbooruLookupSeed(fallbackTag=''){
+    const composerTag = firstComposerTag(get(IDS.tags)?.value || '');
+    if (composerTag) return composerTag;
+    return normalizeDanbooruTag(fallbackTag);
   }
 
   function parseReplaceMappings(raw){
@@ -5519,8 +5621,11 @@
         syncTagsFromSelection(true);
         updateTagSyncStatus();
         updateTagHint();
-        triggerDanbooruLookup(item.tag, { autoOpen: true });
-        renderGalleryItems();
+        const lookupTag = getDanbooruLookupSeed(item.tag);
+        if (lookupTag){
+          triggerDanbooruLookup(lookupTag, { autoOpen: true });
+        }
+        syncGallerySelectionFromTagExplorer({ render: true });
       });
       frag.appendChild(btn);
     });
@@ -5665,7 +5770,7 @@
         setTagVizStatus('Scan complete.');
       }
       refreshCheatsheetChipSelectionCue();
-      renderGalleryItems();
+      syncGallerySelectionFromTagExplorer({ render: true });
     } finally {
       tagScanBusy = false;
       setTagScanButtonBusy(false);
@@ -5679,7 +5784,7 @@
     renderTagViz();
     updateTagHint();
     setTagVizStatus('Selection cleared.');
-    renderGalleryItems();
+    syncGallerySelectionFromTagExplorer({ render: true });
   }
 
   function syncSelectionToTags(){
@@ -5971,6 +6076,7 @@
       showLog(data.log || '');
       await scanTagViz();
       await loadGallery();
+      await refreshTempItemsAfterTagMutation();
     }catch(err){
       console.error(err);
       showStatus(`Failed: ${err && err.message ? err.message : 'See console / server log.'}`);
@@ -6036,7 +6142,14 @@
 
     get(TAGVIZ.scan)?.addEventListener('click', scanTagViz);
     get(TAGVIZ.sync)?.addEventListener('click', syncSelectionToTags);
-    get(TAGVIZ.danbooru)?.addEventListener('click', ()=> openDanbooruOffcanvas('info', true));
+    get(TAGVIZ.danbooru)?.addEventListener('click', ()=>{
+      const fallback = danbooruState.activeTag || Array.from(tagVizState.selected || [])[0] || '';
+      const tag = getDanbooruLookupSeed(fallback);
+      openDanbooruOffcanvas('info', true);
+      if (tag){
+        triggerDanbooruLookup(tag, { forceOpen: true, immediate: true });
+      }
+    });
     get(TAGVIZ.clear)?.addEventListener('click', clearTagVizSelection);
     get(TAGVIZ.filter)?.addEventListener('input', renderTagViz);
     get(TAGVIZ.sort)?.addEventListener('change', renderTagViz);
@@ -6272,6 +6385,7 @@
     bindWorkdirQuickDrop(WORKDIR.tempDrop, '_temp');
     get(WORKDIR.moveAllTemp)?.addEventListener('click', moveAllFromTempToNewFolder);
     get(WORKDIR.returnTemp)?.addEventListener('click', returnAllTempToRoot);
+    get(WORKDIR.cleanupSubdirs)?.addEventListener('click', cleanupWorkspaceSubfolders);
     get(IDS.tags)?.addEventListener('input', ()=>{
       if (tagsSyncLocked) return;
       const raw = (get(IDS.tags)?.value || '').trim();
@@ -6311,6 +6425,7 @@
         showLog(data.log || '');
         await scanTagViz();
         await loadGallery();
+        await refreshTempItemsAfterTagMutation();
       }catch(err){
         console.error(err);
         showStatus(`Undo failed: ${err && err.message ? err.message : 'See console / server log.'}`);

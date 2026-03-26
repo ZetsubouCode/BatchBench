@@ -2,11 +2,19 @@
 
 A tiny Flask site you can run on your own PC (**localhost**) with simple menus that wrap common batch utilities:
 
+- **Workflow Guide**
 - **Image -> PNG converter**
-- **Batch photo adjust** using presets (warmth/tint/brightness/etc.)
-- **Dataset tag editor** (insert / delete / replace / move / dedup for `.txt` beside images)
-- **Append suffix** to all files in a folder
-- **Reorder** paired *(image + .txt)* names across numbered subfolders
+- **Photo Adjust (preset)** for batch color/exposure tuning
+- **Dataset Tag Editor** (project-root workflow with `_temp` staging, insert/delete/replace/dedup, undo, dataset zip, move-all-from-temp)
+- **Offline Tagger (WD v3)**
+- **Dataset Normalization**
+- **Combine Dataset**
+- **Flatten & Renumber**
+- **Stitch Groups**
+- **Webtoon Panel Splitter**
+- **Brush Blur**
+- **CLIP Token Check**
+- **Pipeline (beta)** with reorderable step cards
 
 *Runs on Windows, Linux, and macOS.*
 
@@ -115,7 +123,7 @@ Cara pakai:
 Parameter:
 - Source Folder: folder gambar (`.jpg/.png/.webp/.bmp`), hanya level atas.
 - Output Folder: hasil foto disimpan di sini.
-- Preset: file JSON preset di root project (contoh: `preset_keep_warm_balanced.json`).
+- Preset: file JSON preset di root project (contoh: `preset_keep_warm_balanced.json`, `preset_greyscale.json`).
 - Suffix: tambahan di nama file output (default `_adj`).
 - Max files: 0 berarti semua file di folder.
 Preset mengacu ke `utils/image_ops.py` dengan range:
@@ -128,25 +136,24 @@ Perhatian:
 
 ### Dataset Tag Editor
 Cara pakai (disarankan):
-- Isi Folder (dataset utama) dan Temp folder (atau klik Use default).
-- Pilih Mode, isi Tags/Mapping, lalu Run.
+- Isi **Project Root** (folder induk yang berisi `database/`, `dataset/`, `dataset/_temp`, `prompt.txt`).
+- Cek **Project Setup** lalu jalankan **Initialize Project** jika belum siap.
+- Stage file ke `dataset/_temp` dari Database/Dataset Browser, pilih mode, isi tags/mapping, lalu Run.
 Parameter:
-- Folder: base folder dataset (bukan `_temp`).
-- Temp folder: lokasi folder sementara; default `<folder>/_temp` (otomatis menyesuaikan OS).
+- Project Root: root proyek dataset. Tool otomatis resolve `database/`, `dataset/`, `dataset/_temp`.
 - Image extensions: ekstensi gambar yang di-scan (gunakan format `.png,.jpg`).
-- Tags / mapping: daftar tag untuk insert/delete/move atau mapping untuk replace.
+- Tags / mapping: daftar tag untuk insert/delete atau mapping replace (`old->new; old2->new2`).
 - Create .bak backups: membuat `.bak` untuk mode edit (insert/delete/replace/dedup).
 Mode:
 - insert: tambah tag jika belum ada.
 - delete: hapus tag.
 - replace: ganti tag, format `old->new; old2->new2`.
-- move: pindahkan image+txt ke temp jika ada tag yang cocok.
 - dedup: hapus duplikat tag.
-- undo: kembalikan file dari temp ke folder utama.
 Perhatian:
-- Mode move berjalan di folder utama; semua mode edit berjalan di Temp (bukan di Folder).
-- Undo memindahkan dari Temp ke Folder; jika nama bentrok, akan ditambah `_1`, `_2`, dst.
-- Tidak recursive. Hanya memproses image yang punya pasangan `.txt`.
+- Semua mode edit berjalan di `dataset/_temp`.
+- **Undo** ada sebagai tombol terpisah untuk restore file dari `_temp` ke `dataset/`.
+- Tersedia tombol **Dataset zip** (zip `dataset/` tanpa `_temp`) dan **Move all from _temp** (pindahkan isi `_temp` ke folder timestamp baru).
+- Insert bisa membuat `.txt` baru untuk gambar tanpa caption (dengan konfirmasi di UI).
 - Tag editor tidak memahami blok `#optional:` atau `#warning:`; gunakan Dataset Normalization jika file Anda memakai format itu.
 
 ### Offline Tagger (WD v3)
@@ -315,23 +322,24 @@ Perhatian:
 
 ### Pipeline (beta)
 Cara pakai:
-- Isi Dataset Source, Working Directory, Output Directory, pilih preset, klik Run Pipeline.
+- Isi Dataset Source, Working Directory, Output Directory.
+- Atur Image extensions + Include subfolders + Working copy mode.
+- Susun step via step cards (drag/reorder), lalu klik Run Pipeline.
 Parameter:
 - Dataset Source Folder: dataset asli yang akan disalin ke working folder.
-- Working Directory: lokasi kerja dan file status `.pipeline_job.json`.
+- Working Directory: workspace job (`<working>/jobs/<job_id>/`).
 - Output Directory: lokasi zip final hasil pipeline.
-- Preset type/file: preset normalisasi yang dipakai.
 - Image extensions + Include subfolders: kontrol file yang diikutkan.
-- Run offline auto-tagging step: aktifkan/nonaktifkan auto tag (WD v3).
-- Extra remove / keep / identity tags: tambahan aturan normalisasi.
-- Move unknown backgrounds to `#optional:`: pindahkan tag yang tidak ada di `allow_general`.
+- Working copy mode: `copy`, `hardlink`, atau `incremental`.
+- Step config diisi per kartu step (Offline Tagger, Tag Editor, Normalization, Zip, dan step utilitas lain).
 Alur kerja:
-- Salin dataset ke working folder -> auto tag (opsional) -> normalize -> pause manual -> cleanup -> zip final.
+- Prepare working copy -> jalankan urutan step sesuai kartu -> update artifacts + log.
 Perhatian:
 - Pipeline tidak mengubah dataset asli; semua perubahan di working folder.
-- Manual retag wajib: edit `.txt` di working folder lalu klik Resume.
-- Pipeline memakai setting default Offline Tagger (WD v3); untuk konfigurasi khusus gunakan tab Offline Tagger.
-- File status disimpan di `<working>\.pipeline_job.json`.
+- `Zip result` harus di step terakhir.
+- Step image-only harus diletakkan sebelum step yang mengubah tag.
+- Step **Dataset Tag Editor** di pipeline sekarang sinkron dengan workflow `_temp` (staging -> edit -> restore) untuk mode non-manual.
+- File state pipeline disimpan di `_work/pipeline_jobs/<job_id>/state.json`.
 
 ---
 

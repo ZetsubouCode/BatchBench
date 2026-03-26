@@ -464,7 +464,7 @@ def initialize_project_layout(project_root: Path, exts: List[str], create_prompt
     logs: List[str] = []
     errors: List[str] = []
     created_dirs: List[str] = []
-    copied: List[Dict[str, str]] = []
+    moved_database: List[Dict[str, str]] = []
     copied_dataset: List[Dict[str, str]] = []
     generated_txt: List[str] = []
     skipped: List[str] = []
@@ -499,40 +499,17 @@ def initialize_project_layout(project_root: Path, exts: List[str], create_prompt
     root_images = [path for path in sorted(root.iterdir(), key=lambda p: p.name.lower()) if _is_image_file(path, extset)]
     txt_content = trigger_word.strip()
 
-    database_images_before = _list_images(paths["database_root"], exts, recursive=True)
-    database_name_index = _image_name_index(database_images_before)
     dataset_images_before = _list_images(paths["dataset_root"], exts, recursive=True, exclude_dir=paths["temp_root"])
     dataset_name_index = _image_name_index(dataset_images_before)
 
-    # Initialization ensures root-level source images exist in database/.
-    for src_img in root_images:
-        src_key = src_img.name.lower()
-        if src_key in database_name_index:
-            skipped.append(f"database/{src_img.name}: already exists")
-            logs.append(f"[skip] database/{src_img.name} already exists")
-            continue
-        dst_img = paths["database_root"] / src_img.name
-        renamed_flag = False
-        if dst_img.exists():
-            dst_img, renamed_flag = _next_unique_file(dst_img)
-        if renamed_flag:
-            renamed.append({"source": src_img.name, "target": dst_img.name, "scope": "database"})
-            logs.append(f"[rename][database] {src_img.name} -> {dst_img.name}")
-        ok, error = _copy_image_only(src_img, dst_img)
-        if not ok:
-            errors.append(f"{src_img.name}: {error}")
-            logs.append(f"[error] copy {src_img.name}: {error}")
-            continue
-        database_name_index.add(dst_img.name.lower())
-        copied.append({"source": src_img.name, "image": dst_img.name})
-        logs.append(f"[copy] {src_img.name} -> database/{dst_img.name}")
-
-    # Initialization also ensures root-level source images exist in dataset/.
+    # Initialization first ensures root-level source images exist in dataset/.
+    dataset_ready_source_keys: Set[str] = set()
     for src_img in root_images:
         src_key = src_img.name.lower()
         if src_key in dataset_name_index:
             skipped.append(f"dataset/{src_img.name}: image already exists")
             logs.append(f"[skip] dataset/{src_img.name} image already exists")
+            dataset_ready_source_keys.add(src_key)
             continue
         dst_img = paths["dataset_root"] / src_img.name
         renamed_flag = False
@@ -547,6 +524,7 @@ def initialize_project_layout(project_root: Path, exts: List[str], create_prompt
             logs.append(f"[error] copy dataset/{src_img.name}: {error}")
             continue
         dataset_name_index.add(dst_img.name.lower())
+        dataset_ready_source_keys.add(src_key)
         rel_img = dst_img.relative_to(paths["dataset_root"]).as_posix()
         copied_dataset.append({"source": src_img.name, "image": rel_img})
         logs.append(f"[copy] {src_img.name} -> dataset/{rel_img}")
@@ -568,12 +546,37 @@ def initialize_project_layout(project_root: Path, exts: List[str], create_prompt
             errors.append(f"dataset/{rel_txt}: {exc}")
             logs.append(f"[error] txt dataset/{rel_txt}: {exc}")
 
+    # After dataset copy + txt generation, move original root images to database/.
+    for src_img in root_images:
+        src_key = src_img.name.lower()
+        if src_key not in dataset_ready_source_keys:
+            skipped.append(f"database/{src_img.name}: skipped move because dataset copy failed")
+            logs.append(f"[skip] move {src_img.name} -> database (dataset copy not ready)")
+            continue
+        if not src_img.exists():
+            continue
+        dst_img = paths["database_root"] / src_img.name
+        renamed_flag = False
+        if dst_img.exists():
+            dst_img, renamed_flag = _next_unique_file(dst_img)
+        if renamed_flag:
+            renamed.append({"source": src_img.name, "target": dst_img.name, "scope": "database"})
+            logs.append(f"[rename][database] {src_img.name} -> {dst_img.name}")
+        try:
+            shutil.move(str(src_img), str(dst_img))
+            moved_database.append({"source": src_img.name, "image": dst_img.name})
+            logs.append(f"[move] {src_img.name} -> database/{dst_img.name}")
+        except Exception as exc:
+            errors.append(f"database/{src_img.name}: {exc}")
+            logs.append(f"[error] move {src_img.name} -> database: {exc}")
+
     return {
         "ok": len(errors) == 0,
         **_make_serializable_path_info(paths),
         "trigger_word": trigger_word,
         "created_dirs": created_dirs,
-        "copied": copied,
+        "moved_database": moved_database,
+        "copied": moved_database,
         "copied_dataset": copied_dataset,
         "generated_txt": generated_txt,
         "skipped": skipped,
@@ -586,8 +589,9 @@ def initialize_project_layout(project_root: Path, exts: List[str], create_prompt
         "logs": logs,
         "summary": {
             "created_dirs": len(created_dirs),
-            "copied_images": len(copied) + len(copied_dataset),
-            "copied_database_images": len(copied),
+            "copied_images": len(moved_database) + len(copied_dataset),
+            "moved_database_images": len(moved_database),
+            "copied_database_images": len(moved_database),
             "copied_dataset_images": len(copied_dataset),
             "generated_txt": len(generated_txt),
             "skipped": len(skipped),
@@ -949,8 +953,8 @@ def handle(form, ctx):
     if mode == "undo":
         images_in_temp = _list_images(temp_folder, exts, recursive=True)
         if not images_in_temp:
-            lines.append(f"No image files with {exts} found in temp folder: {temp_folder}")
-            return _done(False, f"No image files found in temp folder: {temp_folder}")
+            lines.append(f"No image files with {exts} found in _temp.")
+            return _done(False, "No image files found in _temp.")
         restored = 0
         errors = 0
         for img in sorted(images_in_temp, key=lambda p: p.name.lower()):
@@ -992,8 +996,8 @@ def handle(form, ctx):
 
     images = _list_images(temp_folder, exts, recursive=True, exclude_dir=None)
     if not images:
-        lines.append(f"No image files with {exts} found in: {temp_folder}")
-        return _done(False, f"No image files found in: {temp_folder}")
+        lines.append(f"No image files with {exts} found in _temp.")
+        return _done(False, "No image files found in _temp.")
 
     processed = 0
     errors = 0

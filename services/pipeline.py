@@ -1030,24 +1030,176 @@ class PipelineManager:
             self._add_log(job, f"Final zip built: {dest_zip}")
         return StepResult(status="SUCCESS", message="Final zip ready")
 
+    def _stage_tag_editor_temp(self, job: PipelineJob, target: Path, image_exts: List[str]) -> StepResult:
+        temp_root = target / "_temp"
+        try:
+            temp_root.mkdir(parents=True, exist_ok=True)
+        except Exception as exc:
+            return StepResult(status="FAIL", message=f"Cannot create _temp folder for tag editor: {exc}")
+
+        try:
+            has_existing_files = any(p.is_file() for p in temp_root.rglob("*"))
+        except Exception as exc:
+            return StepResult(status="FAIL", message=f"Cannot inspect _temp folder: {exc}")
+        if has_existing_files:
+            return StepResult(
+                status="FAIL",
+                message=f"Tag editor staging requires empty _temp folder: {temp_root}",
+            )
+
+        images = [p for p in _find_images(target, recursive=True, exts=image_exts) if temp_root not in p.parents]
+        if not images:
+            return StepResult(status="FAIL", message="No images found to stage for tag editor.")
+
+        moved: List[Tuple[Path, Path]] = []
+        try:
+            for src_img in images:
+                if self._should_stop(job):
+                    raise InterruptedError("Stop requested during tag editor staging.")
+                rel = src_img.relative_to(target)
+                dst_img = temp_root / rel
+                src_txt = src_img.with_suffix(".txt")
+                dst_txt = dst_img.with_suffix(".txt")
+                dst_img.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(src_img), str(dst_img))
+                moved.append((dst_img, src_img))
+                if src_txt.exists():
+                    shutil.move(str(src_txt), str(dst_txt))
+                    moved.append((dst_txt, src_txt))
+        except InterruptedError as exc:
+            rollback_errors: List[str] = []
+            for moved_path, original_path in reversed(moved):
+                try:
+                    if not moved_path.exists():
+                        continue
+                    original_path.parent.mkdir(parents=True, exist_ok=True)
+                    if original_path.exists():
+                        rollback_errors.append(f"{moved_path.name}: source already exists")
+                        continue
+                    shutil.move(str(moved_path), str(original_path))
+                except Exception as rollback_exc:
+                    rollback_errors.append(f"{moved_path.name}: {rollback_exc}")
+            message = str(exc)
+            if rollback_errors:
+                message = f"{message} | rollback issues: {'; '.join(rollback_errors)}"
+            return StepResult(status="STOP", message=message)
+        except Exception as exc:
+            rollback_errors: List[str] = []
+            for moved_path, original_path in reversed(moved):
+                try:
+                    if not moved_path.exists():
+                        continue
+                    original_path.parent.mkdir(parents=True, exist_ok=True)
+                    if original_path.exists():
+                        rollback_errors.append(f"{moved_path.name}: source already exists")
+                        continue
+                    shutil.move(str(moved_path), str(original_path))
+                except Exception as rollback_exc:
+                    rollback_errors.append(f"{moved_path.name}: {rollback_exc}")
+            message = f"Failed staging files for tag editor: {exc}"
+            if rollback_errors:
+                message = f"{message} | rollback issues: {'; '.join(rollback_errors)}"
+            return StepResult(status="FAIL", message=message)
+
+        with self.lock:
+            self._add_log(job, f"Tag editor staging ready: {len(images)} image(s) moved to {temp_root}")
+        return StepResult(status="SUCCESS", message="staged")
+
+    def _restore_tag_editor_temp(self, job: PipelineJob, target: Path, image_exts: List[str]) -> StepResult:
+        restore_form = {
+            "folder": str(target),
+            "mode": "undo",
+            "exts": ",".join(image_exts),
+            "backup": False,
+        }
+        try:
+            raw = tag_editor.handle(restore_form, {})
+        except Exception as exc:
+            return StepResult(status="FAIL", message=f"Tag editor restore failed: {exc}")
+
+        _, log, meta = unpack_tool_result(raw)
+        self._log_tool_output(job, log or "")
+        if not bool(meta.get("ok", True)):
+            error = str(meta.get("error") or "").strip()
+            if "No image files found in _temp." not in error:
+                return StepResult(status="FAIL", message=error or "Tag editor restore failed.")
+
+        temp_root = target / "_temp"
+        leftovers = [p for p in temp_root.rglob("*") if p.is_file()] if temp_root.exists() else []
+        moved_leftovers = 0
+        renamed_leftovers = 0
+        for src in leftovers:
+            rel = src.relative_to(temp_root)
+            dst = target / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            final_dst = dst
+            bump = 1
+            while final_dst.exists():
+                final_dst = dst.with_name(f"{dst.stem}_{bump}{dst.suffix}")
+                bump += 1
+            if final_dst != dst:
+                renamed_leftovers += 1
+            try:
+                shutil.move(str(src), str(final_dst))
+                moved_leftovers += 1
+            except Exception as exc:
+                return StepResult(status="FAIL", message=f"Failed moving leftover temp file {src}: {exc}")
+
+        if temp_root.exists():
+            dirs = sorted([p for p in temp_root.rglob("*") if p.is_dir()], key=lambda p: len(p.parts), reverse=True)
+            for d in dirs:
+                try:
+                    d.rmdir()
+                except Exception:
+                    pass
+
+        with self.lock:
+            self._add_log(
+                job,
+                "Tag editor staging restored."
+                f" Leftovers moved: {moved_leftovers} (renamed: {renamed_leftovers}).",
+            )
+        return StepResult(status="SUCCESS", message="restored")
+
     def _step_tag_editor(self, job: PipelineJob, step_cfg: Dict[str, Any]) -> StepResult:
         mode = (step_cfg.get("mode") or "manual").strip().lower()
+        if mode in {"move", "undo"}:
+            with self.lock:
+                self._add_log(
+                    job,
+                    f"Legacy tag editor mode '{mode}' is not supported in pipeline anymore. Switching to manual pause.",
+                    level="warning",
+                )
+            mode = "manual"
         if mode in {"manual", "pause"}:
             return self._step_manual_pause(job, step_cfg)
+        if mode not in {"insert", "delete", "replace", "dedup"}:
+            return StepResult(status="FAIL", message=f"Unsupported tag editor mode for pipeline: {mode}")
         target = self._resolve_input_dir(job, step_cfg)
         if not target or not target.exists():
             return StepResult(status="FAIL", message="No folder for tag editor.")
-        image_exts = step_cfg.get("exts") or ",".join(_coerce_exts(job.config.get("image_exts")))
+        image_exts = _coerce_exts(step_cfg.get("exts") or job.config.get("image_exts"))
+        stage = self._stage_tag_editor_temp(job, Path(target), image_exts)
+        if stage.status != "SUCCESS":
+            return stage
         form = {
-            "folder": str(target),
+            "folder": str(Path(target)),
             "mode": mode,
-            "edit_target": (step_cfg.get("edit_target") or "recursive").strip().lower(),
             "tags": step_cfg.get("tags") or "",
-            "exts": image_exts,
+            "exts": ",".join(image_exts),
             "backup": _parse_bool(step_cfg.get("backup")),
-            "temp_dir": step_cfg.get("temp_dir") or "",
+            "create_missing_txt": _parse_bool(step_cfg.get("create_missing_txt")),
         }
-        return self._run_tool(job, tag_editor.handle, form)
+        edit_result = self._run_tool(job, tag_editor.handle, form)
+        restore_result = self._restore_tag_editor_temp(job, Path(target), image_exts)
+        if restore_result.status != "SUCCESS":
+            if edit_result.status == "SUCCESS":
+                return restore_result
+            return StepResult(
+                status=edit_result.status,
+                message=f"{edit_result.message} | restore issue: {restore_result.message}",
+            )
+        return edit_result
 
     def _step_webp_to_png(self, job: PipelineJob, step_cfg: Dict[str, Any]) -> StepResult:
         target = self._resolve_input_dir(job, step_cfg)

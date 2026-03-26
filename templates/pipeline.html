@@ -350,11 +350,11 @@
     },
     tag_editor: {
       label: 'Dataset Tag Editor',
-      summary: 'Manual pause or batch tag edits before normalization.',
+      summary: 'Manual pause or batch tag edits using the current _temp workflow.',
       defaults: {
         mode: 'manual',
-        edit_target: 'recursive',
-        backup: false
+        backup: false,
+        create_missing_txt: false
       },
       body: `
         <div class="row g-3">
@@ -365,11 +365,9 @@
               <option value="insert">insert</option>
               <option value="delete">delete</option>
               <option value="replace">replace</option>
-              <option value="move">move</option>
               <option value="dedup">dedup</option>
-              <option value="undo">undo</option>
             </select>
-            <div class="pipe-inline-note mt-1">Manual pause opens time to edit tags in the working copy.</div>
+            <div class="pipe-inline-note mt-1">Manual pause gives time to edit tags in the working copy.</div>
           </div>
           <div class="col-lg-8">
             <label class="form-label">Target folder (optional override)</label>
@@ -384,25 +382,21 @@
             <label class="form-label">Tags / mapping</label>
             <input class="form-control" data-field="tags" placeholder="tag1, tag2 or old->new; old2->new2">
           </div>
-          <div class="col-lg-3">
-            <label class="form-label">Edit target</label>
-            <select class="form-select" data-field="edit_target">
-              <option value="recursive">recursive (stage to _temp)</option>
-              <option value="temp">temp only</option>
-              <option value="base">base only</option>
-            </select>
-          </div>
           <div class="col-lg-3 d-flex align-items-end">
             <label class="form-check">
               <input class="form-check-input" type="checkbox" data-field="backup">
               <span class="form-check-label">Create .bak backups</span>
             </label>
           </div>
-          <div class="col-lg-6">
-            <label class="form-label">Temp folder (optional override)</label>
-            <div class="input-group">
-              <input class="form-control" data-field="temp_dir" data-browse="1" placeholder="Default: <folder>/_temp">
-              <button class="btn btn-outline-light btn-browse" type="button" data-browse-target="temp_dir">Browse</button>
+          <div class="col-lg-3 d-flex align-items-end">
+            <label class="form-check">
+              <input class="form-check-input" type="checkbox" data-field="create_missing_txt">
+              <span class="form-check-label">Create missing .txt (insert only)</span>
+            </label>
+          </div>
+          <div class="col-12">
+            <div class="pipe-inline-note">
+              Pipeline stages files into <code>_temp</code>, runs the selected tag edit mode, then restores back to the working copy automatically.
             </div>
           </div>
         </div>

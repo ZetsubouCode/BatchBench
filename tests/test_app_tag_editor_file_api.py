@@ -247,6 +247,51 @@ class TagEditorFileApiTests(unittest.TestCase):
             self.assertFalse((temp / "batch_a" / "variant" / "sample.txt").exists())
             self.assertFalse((temp / "notes.md").exists())
 
+    def test_cleanup_subdirs_removes_empty_folders_but_keeps_temp(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / "dataset"
+            (root / "_temp").mkdir(parents=True, exist_ok=True)
+            (root / "set_a" / "nested").mkdir(parents=True, exist_ok=True)
+            (root / "set_b").mkdir(parents=True, exist_ok=True)
+
+            resp = self.client.post(
+                "/api/tags/cleanup-subdirs",
+                json={"folder": str(root), "keep_temp": True},
+            )
+
+            self.assertEqual(resp.status_code, 200)
+            data = resp.get_json()
+            self.assertTrue(data.get("ok"), msg=data)
+            self.assertTrue(data.get("cleaned"), msg=data)
+            self.assertIn("set_a", data.get("removed") or [])
+            self.assertIn("set_b", data.get("removed") or [])
+            self.assertFalse((root / "set_a").exists())
+            self.assertFalse((root / "set_b").exists())
+            self.assertTrue((root / "_temp").exists())
+
+    def test_cleanup_subdirs_warns_and_skips_when_any_folder_has_files(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / "dataset"
+            (root / "_temp").mkdir(parents=True, exist_ok=True)
+            (root / "set_a").mkdir(parents=True, exist_ok=True)
+            (root / "set_a" / "img.png").write_bytes(b"img")
+            (root / "set_b").mkdir(parents=True, exist_ok=True)
+
+            resp = self.client.post(
+                "/api/tags/cleanup-subdirs",
+                json={"folder": str(root), "keep_temp": True},
+            )
+
+            self.assertEqual(resp.status_code, 200)
+            data = resp.get_json()
+            self.assertTrue(data.get("ok"), msg=data)
+            self.assertFalse(data.get("cleaned"), msg=data)
+            self.assertIn("set_a", data.get("blocked") or [])
+            self.assertEqual(data.get("removed"), [])
+            self.assertTrue((root / "set_a").exists())
+            self.assertTrue((root / "set_b").exists())
+            self.assertTrue((root / "_temp").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

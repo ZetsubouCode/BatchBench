@@ -73,6 +73,42 @@
       </div>
     </div>
 
+    <div class="row g-3 mt-1">
+      <div class="col-md-8">
+        <label class="form-label d-flex justify-content-between align-items-center">
+          <span>Preview Image</span>
+          <button class="btn btn-sm btn-outline-light" type="button" id="btn-preview-load-images">Load image list</button>
+        </label>
+        <div class="input-group">
+          <select class="form-select" id="preview_image_batch"
+                  data-bs-toggle="tooltip" data-bs-title="Pick one image from Source Folder for live preview">
+            <option value="">(no image selected)</option>
+          </select>
+          <button class="btn btn-outline-light" type="button" id="btn-preview-refresh">Refresh preview</button>
+        </div>
+        <div class="form-text">Uses Source Folder path. Slider changes are previewed live on selected image.</div>
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label">Preview max side (px)</label>
+        <input id="preview_max_side_batch" type="number" class="form-control" min="128" max="2048" step="32" value="960"
+               data-bs-toggle="tooltip" data-bs-title="Larger size is more detailed but slower">
+      </div>
+    </div>
+
+    <div class="mt-3">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h6 class="m-0">Live Preview</h6>
+        <small class="text-muted" id="batch-preview-status">Select Source + image, then move sliders.</small>
+      </div>
+      <div class="border rounded p-2" style="background:var(--bb-input-bg); border-color:var(--bb-border)!important; min-height:280px;">
+        <div id="batch-preview-empty" class="text-muted small">No preview image loaded.</div>
+        <img id="batch-preview-image" class="img-fluid d-none" alt="Batch adjust live preview"
+             style="max-height:560px; width:100%; object-fit:contain;">
+      </div>
+      <div class="small text-muted mt-2" id="batch-preview-meta"></div>
+    </div>
+
     <hr class="my-4">
 
     <div class="d-flex justify-content-between align-items-center mb-2">
@@ -119,10 +155,20 @@
 (() => {
   const presetEl = document.getElementById('preset_batch');
   const srcEl = document.getElementById('src_batch');
+  const recursiveEl = document.getElementById('recursive_batch');
   const btnWorkdir = document.getElementById('btn-src-workdir');
   const btnLoad = document.getElementById('btn-load-preset');
   const btnReset = document.getElementById('btn-reset-zero');
+  const btnPreviewLoadImages = document.getElementById('btn-preview-load-images');
+  const btnPreviewRefresh = document.getElementById('btn-preview-refresh');
+  const previewSelectEl = document.getElementById('preview_image_batch');
+  const previewMaxSideEl = document.getElementById('preview_max_side_batch');
+  const previewStatusEl = document.getElementById('batch-preview-status');
+  const previewMetaEl = document.getElementById('batch-preview-meta');
+  const previewEmptyEl = document.getElementById('batch-preview-empty');
+  const previewImgEl = document.getElementById('batch-preview-image');
   const presetDataEl = document.getElementById('bb-batch-presets');
+  const defaultWorkDir = '{{ work_dir }}';
 
   let presets = {};
   try { presets = JSON.parse(presetDataEl?.textContent || '{}') || {}; } catch(e) { presets = {}; }
@@ -134,6 +180,10 @@
 
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
   const ranges = { exposure_ev: [-4, 4], vignette: [0, 1] };
+  let previewTimer = null;
+  let previewSeq = 0;
+  let previewAbort = null;
+  let previewUrl = '';
 
   function setPair(key, val){
     const rng = document.getElementById('rng_' + key);
@@ -146,12 +196,218 @@
     num.value = String(v);
   }
 
-  function loadPreset(name){
-    const cfg = presets?.[name] || {};
-    keys.forEach(k => setPair(k, (k in cfg) ? cfg[k] : 0));
+  function setPreviewStatus(msg){
+    if(previewStatusEl) previewStatusEl.textContent = msg || '';
   }
 
-  function resetZero(){ keys.forEach(k => setPair(k, 0)); }
+  function setPreviewMeta(msg){
+    if(previewMetaEl) previewMetaEl.textContent = msg || '';
+  }
+
+  function clearPreviewUrl(){
+    if(previewUrl){
+      URL.revokeObjectURL(previewUrl);
+      previewUrl = '';
+    }
+  }
+
+  function setPreviewEmpty(msg){
+    clearPreviewUrl();
+    if(previewImgEl){
+      previewImgEl.classList.add('d-none');
+      previewImgEl.removeAttribute('src');
+    }
+    if(previewEmptyEl){
+      previewEmptyEl.classList.remove('d-none');
+      if(msg) previewEmptyEl.textContent = msg;
+    }
+  }
+
+  function loadPreset(name, schedule = true){
+    const cfg = presets?.[name] || {};
+    keys.forEach(k => setPair(k, (k in cfg) ? cfg[k] : 0));
+    if(schedule) schedulePreview();
+  }
+
+  function resetZero(){
+    keys.forEach(k => setPair(k, 0));
+    schedulePreview();
+  }
+
+  function getFolderForPreview(){
+    const raw = String(srcEl?.value || '').trim();
+    return raw || defaultWorkDir;
+  }
+
+  function getPreviewCfg(){
+    const cfg = {};
+    keys.forEach((k) => {
+      const num = document.getElementById('num_' + k);
+      const rng = document.getElementById('rng_' + k);
+      const raw = String(num?.value ?? rng?.value ?? '').trim();
+      const n = Number(raw);
+      cfg[k] = Number.isFinite(n) ? n : 0;
+    });
+    return cfg;
+  }
+
+  function getPreviewPayload(){
+    const rel = String(previewSelectEl?.value || '').trim();
+    if(!rel) return null;
+    const rawMaxSide = Number(previewMaxSideEl?.value || 960);
+    const maxSide = Number.isFinite(rawMaxSide) ? clamp(rawMaxSide, 128, 2048) : 960;
+    return {
+      folder: getFolderForPreview(),
+      rel,
+      preview_max_side: Math.round(maxSide),
+      cfg: getPreviewCfg(),
+    };
+  }
+
+  function refillPreviewOptions(items, selectedValue, autoSelectFirst){
+    if(!previewSelectEl) return;
+    const options = Array.isArray(items) ? items : [];
+    previewSelectEl.innerHTML = '';
+    const emptyOpt = document.createElement('option');
+    emptyOpt.value = '';
+    emptyOpt.textContent = '(no image selected)';
+    previewSelectEl.appendChild(emptyOpt);
+
+    options.forEach((rel) => {
+      const opt = document.createElement('option');
+      opt.value = rel;
+      opt.textContent = rel;
+      previewSelectEl.appendChild(opt);
+    });
+
+    if(selectedValue && options.includes(selectedValue)){
+      previewSelectEl.value = selectedValue;
+      return;
+    }
+    if(autoSelectFirst && options.length){
+      previewSelectEl.value = options[0];
+      return;
+    }
+    previewSelectEl.value = '';
+  }
+
+  async function loadPreviewImages(autoSelectFirst = false){
+    const folder = getFolderForPreview();
+    if(!folder){
+      setPreviewStatus('Source folder is required for preview.');
+      setPreviewEmpty('No preview image loaded.');
+      return;
+    }
+
+    const previous = String(previewSelectEl?.value || '').trim();
+    setPreviewStatus('Loading image list...');
+    try{
+      const q = new URLSearchParams({
+        folder,
+        recursive: recursiveEl?.checked ? '1' : '0',
+        limit: '800',
+      });
+      const res = await fetch('/api/batch-adjust/list-images?' + q.toString());
+      const data = await res.json().catch(() => ({}));
+      if(!res.ok || !data.ok){
+        throw new Error(data.error || ('HTTP ' + res.status));
+      }
+
+      const images = Array.isArray(data.images) ? data.images : [];
+      refillPreviewOptions(images, previous, autoSelectFirst);
+
+      if(images.length === 0){
+        setPreviewStatus('No image found in selected source folder.');
+        setPreviewMeta('');
+        setPreviewEmpty('No image found in selected source folder.');
+        return;
+      }
+
+      setPreviewStatus(`Loaded ${data.returned || images.length} image(s).`);
+      setPreviewMeta(`Folder: ${data.folder || folder}`);
+      if(String(previewSelectEl?.value || '').trim()){
+        await requestPreviewNow();
+      }else{
+        setPreviewEmpty('Select one image from Preview Image list.');
+      }
+    }catch(err){
+      setPreviewStatus(`Load image list failed: ${err.message}`);
+      setPreviewMeta('');
+      setPreviewEmpty('No preview image loaded.');
+    }
+  }
+
+  async function requestPreviewNow(){
+    const payload = getPreviewPayload();
+    if(!payload){
+      setPreviewStatus('Select one preview image first.');
+      setPreviewMeta('');
+      setPreviewEmpty('Select one image from Preview Image list.');
+      return;
+    }
+
+    if(previewAbort){
+      try { previewAbort.abort(); } catch(e) {}
+    }
+    previewAbort = new AbortController();
+    const seq = ++previewSeq;
+    setPreviewStatus('Generating preview...');
+
+    try{
+      const res = await fetch('/api/batch-adjust/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: previewAbort.signal,
+      });
+      if(!res.ok){
+        let errMsg = 'Preview failed.';
+        try{
+          const body = await res.json();
+          errMsg = body.error || errMsg;
+        }catch(e){}
+        throw new Error(errMsg);
+      }
+
+      const blob = await res.blob();
+      const nextUrl = URL.createObjectURL(blob);
+      const img = new Image();
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = () => reject(new Error('Preview image invalid.'));
+        img.src = nextUrl;
+      });
+      if(seq !== previewSeq){
+        URL.revokeObjectURL(nextUrl);
+        return;
+      }
+
+      clearPreviewUrl();
+      previewUrl = nextUrl;
+      if(previewImgEl){
+        previewImgEl.src = nextUrl;
+        previewImgEl.classList.remove('d-none');
+      }
+      if(previewEmptyEl){
+        previewEmptyEl.classList.add('d-none');
+      }
+      setPreviewStatus(`Preview ready (${img.naturalWidth}x${img.naturalHeight}).`);
+      setPreviewMeta(`Image: ${payload.rel}`);
+    }catch(err){
+      if(err?.name === 'AbortError') return;
+      setPreviewStatus(`Preview failed: ${err.message}`);
+      setPreviewMeta('');
+      setPreviewEmpty('Failed to render preview image.');
+    }
+  }
+
+  function schedulePreview(delay = 180){
+    if(previewTimer) window.clearTimeout(previewTimer);
+    previewTimer = window.setTimeout(() => {
+      previewTimer = null;
+      requestPreviewNow();
+    }, delay);
+  }
 
   // Bind range -> number
   keys.forEach((k) => {
@@ -159,23 +415,33 @@
     const num = document.getElementById('num_' + k);
     if(!rng || !num) return;
 
-    rng.addEventListener('input', () => { num.value = rng.value; });
+    rng.addEventListener('input', () => {
+      num.value = rng.value;
+      schedulePreview();
+    });
     num.addEventListener('input', () => {
       const lohi = ranges[k] || [-1, 1];
       const raw = Number(num.value || 0);
       rng.value = String(clamp(raw, lohi[0], lohi[1]));
+      schedulePreview();
     });
   });
 
   btnWorkdir?.addEventListener('click', () => {
-    srcEl.value = '{{ work_dir }}';
+    srcEl.value = defaultWorkDir;
     srcEl.dispatchEvent(new Event('input', { bubbles: true }));
     srcEl.dispatchEvent(new Event('change', { bubbles: true }));
   });
 
-  btnLoad?.addEventListener('click', () => loadPreset(presetEl.value));
+  btnLoad?.addEventListener('click', () => loadPreset(presetEl.value, true));
   btnReset?.addEventListener('click', resetZero);
-  presetEl?.addEventListener('change', () => loadPreset(presetEl.value));
+  presetEl?.addEventListener('change', () => loadPreset(presetEl.value, true));
+  btnPreviewLoadImages?.addEventListener('click', () => { loadPreviewImages(true); });
+  btnPreviewRefresh?.addEventListener('click', () => { requestPreviewNow(); });
+  previewSelectEl?.addEventListener('change', () => { requestPreviewNow(); });
+  srcEl?.addEventListener('change', () => { loadPreviewImages(true); });
+  recursiveEl?.addEventListener('change', () => { loadPreviewImages(true); });
+  previewMaxSideEl?.addEventListener('input', () => { schedulePreview(260); });
 
   // Auto-load once if numeric fields are empty
   window.setTimeout(() => {
@@ -185,13 +451,25 @@
     });
 
     if(!anyHasValue){
-      loadPreset(presetEl.value);
+      loadPreset(presetEl.value, false);
     }else{
       keys.forEach(k => {
         const num = document.getElementById('num_' + k);
         if(num && String(num.value || '').trim() !== '') setPair(k, num.value);
       });
     }
+
+    // Delay slightly so shared form persistence can restore path fields first.
+    window.setTimeout(() => {
+      loadPreviewImages(true);
+    }, 220);
   }, 0);
+
+  window.addEventListener('beforeunload', () => {
+    clearPreviewUrl();
+    if(previewAbort){
+      try { previewAbort.abort(); } catch(e) {}
+    }
+  });
 })();
 </script>

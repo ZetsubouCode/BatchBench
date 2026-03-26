@@ -77,6 +77,16 @@
       </div>
 
       <div class="col-md-3">
+        <label class="form-label">Output profile</label>
+        <select class="form-select" id="offline_output_profile" name="output_profile" data-bs-toggle="tooltip" data-bs-title="Beginner-friendly semantic filtering profile">
+          <option value="standard_full">Standard full tags</option>
+          <option value="background_pose_only" selected>Background + pose only (recommended)</option>
+          <option value="custom_selective">Custom selective</option>
+        </select>
+        <div class="form-text text-muted">Recommended for clean training tags: keeps scene + pose, removes clothes and appearance noise.</div>
+      </div>
+
+      <div class="col-md-3" id="offline_tag_focus_wrap" data-profile-managed="standard">
         <label class="form-label">Tag focus</label>
         <select class="form-select" name="tag_focus_mode" data-bs-toggle="tooltip" data-bs-title="Split between character/subject and non-character tags">
           <option value="all" selected>all</option>
@@ -85,17 +95,67 @@
         </select>
       </div>
 
-      <div class="col-md-3 d-flex align-items-end">
+      <div class="col-md-3 d-flex align-items-end" id="offline_include_character_wrap" data-profile-managed="standard">
         <div class="form-check" data-bs-toggle="tooltip" data-bs-title="Include character name tags">
           <input class="form-check-input" type="checkbox" id="offline_include_character" name="include_character" checked>
           <label class="form-check-label" for="offline_include_character">Include character tags (focus=all)</label>
         </div>
       </div>
 
-      <div class="col-md-3 d-flex align-items-end">
+      <div class="col-md-3 d-flex align-items-end" id="offline_include_rating_wrap" data-profile-managed="standard">
         <div class="form-check" data-bs-toggle="tooltip" data-bs-title="Include rating tag (rating:general, etc)">
           <input class="form-check-input" type="checkbox" id="offline_include_rating" name="include_rating">
           <label class="form-check-label" for="offline_include_rating">Include rating</label>
+        </div>
+      </div>
+
+      <div class="col-12 d-none" id="offline_custom_selective_wrap">
+        <div class="border rounded p-3">
+          <div class="fw-semibold mb-2">Custom selective buckets</div>
+          <div class="row g-2">
+            <div class="col-md-4">
+              <label class="form-check" data-bs-toggle="tooltip" data-bs-title="Scene/place tags such as forest, classroom, sky, window.">
+                <input class="form-check-input" type="checkbox" name="selective_keep_background_place" checked>
+                <span class="form-check-label">Keep background / place</span>
+              </label>
+            </div>
+            <div class="col-md-4">
+              <label class="form-check" data-bs-toggle="tooltip" data-bs-title="Objects/props such as sword, phone, chair, book, umbrella.">
+                <input class="form-check-input" type="checkbox" name="selective_keep_object_prop" checked>
+                <span class="form-check-label">Keep objects / props</span>
+              </label>
+            </div>
+            <div class="col-md-4">
+              <label class="form-check" data-bs-toggle="tooltip" data-bs-title="Pose and limb motion tags such as standing, kneeling, arms_up, crossed_legs.">
+                <input class="form-check-input" type="checkbox" name="selective_keep_pose_action" checked>
+                <span class="form-check-label">Keep pose / body action</span>
+              </label>
+            </div>
+            <div class="col-md-4">
+              <label class="form-check" data-bs-toggle="tooltip" data-bs-title="Identity-like appearance tags such as blue_hair, red_eyes, long_hair.">
+                <input class="form-check-input" type="checkbox" name="selective_keep_appearance">
+                <span class="form-check-label">Keep appearance</span>
+              </label>
+            </div>
+            <div class="col-md-4">
+              <label class="form-check" data-bs-toggle="tooltip" data-bs-title="Clothing/outfit tags such as dress, jacket, shirt, skirt, shoes.">
+                <input class="form-check-input" type="checkbox" name="selective_keep_clothing">
+                <span class="form-check-label">Keep clothing</span>
+              </label>
+            </div>
+            <div class="col-md-4">
+              <label class="form-check" data-bs-toggle="tooltip" data-bs-title="Character category names from the model label metadata.">
+                <input class="form-check-input" type="checkbox" name="selective_keep_character_names">
+                <span class="form-check-label">Keep character names</span>
+              </label>
+            </div>
+            <div class="col-md-4">
+              <label class="form-check" data-bs-toggle="tooltip" data-bs-title="Rating/meta labels such as rating:safe and metadata categories.">
+                <input class="form-check-input" type="checkbox" name="selective_keep_rating_meta">
+                <span class="form-check-label">Keep rating/meta</span>
+              </label>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -187,6 +247,10 @@
             <input class="form-check-input" type="checkbox" name="strip_whitespace" checked>
             <span class="form-check-label">Strip whitespace</span>
           </label>
+          <label class="form-check" data-bs-toggle="tooltip" data-bs-title="Optional online fallback for unknown tags in selective profiles. Slower, needs internet.">
+            <input class="form-check-input" type="checkbox" name="danbooru_safenet">
+            <span class="form-check-label">Use Danbooru safe-net for unknown selective tags</span>
+          </label>
         </div>
       </div>
     </details>
@@ -196,3 +260,30 @@
     </div>
   </form>
 </div>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const profileSel = document.getElementById("offline_output_profile");
+    if (!profileSel) return;
+    const customWrap = document.getElementById("offline_custom_selective_wrap");
+    const managed = Array.from(document.querySelectorAll("[data-profile-managed='standard']"));
+
+    const toggleProfileUi = () => {
+      const profile = (profileSel.value || "").trim();
+      const standard = profile === "standard_full";
+      const custom = profile === "custom_selective";
+      managed.forEach((wrap) => {
+        wrap.classList.toggle("opacity-50", !standard);
+        wrap.classList.toggle("d-none", !standard);
+        wrap.querySelectorAll("input, select, textarea").forEach((el) => {
+          el.disabled = !standard;
+        });
+      });
+      if (customWrap) {
+        customWrap.classList.toggle("d-none", !custom);
+      }
+    };
+
+    profileSel.addEventListener("change", toggleProfileUi);
+    toggleProfileUi();
+  });
+</script>

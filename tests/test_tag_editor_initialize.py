@@ -21,6 +21,7 @@ class TagEditorInitializeTests(unittest.TestCase):
 
             self.assertTrue(result.get("ok"), msg=result)
             database = project / "database"
+            self.assertFalse((project / "root.png").exists())
             self.assertTrue((database / "root.png").exists())
             self.assertFalse((database / "root.txt").exists())
             self.assertTrue((dataset / "root.png").exists())
@@ -31,6 +32,7 @@ class TagEditorInitializeTests(unittest.TestCase):
             self.assertEqual((dataset / "train_b.txt").read_text(encoding="utf-8").strip(), "keep_existing")
             self.assertIn("train_a.txt", result.get("generated_txt") or [])
             self.assertIn("root.txt", result.get("generated_txt") or [])
+            self.assertTrue((result.get("moved_database") or []))
             self.assertTrue((result.get("copied_dataset") or []))
             self.assertTrue(any("dataset/train_b.txt: already exists" == item for item in (result.get("skipped") or [])))
 
