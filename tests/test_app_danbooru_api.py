@@ -92,6 +92,40 @@ class DanbooruApiTests(unittest.TestCase):
             preview_limit=12,
         )
 
+    def test_summary_api_forwards_tags(self):
+        payload = {
+            "ok": True,
+            "summaries": {"long_hair": {"name": "long_hair", "post_count": 12}},
+            "errors": {},
+        }
+        with patch("app.danbooru_client.lookup_tag_summaries", return_value=payload) as mocked:
+            resp = self.client.post("/api/danbooru/tag-summaries", json={"tags": ["long_hair"]})
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.get_json(), payload)
+        mocked.assert_called_once_with(["long_hair"])
+
+    def test_wiki_api_forwards_preview_limit(self):
+        payload = {
+            "ok": True,
+            "tag": "long_hair",
+            "found": True,
+            "cached": False,
+            "info": None,
+            "wiki": None,
+            "related": [],
+            "previews": [],
+            "error": "",
+        }
+        with patch("app.danbooru_client.lookup_tag_wiki", return_value=payload) as mocked:
+            resp = self.client.post(
+                "/api/danbooru/tag-wiki",
+                json={"tag": "long_hair", "preview_limit": 15},
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        mocked.assert_called_once_with("long_hair", preview_limit=15)
+
 
 if __name__ == "__main__":
     unittest.main()

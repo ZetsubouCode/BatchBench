@@ -1,0 +1,131 @@
+{
+  "version": 1,
+  "quiz_review": {
+    "enabled": true,
+    "default_area": "temp",
+    "image_fit": "contain",
+    "auto_save": true,
+    "show_current_tags": true,
+    "show_progress": true,
+    "keyboard_enabled": true,
+    "thumbnail_preload_count": 3,
+    "steps": [
+      {
+        "id": "subject_count",
+        "label": "Subject Count",
+        "mode": "single",
+        "required": true,
+        "auto_advance": true,
+        "autosuggest_segment_only": true,
+        "allow_not_applicable": false,
+        "queue_mode": "all",
+        "tags": [
+          "solo",
+          "1other",
+          "2others",
+          "3others",
+          "multiple_others"
+        ]
+      },
+      {
+        "id": "face_and_appearance",
+        "label": "Face and Appearance",
+        "mode": "multi",
+        "required": true,
+        "auto_advance": false,
+        "autosuggest_segment_only": false,
+        "allow_not_applicable": false,
+        "queue_mode": "missing_only",
+        "tags": [
+          "hair_color",
+          "eye_color",
+          "hairstyle",
+          "long_hair",
+          "short_hair",
+          "bangs"
+        ]
+      },
+      {
+        "id": "outfit",
+        "label": "Outfit",
+        "mode": "multi",
+        "required": true,
+        "auto_advance": false,
+        "autosuggest_segment_only": true,
+        "allow_not_applicable": true,
+        "queue_mode": "missing_only",
+        "tags": [
+          "top",
+          "bottom",
+          "footwear",
+          "dress",
+          "shirt",
+          "skirt"
+        ]
+      },
+      {
+        "id": "body_composition",
+        "label": "Body Composition / Pose",
+        "mode": "multi",
+        "required": true,
+        "auto_advance": false,
+        "autosuggest_segment_only": true,
+        "allow_not_applicable": false,
+        "queue_mode": "missing_only",
+        "tags": [
+          "full_body",
+          "cowboy_shot",
+          "upper_body",
+          "portrait",
+          "close-up",
+          "feet_out_of_frame",
+          "foot_out_of_frame",
+          "head_out_of_frame",
+          "standing",
+          "sitting",
+          "clenched_hands"
+        ]
+      },
+      {
+        "id": "camera_angle",
+        "label": "POV / Camera Angle",
+        "mode": "multi",
+        "required": true,
+        "auto_advance": false,
+        "autosuggest_segment_only": true,
+        "allow_not_applicable": true,
+        "queue_mode": "missing_only",
+        "tags": [
+          "from_front",
+          "from_side",
+          "from_behind",
+          "from_above",
+          "from_below",
+          "profile",
+          "dutch_angle"
+        ]
+      },
+      {
+        "id": "background",
+        "label": "Background Details",
+        "mode": "multi",
+        "required": true,
+        "auto_advance": false,
+        "autosuggest_segment_only": false,
+        "allow_not_applicable": true,
+        "queue_mode": "missing_only",
+        "tags": [
+          "simple_background",
+          "indoors",
+          "outdoors",
+          "bedroom",
+          "street",
+          "forest",
+          "halftone_background",
+          "white_background",
+          "gradient_background"
+        ]
+      }
+    ]
+  }
+}

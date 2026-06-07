@@ -1,0 +1,46 @@
+{
+  "segments": [
+    {
+      "id": "identity_appearance",
+      "label": "Identity / Appearance",
+      "order": 1
+    },
+    {
+      "id": "outfit",
+      "label": "Outfit",
+      "order": 2
+    },
+    {
+      "id": "expression",
+      "label": "Expression",
+      "order": 3
+    },
+    {
+      "id": "body_composition",
+      "label": "Body Composition / Pose",
+      "order": 4
+    },
+    {
+      "id": "camera_angle",
+      "label": "POV / Camera Angle",
+      "order": 5
+    },
+    {
+      "id": "lighting",
+      "label": "Lighting",
+      "order": 6
+    },
+    {
+      "id": "background",
+      "label": "Background Details",
+      "order": 7
+    }
+  ],
+  "prompt_init": {
+    "mode": "quiz_segment_template",
+    "overwrite_existing": false,
+    "backup_before_overwrite": true,
+    "append_missing_sections": true,
+    "custom_template": ""
+  }
+}

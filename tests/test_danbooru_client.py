@@ -113,6 +113,72 @@ class DanbooruClientTests(unittest.TestCase):
         self.assertEqual(out.get("previews"), [])
         self.assertNotIn("/posts.json", calls)
 
+    def test_lookup_tag_summaries_is_lightweight_and_cached(self):
+        calls = []
+
+        def fake_get(path, params, timeout_seconds):  # noqa: ARG001
+            calls.append((path, params))
+            if params.get("search[name]") == "long_hair":
+                return ([{"name": "long_hair", "category": 0, "post_count": 123}], None)
+            return ([], None)
+
+        with patch("services.danbooru_client._http_get_json", side_effect=fake_get):
+            first = danbooru_client.lookup_tag_summaries([" Long Hair ", "missing_tag", "long_hair"])
+            second = danbooru_client.lookup_tag_summaries(["long_hair", "missing_tag"])
+
+        self.assertTrue(first.get("ok"))
+        self.assertEqual(first["summaries"]["long_hair"]["post_count"], 123)
+        self.assertFalse(first["summaries"]["missing_tag"]["found"])
+        self.assertEqual(first["summaries"]["missing_tag"]["post_count"], 0)
+        self.assertEqual(second["summaries"], first["summaries"])
+        self.assertEqual([path for path, _ in calls], ["/tags.json", "/tags.json"])
+
+    def test_wiki_lookup_adds_guidance_groups_and_relationships(self):
+        def fake_get(path, params, timeout_seconds):  # noqa: ARG001
+            if path == "/tags.json":
+                return ([{"name": "miniskirt", "category": 0, "post_count": 100}], None)
+            if path == "/wiki_pages.json":
+                return (
+                    [
+                        {
+                            "title": "miniskirt",
+                            "body": "A short [[skirt]]. Use [[micro skirt]] instead for extremely short skirts.\n\nh4. See also\n\n* [[Tag Group:Attire]]",
+                            "other_names": ["mini skirt"],
+                        }
+                    ],
+                    None,
+                )
+            if path == "/posts.json":
+                return ([{"id": 1, "preview_file_url": "/x.jpg"}], None)
+            if path == "/related_tag.json":
+                return (
+                    {
+                        "related_tags": [
+                            {"tag": {"name": "pleated_skirt", "category": 0, "post_count": 10}, "frequency": 0.5}
+                        ],
+                        "wiki_page_tags": [{"name": "micro_skirt", "category": 0, "post_count": 5}],
+                    },
+                    None,
+                )
+            if path == "/tag_implications.json" and params.get("search[antecedent_name]") == "miniskirt":
+                return ([{"antecedent_name": "miniskirt", "consequent_name": "skirt", "status": "active"}], None)
+            if path == "/tag_implications.json":
+                return ([], None)
+            if path == "/tag_aliases.json":
+                return ([], None)
+            return ([], None)
+
+        with patch("services.danbooru_client._http_get_json", side_effect=fake_get):
+            out = danbooru_client.lookup_tag_wiki("miniskirt", preview_limit=4)
+
+        self.assertTrue(out.get("ok"), msg=out)
+        self.assertIn("short skirt", out.get("wiki_plain", ""))
+        self.assertEqual(out.get("tag_groups"), ["Attire"])
+        self.assertEqual((out.get("relationships") or {}).get("implies"), ["skirt"])
+        self.assertEqual((out.get("related_details") or [])[0]["name"], "pleated_skirt")
+        self.assertEqual((out.get("wiki_linked_tags") or [])[0]["name"], "micro_skirt")
+        self.assertTrue((out.get("guidance") or {}).get("avoid_when"))
+
 
 if __name__ == "__main__":
     unittest.main()

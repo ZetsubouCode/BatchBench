@@ -15,6 +15,7 @@ from utils.tool_result import unpack_tool_result
 from services.registry import TOOL_REGISTRY
 from services import normalizer
 from services import tag_editor
+from services import review_quiz
 from services import danbooru_client
 from services import blur_brush
 from services.pipeline import PIPELINE_MANAGER
@@ -49,6 +50,27 @@ BATCH_ADJUST_PARAM_KEYS = [
     "sharpness",
     "vignette",
 ]
+
+
+def _review_quiz_tagging_settings() -> Dict[str, Any]:
+    config = review_quiz.load_review_quiz_config()
+    steps = config.get("quiz_review", {}).get("steps") or []
+    base = tag_editor.load_tagging_quiz_settings()
+    base["segments"] = [
+        {
+            "id": step.get("id") or "",
+            "label": step.get("label") or step.get("id") or "",
+            "order": index + 1,
+            "mode": step.get("mode") or "multi",
+            "required": bool(step.get("required", False)),
+            "auto_advance": bool(step.get("auto_advance", False)),
+            "allow_not_applicable": bool(step.get("allow_not_applicable", False)),
+            "queue_mode": step.get("queue_mode") or "all",
+            "tags": step.get("tags") or [],
+        }
+        for index, step in enumerate(steps)
+    ]
+    return base
 
 
 def _parse_path_list(raw: str) -> List[Path]:
@@ -182,6 +204,22 @@ def _resolve_project_root_from_payload(payload: Dict[str, Any]) -> Tuple[Optiona
     folder = (payload.get("folder") or "").strip()
     if not folder:
         return None, _json_error("folder is required", 400)
+    paths = _project_paths(folder)
+    root = paths["project_root"]
+    if not root.exists() or not root.is_dir():
+        return None, _json_error(
+            f"Project root not found: {root}",
+            400,
+            normalized_root=str(root),
+            needs_init=True,
+        )
+    return paths, None
+
+
+def _resolve_quiz_project_from_payload(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Optional[Any]]:
+    folder = (payload.get("project_root") or payload.get("folder") or "").strip()
+    if not folder:
+        return None, _json_error("project_root is required", 400)
     paths = _project_paths(folder)
     root = paths["project_root"]
     if not root.exists() or not root.is_dir():
@@ -400,26 +438,25 @@ def _parse_tag_list(raw: Any) -> List[str]:
 
 
 def _default_glossary_payload() -> Dict[str, Any]:
-    return {"version": 1, "categories": {"Unsorted": []}, "updated_at": 0}
+    return {"version": 2, "categories": {"Unsorted": []}, "tag_meta": {}, "updated_at": 0}
 
 
 def _normalize_glossary_payload(payload: Any) -> Dict[str, Any]:
     src = payload if isinstance(payload, dict) else {}
     categories = src.get("categories") if isinstance(src.get("categories"), dict) else {}
     normalized_categories: Dict[str, List[str]] = {}
+    seen_tags = set()
     for raw_name, raw_tags in categories.items():
-        name = str(raw_name).strip() or "Unsorted"
-        seen = set()
-        tags: List[str] = []
+        name = re.sub(r"\s+", " ", str(raw_name).strip())[:40] or "Unsorted"
+        tags = normalized_categories.setdefault(name, [])
         if isinstance(raw_tags, list):
             for raw_tag in raw_tags:
                 tag = str(raw_tag or "").strip().lower()
-                tag = re.sub(r"\s+", "_", tag).strip("_")
-                if not tag or tag in seen:
+                tag = re.sub(r"_+", "_", re.sub(r"\s+", "_", tag)).strip("_")
+                if not tag or tag in seen_tags:
                     continue
-                seen.add(tag)
+                seen_tags.add(tag)
                 tags.append(tag)
-        normalized_categories[name] = tags
     if "Unsorted" not in normalized_categories:
         normalized_categories["Unsorted"] = []
     updated_at = src.get("updated_at", 0)
@@ -427,7 +464,41 @@ def _normalize_glossary_payload(payload: Any) -> Dict[str, Any]:
         updated_at = int(updated_at)
     except Exception:
         updated_at = 0
-    return {"version": 1, "categories": normalized_categories, "updated_at": max(0, updated_at)}
+    raw_tag_meta = src.get("tag_meta") if isinstance(src.get("tag_meta"), dict) else {}
+    normalized_tag_meta: Dict[str, Dict[str, Any]] = {}
+    for tag in seen_tags:
+        raw_meta = raw_tag_meta.get(tag)
+        if not isinstance(raw_meta, dict):
+            continue
+        post_count = raw_meta.get("post_count")
+        try:
+            post_count = max(0, int(post_count))
+        except Exception:
+            post_count = None
+        category = raw_meta.get("category")
+        try:
+            category = int(category)
+        except Exception:
+            category = None
+        fetched_at = raw_meta.get("fetched_at", 0)
+        try:
+            fetched_at = max(0, int(fetched_at))
+        except Exception:
+            fetched_at = 0
+        meta: Dict[str, Any] = {
+            "found": bool(raw_meta.get("found", post_count is not None)),
+            "post_count": post_count,
+            "category": category,
+            "category_name": str(raw_meta.get("category_name") or "unknown")[:40],
+            "fetched_at": fetched_at,
+        }
+        normalized_tag_meta[tag] = meta
+    return {
+        "version": 2,
+        "categories": normalized_categories,
+        "tag_meta": normalized_tag_meta,
+        "updated_at": max(0, updated_at),
+    }
 
 
 def _load_tag_editor_glossary() -> Dict[str, Any]:
@@ -442,6 +513,9 @@ def _load_tag_editor_glossary() -> Dict[str, Any]:
 
 def _save_tag_editor_glossary(payload: Any) -> Dict[str, Any]:
     normalized = _normalize_glossary_payload(payload)
+    current = _load_tag_editor_glossary()
+    if current.get("updated_at", 0) > normalized.get("updated_at", 0):
+        return current
     TAG_EDITOR_GLOSSARY_PATH.write_text(json.dumps(normalized, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
     return normalized
 
@@ -546,6 +620,294 @@ def api_danbooru_taginfo():
     return jsonify(result), code
 
 
+@app.post("/api/danbooru/tag-summaries")
+def api_danbooru_tag_summaries():
+    payload = request.get_json(silent=True) or {}
+    return jsonify(danbooru_client.lookup_tag_summaries(payload.get("tags")))
+
+
+@app.post("/api/danbooru/tag-wiki")
+def api_danbooru_tag_wiki():
+    payload = request.get_json(silent=True) or {}
+    preview_limit = _parse_int(payload.get("preview_limit"), 12)
+    preview_limit = max(1, min(20, preview_limit))
+    result = danbooru_client.lookup_tag_wiki(
+        payload.get("tag"),
+        preview_limit=preview_limit,
+    )
+    error_code = result.get("error_code")
+    if error_code:
+        result = {k: v for k, v in result.items() if k != "error_code"}
+    if result.get("ok"):
+        return jsonify(result)
+    code = 400 if error_code == "invalid_input" else 502
+    return jsonify(result), code
+
+
+@app.get("/api/settings/review-quiz")
+def api_settings_review_quiz_get():
+    return jsonify({"ok": True, "config": review_quiz.load_review_quiz_config(), "warnings": [], "info": []})
+
+
+@app.post("/api/settings/review-quiz")
+def api_settings_review_quiz_save():
+    payload = request.get_json(silent=True) or {}
+    config = payload.get("config") if isinstance(payload.get("config"), dict) else payload
+    try:
+        saved = review_quiz.save_review_quiz_config(config)
+    except ValueError as exc:
+        return _json_error(str(exc), 400)
+    except Exception as exc:
+        return _json_error(f"Could not save Quiz Review settings: {exc}", 500)
+    return jsonify({"ok": True, "config": saved, "warnings": [], "info": []})
+
+
+@app.post("/api/settings/review-quiz/reset")
+def api_settings_review_quiz_reset():
+    try:
+        saved = review_quiz.reset_review_quiz_config()
+    except Exception as exc:
+        return _json_error(f"Could not reset Quiz Review settings: {exc}", 500)
+    return jsonify({"ok": True, "config": saved, "warnings": [], "info": []})
+
+
+@app.post("/api/settings/review-quiz/from-cheatsheet")
+def api_settings_review_quiz_from_cheatsheet():
+    payload = request.get_json(silent=True) or {}
+    rel = (payload.get("rel") or "prompt.txt").strip()
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    target = _resolve_rel_under(paths["project_root"], rel)
+    if not target or not target.exists() or not target.is_file() or target.suffix.lower() != ".txt":
+        return _json_error("Cheat sheet .txt file not found", 404, normalized_root=str(paths["project_root"]))
+    try:
+        content = target.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        content = target.read_text(encoding="utf-8-sig")
+    except Exception as exc:
+        return _json_error(str(exc), 500, normalized_root=str(paths["project_root"]))
+    parsed = _parse_cheatsheet_content(content)
+    return jsonify(
+        {
+            "ok": True,
+            "steps": review_quiz.steps_from_cheatsheet_sections(parsed.get("sections")),
+            "trigger": parsed.get("trigger") or "",
+            "rel": rel,
+            "normalized_root": str(paths["project_root"]),
+            "warnings": [],
+            "info": [],
+        }
+    )
+
+
+@app.post("/api/tags/quiz/list")
+def api_tags_quiz_list():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    try:
+        result = review_quiz.list_quiz_items(
+            paths["project_root"],
+            area=(payload.get("area") or "temp"),
+            step_id=(payload.get("step_id") or ""),
+            queue=(payload.get("queue") or ""),
+            exts=_parse_exts(payload.get("exts")),
+        )
+    except ValueError as exc:
+        return _json_error(str(exc), 400, normalized_root=str(paths["project_root"]))
+    except Exception as exc:
+        return _json_error(f"Quiz Review scan failed: {exc}", 500, normalized_root=str(paths["project_root"]))
+    for item in result.get("items") or []:
+        item["image_url"] = url_for(
+            "api_tags_image",
+            folder=str(paths["project_root"]),
+            area=result.get("area") or "temp",
+            path=item.get("rel") or "",
+        )
+    result.update({"normalized_root": str(paths["project_root"]), "needs_init": False, "warnings": [], "info": []})
+    return jsonify(result)
+
+
+@app.post("/api/tags/quiz/save")
+def api_tags_quiz_save():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    try:
+        result = review_quiz.save_quiz_item(
+            paths["project_root"],
+            area=(payload.get("area") or "temp"),
+            rel=(payload.get("rel") or ""),
+            step_id=(payload.get("step_id") or ""),
+            selected_tags=payload.get("selected_tags") or [],
+            manual_tags=payload.get("manual_tags") if "manual_tags" in payload else None,
+            not_applicable=_parse_bool(payload.get("not_applicable")),
+            mark_reviewed=_parse_bool(payload.get("mark_reviewed"), True),
+            backup=_parse_bool(payload.get("backup"), True),
+        )
+    except ValueError as exc:
+        return _json_error(str(exc), 400, normalized_root=str(paths["project_root"]))
+    except Exception as exc:
+        return _json_error(f"Quiz Review save failed: {exc}", 500, normalized_root=str(paths["project_root"]))
+    result.update({"normalized_root": str(paths["project_root"]), "needs_init": False, "info": []})
+    return jsonify(result)
+
+
+@app.post("/api/tags/quiz/restore")
+def api_tags_quiz_restore():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    try:
+        result = review_quiz.restore_quiz_item(
+            paths["project_root"],
+            area=(payload.get("area") or "temp"),
+            rel=(payload.get("rel") or ""),
+            tags=payload.get("tags") or [],
+            metadata_item=payload.get("metadata") or {},
+            had_txt=_parse_bool(payload.get("had_txt"), True),
+        )
+    except ValueError as exc:
+        return _json_error(str(exc), 400, normalized_root=str(paths["project_root"]))
+    except Exception as exc:
+        return _json_error(f"Quiz Review restore failed: {exc}", 500, normalized_root=str(paths["project_root"]))
+    result.update({"normalized_root": str(paths["project_root"]), "needs_init": False, "info": []})
+    return jsonify(result)
+
+
+@app.get("/api/tagging-quiz/settings")
+def api_tagging_quiz_settings_get():
+    return jsonify({"ok": True, "settings": _review_quiz_tagging_settings(), "warnings": [], "info": []})
+
+
+@app.post("/api/tagging-quiz/settings")
+def api_tagging_quiz_settings_post():
+    payload = request.get_json(silent=True) or {}
+    try:
+        saved = tag_editor.save_tagging_quiz_settings(payload.get("settings") if "settings" in payload else payload)
+    except Exception as exc:
+        return _json_error(f"Could not save tagging quiz settings: {exc}", 500)
+    return jsonify({"ok": True, "settings": saved, "warnings": [], "info": ["Tagging quiz settings saved"]})
+
+
+@app.post("/api/tagging-quiz/cheatsheet/parse")
+def api_tagging_quiz_cheatsheet_parse():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_quiz_project_from_payload(payload)
+    if error:
+        return error
+    result = tag_editor.parse_cheatsheet_file(paths["project_root"], payload.get("prompt_file") or "prompt.txt")
+    code = 200 if result.get("ok") else 404
+    result.setdefault("normalized_root", str(paths["project_root"]))
+    result.setdefault("warnings", [])
+    result.setdefault("info", [])
+    return jsonify(result), code
+
+
+@app.post("/api/tagging-quiz/recommendations/build")
+def api_tagging_quiz_recommendations_build():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_quiz_project_from_payload(payload)
+    if error:
+        return error
+    try:
+        result = tag_editor.build_tagging_quiz_recommendations(
+            paths["project_root"],
+            payload.get("mapping_rows") or [],
+            prompt_file=payload.get("prompt_file") or "prompt.txt",
+            settings=_review_quiz_tagging_settings(),
+        )
+    except Exception as exc:
+        return _json_error(f"Could not build recommendations: {exc}", 500, normalized_root=str(paths["project_root"]))
+    return jsonify(result)
+
+
+@app.post("/api/tagging-quiz/session/start")
+def api_tagging_quiz_session_start():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_quiz_project_from_payload(payload)
+    if error:
+        return error
+    try:
+        result = tag_editor.start_tagging_session(
+            paths["project_root"],
+            _parse_exts(payload.get("image_exts") or payload.get("exts")),
+            mapping_rows=payload.get("mapping_rows") or [],
+            session_defaults=payload.get("session_defaults") or {},
+            recommendations=payload.get("recommendations") if isinstance(payload.get("recommendations"), dict) else None,
+            settings=_review_quiz_tagging_settings(),
+            replace=True,
+        )
+    except Exception as exc:
+        return _json_error(f"Could not start tagging session: {exc}", 500, normalized_root=str(paths["project_root"]))
+    return jsonify(result)
+
+
+@app.post("/api/tagging-quiz/session/load")
+def api_tagging_quiz_session_load():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_quiz_project_from_payload(payload)
+    if error:
+        return error
+    result = tag_editor.load_tagging_session(paths["project_root"])
+    code = 200 if result.get("ok") else 400
+    return jsonify(result), code
+
+
+@app.post("/api/tagging-quiz/session/save")
+def api_tagging_quiz_session_save():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_quiz_project_from_payload(payload)
+    if error:
+        return error
+    result = tag_editor.save_tagging_session(paths["project_root"], payload.get("session") or {})
+    code = 200 if result.get("ok") else 400
+    return jsonify(result), code
+
+
+@app.post("/api/tagging-quiz/image/save")
+def api_tagging_quiz_image_save():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_quiz_project_from_payload(payload)
+    if error:
+        return error
+    result = tag_editor.save_tagging_quiz_image(
+        paths["project_root"],
+        payload.get("image_rel") or "",
+        payload.get("segments") or {},
+        session_payload=payload.get("session") if isinstance(payload.get("session"), dict) else None,
+        backup=_parse_bool(payload.get("backup"), True),
+    )
+    code = 200 if result.get("ok") else 400
+    return jsonify(result), code
+
+
+@app.post("/api/tagging-quiz/session/delete")
+def api_tagging_quiz_session_delete():
+    payload = request.get_json(silent=True) or {}
+    if not _parse_bool(payload.get("confirm")):
+        return _json_error("confirm is required", 400)
+    paths, error = _resolve_quiz_project_from_payload(payload)
+    if error:
+        return error
+    return jsonify(tag_editor.delete_tagging_session(paths["project_root"]))
+
+
+@app.post("/api/tagging-quiz/session/archive")
+def api_tagging_quiz_session_archive():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_quiz_project_from_payload(payload)
+    if error:
+        return error
+    result = tag_editor.archive_tagging_session(paths["project_root"])
+    code = 200 if result.get("ok") else 400
+    return jsonify(result), code
+
+
 @app.post("/api/tags/project-state")
 def api_tags_project_state():
     payload = request.get_json(silent=True) or {}
@@ -578,7 +940,12 @@ def api_tags_project_init():
         result.setdefault("info", [])
         result["apply"] = False
         return jsonify(result), code
-    result = tag_editor.initialize_project_layout(readable_path(folder), exts, create_prompt=True)
+    result = tag_editor.initialize_project_layout(
+        readable_path(folder),
+        exts,
+        create_prompt=True,
+        tagging_quiz_settings=tag_editor.load_tagging_quiz_settings(),
+    )
     code = 200 if result.get("ok") else 400
     result.setdefault("normalized_root", result.get("project_root", ""))
     result.setdefault("warnings", [])
@@ -1068,6 +1435,24 @@ def api_blur_brush_list_images():
         return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
     images = blur_brush.list_images(root, recursive=recursive, exts=exts)
     return jsonify({"ok": True, "folder": str(root), "total": len(images), "images": images})
+
+
+@app.get("/api/blur_brush/image")
+def api_blur_brush_image():
+    folder = (request.args.get("folder") or "").strip()
+    rel = (request.args.get("path") or request.args.get("rel") or "").strip()
+    if not folder or not rel:
+        return jsonify({"ok": False, "error": "folder and path are required"}), 400
+    if _bad_rel(rel):
+        return jsonify({"ok": False, "error": "Invalid path"}), 400
+
+    root = readable_path(folder)
+    if not root.exists() or not root.is_dir():
+        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
+    target = _safe_child(root, rel)
+    if not target or not target.exists() or not target.is_file():
+        return jsonify({"ok": False, "error": "File not found"}), 404
+    return send_file(target, conditional=True)
 
 
 @app.post("/api/blur_brush/apply")
@@ -1791,7 +2176,6 @@ def index():
         if not handler:
             request_ok = False
             request_error = f"Unknown tool: {tool}"
-            flash(request_error)
         else:
             ctx = {
                 "presets": PRESET_FILES,
@@ -1807,9 +2191,8 @@ def index():
             except Exception as e:
                 request_ok = False
                 request_error = f"Error running tool '{tool}': {e}"
-                flash(request_error)
-            if not request_ok and request_error:
-                flash(request_error)
+        if (not is_ajax) and (not request_ok) and request_error:
+            flash(request_error)
 
         if is_ajax:
             code = 200 if request_ok else 400

@@ -3,18 +3,12 @@
 A tiny Flask site you can run on your own PC (**localhost**) with simple menus that wrap common batch utilities:
 
 - **Workflow Guide**
-- **Image -> PNG converter**
-- **Photo Adjust (preset)** for batch color/exposure tuning
-- **Dataset Tag Editor** (project-root workflow with `_temp` staging, insert/delete/replace/dedup, undo, dataset zip, move-all-from-temp)
-- **Offline Tagger (WD v3)**
-- **Dataset Normalization**
-- **Combine Dataset**
-- **Flatten & Renumber**
-- **Stitch Groups**
-- **Webtoon Panel Splitter**
-- **Brush Blur**
-- **CLIP Token Check**
+- **Image Tools**: Image -> PNG converter, Photo Adjust, Brush Blur
+- **Dataset Assembly**: Webtoon Panel Splitter, Stitch Groups, Flatten & Renumber, Combine Dataset
+- **Tag Tools**: Dataset Tag Editor, Dataset Normalization, Offline Tagger (WD v3), CLIP Token Check
 - **Pipeline (beta)** with reorderable step cards
+- **Tag Glossary Wiki**
+- **Settings** for Quiz Review flow configuration
 
 *Runs on Windows, Linux, and macOS.*
 
@@ -66,6 +60,9 @@ Linux/macOS:
 Open in browser:
 - <http://127.0.0.1:5000/>
 
+The launch script watches the app source for changes and reloads the local server
+automatically. After updating the app, refresh the browser page.
+
 ---
 
 ## 4) MD5 checksums for project files (local)
@@ -107,7 +104,9 @@ Tip: if you store models in this repo, put them under `models/` (ignored by git)
 
 Penjelasan singkat untuk tiap tab: cara pakai, parameter, dan hal yang perlu diperhatikan.
 
-### Image -> PNG Converter
+### Image Tools
+
+#### Image -> PNG Converter
 Cara pakai:
 - Isi Source Folder (berisi file gambar), isi Output Folder, klik Convert.
 Parameter:
@@ -117,7 +116,7 @@ Perhatian:
 - Tidak recursive (hanya level folder teratas).
 - Semua format yang didukung akan dikonversi ke `.png`.
 
-### Photo Adjust (preset)
+#### Photo Adjust (preset)
 Cara pakai:
 - Pilih Source Folder dan Output Folder, pilih preset, atur suffix/limit, klik Process.
 Parameter:
@@ -134,11 +133,92 @@ Perhatian:
 - Output selalu JPEG dengan quality 95 dan ekstensi `.jpg`.
 - Tidak recursive; metadata EXIF bisa hilang karena re-save.
 
-### Dataset Tag Editor
+#### Brush Blur
+Cara pakai:
+- Isi Folder, klik Load Images, pilih gambar, lalu klik Open.
+- Pilih Gaussian Blur, Mosaic, atau Box Blur. Atur Brush Size, Strength, dan Feather.
+- Paint area yang ingin diproses, klik Preview Result, lalu Apply & Save jika hasilnya sudah benar.
+Parameter:
+- Output: `overwrite` menimpa file atau `copy` menyimpan salinan.
+- Create `.bak`: membuat backup sebelum overwrite.
+- Paint / Erase, Undo / Redo, dan Clear Mask: kontrol mask manual.
+Perhatian:
+- Gunakan Preview Result sebelum menyimpan.
+- Tool ini memproses satu gambar per kali dan cocok untuk touch-up area tertentu.
+
+### Dataset Assembly
+
+#### Webtoon Panel Splitter
+Cara pakai:
+- Isi Source folder, atur stripe detection, klik Split panels.
+Parameter:
+- Source folder: folder chapter atau root yang berisi subfolder chapter.
+- Output folder: default `_panels` per folder. Jika diisi, hasil ke `<output>\<chapter>\_panels`.
+- Filename glob + Extensions: filter file halaman.
+- Width alignment: `match-width` resize ke lebar terbesar; `none` hanya pad (background putih).
+- Stripe detection:
+  - Min stripe height: tinggi minimal garis putih untuk jadi pemisah.
+  - Row white threshold: 0-255, seberapa putih sebuah pixel.
+  - Row coverage: persentase pixel putih dalam satu baris.
+  - Tolerance inside stripe: toleransi baris gelap di dalam stripe.
+  - Min panel height: potongannya harus setinggi ini.
+- Options: save strip, overwrite, dry run.
+Perhatian:
+- Gambar disusun vertikal tanpa gap, lalu dipotong berdasarkan stripe putih.
+- Jika banyak noise, turunkan row coverage atau threshold.
+
+#### Stitch Groups
+Cara pakai:
+- Isi Source folder, atur opsi, klik Merge.
+Parameter:
+- Source folder: berisi file dengan pola `<prefix>_<number>.<ext>`.
+- Filename glob: filter awal, misalnya `*_*.*`.
+- Extensions to include: daftar ekstensi yang diikutkan.
+- Stack direction: `Vertical` (atas ke bawah) atau `Horizontal` (kiri ke kanan).
+- Resize rule: `auto` menyesuaikan lebar/tinggi sesuai arah; `none` hanya pad; opsi lain memaksa match-width/height.
+- Gap (px) dan Background: jarak antar gambar dan warna kanvas.
+- Skip single / Reverse order / Overwrite / Dry run: kontrol output.
+Perhatian:
+- Hanya file yang namanya cocok `<prefix>_<number>` yang diproses; urutan berdasarkan angka.
+- Output selalu PNG dan disimpan di `<source>\combined` jika Output kosong.
+
+#### Flatten & Renumber
+Cara pakai:
+- Isi Root Folder, atur numbering dan ordering, klik Run Renamer.
+Parameter:
+- Root Folder: berisi gambar dan subfolder level pertama.
+- Output Folder: default `<root>\_renamed`.
+- Image extensions: daftar ekstensi yang diproses (gunakan format `.png,.jpg`).
+- Start at / Prefix pad / Suffix pad / Separator: mengatur format `001.png`, `002_1.png`, dst.
+- Ordering: urutan top-level, folder, dan isi folder (name natural, ctime, mtime).
+- Rename matching `.txt`: ikut menyalin/rename file `.txt` pasangan.
+- Move instead of copy: pindahkan file (hapus dari sumber).
+- Dry run: hanya tampilkan rencana, tidak menulis file.
+Perhatian:
+- Hanya memproses top-level dan subfolder level pertama.
+- Nama unik dijamin; jika bentrok, ditambah `-1`, `-2`, dst.
+
+#### Combine Dataset
+Cara pakai:
+- Isi Source folders (satu folder per baris) dan Output Folder, lalu klik Combine.
+Parameter:
+- Source folders: daftar semua dataset sumber (minimum 2 folder, satu folder per baris).
+- Suffix for non-base sets: ditambahkan ke nama file dari dataset non-base agar tidak bentrok. Jika lebih dari 2 dataset, suffix auto increment (`_B`, `_C`, `_D`).
+- Image ext: ekstensi gambar yang dianggap pasangan `.txt` (gunakan format `.png,.jpg`).
+- Move (not copy): jika aktif, file dipindah (bukan disalin).
+Perhatian:
+- Hanya memproses pasangan image+txt di level atas, tidak recursive.
+- Base set dipilih dari dataset dengan pasangan terbanyak (tie ikut urutan).
+- Jika ada bentrok nama, akan ditambah `_1`, `_2`, dst.
+
+### Tag Tools
+
+#### Dataset Tag Editor
 Cara pakai (disarankan):
 - Isi **Project Root** (folder induk yang berisi `database/`, `dataset/`, `dataset/_temp`, `prompt.txt`).
 - Cek **Project Setup** lalu jalankan **Initialize Project** jika belum siap.
 - Stage file ke `dataset/_temp` dari Database/Dataset Browser, pilih mode, isi tags/mapping, lalu Run.
+- Untuk review kategori yang berulang, buka **Quiz Review**, pilih step dan queue, lalu jawab memakai tombol opsi atau shortcut keyboard.
 Parameter:
 - Project Root: root proyek dataset. Tool otomatis resolve `database/`, `dataset/`, `dataset/_temp`.
 - Image extensions: ekstensi gambar yang di-scan (gunakan format `.png,.jpg`).
@@ -154,33 +234,11 @@ Perhatian:
 - **Undo** ada sebagai tombol terpisah untuk restore file dari `_temp` ke `dataset/`.
 - Tersedia tombol **Dataset zip** (zip `dataset/` tanpa `_temp`) dan **Move all from _temp** (pindahkan isi `_temp` ke folder timestamp baru).
 - Insert bisa membuat `.txt` baru untuk gambar tanpa caption (dengan konfirmasi di UI).
+- Quiz Review menyimpan status review terpisah di `.bb_review.json`; metadata seperti Not Applicable tidak ditulis ke caption `.txt`.
+- Quiz Review default memakai `dataset/_temp`. Pilih area `dataset/` secara eksplisit hanya jika memang ingin mengedit langsung.
 - Tag editor tidak memahami blok `#optional:` atau `#warning:`; gunakan Dataset Normalization jika file Anda memakai format itu.
 
-### Offline Tagger (WD v3)
-Cara pakai:
-- Isi Dataset folder, atur parameter, klik Run tagger.
-Parameter utama:
-- Model ID or local path: Hugging Face repo ID atau path lokal model. Wajib ada file `.safetensors`.
-- Device: `auto` memakai CUDA jika tersedia, fallback ke CPU.
-- Batch size: semakin besar semakin cepat, tapi butuh memori lebih.
-- General/Character threshold: semakin kecil, tag makin banyak (lebih noisy).
-- Threshold mode: `mcut` (default) lebih adaptif per gambar, `fixed` pakai threshold statis.
-- MCUT tuning (advanced): `mcut_relax_*` menurunkan threshold MCUT agar hasil lebih deskriptif, `mcut_min_*_tags` menjaga minimal jumlah tag.
-- Tag focus: `all`, `character/subject only`, atau `non-character only`.
-- Max tags: 0 berarti tidak dibatasi.
-- Write mode: `append` menambah ke tag lama, `overwrite` menimpa, `skip` mengabaikan file yang `.txt`-nya sudah berisi.
-- Include character/rating: kontrol tag karakter dan `rating:general` (opsi character berlaku saat focus `all`).
-- Replace underscores: `long_hair` -> `long hair`.
-- Preview only + Preview limit: hanya tampilkan contoh di log tanpa menulis file.
-- Image limit: batasi jumlah gambar (0 = semua).
-- Local files only: jangan download model; gagal jika cache kosong.
-- Non-character regex (advanced): pola pemisah subject/outfit vs background/scene; bisa diubah untuk model selain WD.
-Perhatian:
-- Tag ditulis ke `.txt` di samping gambar.
-- Jika ada `#optional:` atau `#warning:` di .txt, blok tersebut dipertahankan.
-- Urutan file diproses berdasarkan path (sorted).
-
-### Dataset Normalization
+#### Dataset Normalization
 Cara pakai:
 - Isi Dataset folder, pilih preset type dan preset file.
 - Klik Scan atau Dry-run preview, cek hasil, lalu Apply jika sudah ok.
@@ -205,7 +263,7 @@ Perhatian:
 - `keep_tags` + `extra_keep` + `identity_tags` selalu dipertahankan (tidak dihapus dan tidak dipindah).
 - `remove_regex` memakai regex Python, case-insensitive; regex invalid diabaikan.
 
-#### Preset file normalize_v1.json
+##### Preset file normalize_v1.json
 Preset ada di `presets/anime/normalize_v1.json`. Struktur umumnya:
 
 ```json
@@ -257,68 +315,48 @@ Keterangan rules:
   - frequency_threshold: tag dengan frekuensi lebih kecil dari nilai ini (jumlah/total file) akan dipindah ke optional, kecuali ada di allow_general.
 - Jika Anda menambah preset baru, simpan di `presets/<type>/` dan klik Reload di UI.
 
-### Combine Dataset
+#### Offline Tagger (WD v3)
 Cara pakai:
-- Isi Source folders (satu folder per baris) dan Output Folder, lalu klik Combine.
-Parameter:
-- Source folders: daftar semua dataset sumber (minimum 2 folder, satu folder per baris).
-- Suffix for non-base sets: ditambahkan ke nama file dari dataset non-base agar tidak bentrok. Jika lebih dari 2 dataset, suffix auto increment (`_B`, `_C`, `_D`).
-- Image ext: ekstensi gambar yang dianggap pasangan `.txt` (gunakan format `.png,.jpg`).
-- Move (not copy): jika aktif, file dipindah (bukan disalin).
+- Isi Dataset folder dan mulai dengan Output profile **Background + pose only (recommended)**.
+- Aktifkan Preview only, klik Run tagger, lalu cek ringkasan kept / dropped sebelum menulis file.
+- Gunakan `append`, `overwrite`, atau `skip` setelah hasil preview sesuai kebutuhan.
+Output profile:
+- `Background + pose only (recommended)`: simpan scene, place, object, pose, dan limb action; buang clothing, appearance, character name, rating/meta, serta unknown tag untuk hasil yang lebih bersih.
+- `Standard full tags`: perilaku lama dengan output tag luas; Tag focus dan Include character/rating aktif kembali.
+- `Custom selective`: pilih bucket sederhana seperti background, objects, pose, appearance, clothing, character names, dan rating/meta.
+Parameter utama:
+- Device: `auto` memakai CUDA jika tersedia, fallback ke CPU.
+- Batch size: semakin besar semakin cepat, tapi butuh memori lebih.
+- Trigger tag: selalu dipasang pertama dan tidak dihapus.
+- Write mode: `append` menambah ke tag lama, `overwrite` menimpa, `skip` mengabaikan file yang `.txt`-nya sudah berisi.
+- Preview only + Preview limit: tampilkan contoh dan ringkasan filter tanpa menulis file.
+- Image limit: batasi jumlah gambar (0 = semua).
+- Local files only: jangan download model; gagal jika cache kosong.
+Advanced:
+- Threshold mode `mcut` direkomendasikan untuk WD tagger; `fixed` memakai threshold statis.
+- General/Character threshold, MCUT tuning, max tags, non-character regex, dan Danbooru safe-net tersedia untuk tuning lanjutan.
+- Danbooru safe-net dapat mengecek unknown selective tags secara online, tetapi lebih lambat dan membutuhkan internet.
 Perhatian:
-- Hanya memproses pasangan image+txt di level atas, tidak recursive.
-- Base set dipilih dari dataset dengan pasangan terbanyak (tie ikut urutan).
-- Jika ada bentrok nama, akan ditambah `_1`, `_2`, dst.
+- Tag ditulis ke `.txt` di samping gambar.
+- Selective profile mengutamakan output bersih; beberapa fringe tag yang berguna mungkin ikut terlewat.
+- Jika ada `#optional:` atau `#warning:` di `.txt`, blok tersebut dipertahankan.
+- Urutan file diproses berdasarkan path (sorted).
 
-### Flatten & Renumber
+#### CLIP Token Check
 Cara pakai:
-- Isi Root Folder, atur numbering dan ordering, klik Run Renamer.
+- Isi Dataset Folder, pilih mode, lalu klik Scan Tokens.
+- Review caption dengan token count tertinggi atau yang melewati Token Limit.
 Parameter:
-- Root Folder: berisi gambar dan subfolder level pertama.
-- Output Folder: default `<root>\_renamed`.
-- Image extensions: daftar ekstensi yang diproses (gunakan format `.png,.jpg`).
-- Start at / Prefix pad / Suffix pad / Separator: mengatur format `001.png`, `002_1.png`, dst.
-- Ordering: urutan top-level, folder, dan isi folder (name natural, ctime, mtime).
-- Rename matching `.txt`: ikut menyalin/rename file `.txt` pasangan.
-- Move instead of copy: pindahkan file (hapus dari sumber).
-- Dry run: hanya tampilkan rencana, tidak menulis file.
+- Image Extensions: hanya pasangan image + `.txt` dengan ekstensi ini yang di-scan.
+- Token Limit: batas warning, default `77`.
+- Top N: jumlah caption terpanjang yang ditampilkan.
+- Mode `estimate`: scan ringan tanpa tokenizer tambahan.
+- Mode `exact`: memakai CLIP tokenizer dan membutuhkan `transformers`.
+- Recursive scan: include subfolder.
+- Include `_temp`: ikut scan staging folder bila diperlukan.
 Perhatian:
-- Hanya memproses top-level dan subfolder level pertama.
-- Nama unik dijamin; jika bentrok, ditambah `-1`, `-2`, dst.
-
-### Stitch Groups
-Cara pakai:
-- Isi Source folder, atur opsi, klik Merge.
-Parameter:
-- Source folder: berisi file dengan pola `<prefix>_<number>.<ext>`.
-- Filename glob: filter awal, misalnya `*_*.*`.
-- Extensions to include: daftar ekstensi yang diikutkan.
-- Stack direction: `Vertical` (atas ke bawah) atau `Horizontal` (kiri ke kanan).
-- Resize rule: `auto` menyesuaikan lebar/tinggi sesuai arah; `none` hanya pad; opsi lain memaksa match-width/height.
-- Gap (px) dan Background: jarak antar gambar dan warna kanvas.
-- Skip single / Reverse order / Overwrite / Dry run: kontrol output.
-Perhatian:
-- Hanya file yang namanya cocok `<prefix>_<number>` yang diproses; urutan berdasarkan angka.
-- Output selalu PNG dan disimpan di `<source>\combined` jika Output kosong.
-
-### Webtoon Panel Splitter
-Cara pakai:
-- Isi Source folder, atur stripe detection, klik Split panels.
-Parameter:
-- Source folder: folder chapter atau root yang berisi subfolder chapter.
-- Output folder: default `_panels` per folder. Jika diisi, hasil ke `<output>\<chapter>\_panels`.
-- Filename glob + Extensions: filter file halaman.
-- Width alignment: `match-width` resize ke lebar terbesar; `none` hanya pad (background putih).
-- Stripe detection:
-  - Min stripe height: tinggi minimal garis putih untuk jadi pemisah.
-  - Row white threshold: 0-255, seberapa putih sebuah pixel.
-  - Row coverage: persentase pixel putih dalam satu baris.
-  - Tolerance inside stripe: toleransi baris gelap di dalam stripe.
-  - Min panel height: potongannya harus setinggi ini.
-- Options: save strip, overwrite, dry run.
-Perhatian:
-- Gambar disusun vertikal tanpa gap, lalu dipotong berdasarkan stripe putih.
-- Jika banyak noise, turunkan row coverage atau threshold.
+- Gunakan hasil sebagai sinyal review; jangan menghapus trigger atau identity tag penting secara membabi buta.
+- Jalankan lagi setelah cleanup caption untuk memastikan panjang token sudah masuk akal.
 
 ### Pipeline (beta)
 Cara pakai:
@@ -340,6 +378,31 @@ Perhatian:
 - Step image-only harus diletakkan sebelum step yang mengubah tag.
 - Step **Dataset Tag Editor** di pipeline sekarang sinkron dengan workflow `_temp` (staging -> edit -> restore) untuk mode non-manual.
 - File state pipeline disimpan di `_work/pipeline_jobs/<job_id>/state.json`.
+
+### Tag Glossary Wiki
+Cara pakai:
+- Tambah dan kategorikan tag yang ingin disimpan sebagai referensi reusable.
+- Pilih tag collection untuk memuat artikel wiki, guidance singkat, related tag, dan reference image dari Danbooru.
+- Gunakan linked tag untuk membandingkan pilihan lalu tambahkan tag yang berguna ke glossary.
+Perhatian:
+- Lookup artikel dan reference image dimuat dari Danbooru saat diperlukan, jadi koneksi internet dibutuhkan untuk fetch pertama.
+- Glossary tersinkron dengan quick picker di Dataset Tag Editor pada sesi browser yang sama.
+
+### Settings
+Settings dipakai untuk mengatur flow **Quiz Review** tanpa edit JSON manual.
+Cara pakai:
+- Tambah atau edit step card. Satu step adalah satu pertanyaan review, misalnya Body Composition atau Camera Angle.
+- Pilih `Single choice` jika satu jawaban harus mengganti tag lain dalam step yang sama. Pilih `Multi choice` jika beberapa tag boleh hidup bersama. Pilih `Manual tagging` untuk step yang membutuhkan editor caption dan glossary quick picker.
+- Atur default queue, Required, Auto advance, Allow Not Applicable, dan daftar tag.
+- Flow boleh mencampur step quiz dan step `Manual tagging`. Gunakan queue `Not reviewed` atau `Missing only` untuk satu pass manual per gambar.
+- Saat Quiz Review terbuka, tekan `Ctrl+Alt+C` untuk menampilkan cheat sheet di atas quiz. Pada step `Manual tagging`, overlay menampilkan gambar quiz aktif di sisi kanan; klik tag cheat sheet untuk menambahkannya langsung ke caption pending.
+- Input `Manual tagging` mengingat tag yang pernah dipakai dan menampilkan autosuggest dari riwayat serta glossary. Posisi gambar terakhir disimpan per project, area, dan manual step agar review dapat dilanjutkan. Quiz meminta konfirmasi sebelum membuang perubahan manual yang belum disimpan.
+- Review Global Behavior, pertahankan default target `dataset/_temp`, lalu klik Save config.
+- Opsional: klik Create steps untuk membuat draft editable dari section `prompt.txt`.
+Perhatian:
+- Cheat sheet adalah vocabulary/reference; Quiz Review adalah workflow. Import dari cheat sheet tidak tersimpan sampai Save config diklik.
+- Ubah step ID dengan hati-hati setelah review berjalan karena ID dipakai oleh metadata review.
+- Export JSON sebelum perubahan besar jika ingin menyimpan backup konfigurasi.
 
 ---
 

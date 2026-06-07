@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import threading
 import time
 from collections import OrderedDict
@@ -234,6 +235,45 @@ def _fetch_tag_meta(tag: str, timeout_seconds: float) -> Tuple[Optional[Dict[str
     )
 
 
+def lookup_tag_summaries(raw_tags: Any) -> Dict[str, Any]:
+    values = raw_tags if isinstance(raw_tags, list) else []
+    tags: List[str] = []
+    seen = set()
+    for raw_tag in values:
+        tag = normalize_tag(raw_tag)
+        if not tag or len(tag) > _MAX_TAG_LENGTH or tag in seen:
+            continue
+        seen.add(tag)
+        tags.append(tag)
+        if len(tags) >= 20:
+            break
+
+    timeout_seconds = _request_timeout_seconds()
+    summaries: Dict[str, Dict[str, Any]] = {}
+    errors: Dict[str, str] = {}
+    for tag in tags:
+        cache_key = f"summary|{tag}"
+        cached = _cache_get(cache_key)
+        if cached is not None:
+            summaries[tag] = cached
+            continue
+        info, err = _fetch_tag_meta(tag, timeout_seconds)
+        if err:
+            errors[tag] = err
+            continue
+        summary = info or {
+            "name": tag,
+            "category": None,
+            "category_name": "unknown",
+            "post_count": 0,
+        }
+        summary = {**summary, "found": bool(info)}
+        summaries[tag] = summary
+        _cache_put(cache_key, summary)
+
+    return {"ok": True, "summaries": summaries, "errors": errors}
+
+
 def _fetch_wiki(tag: str, timeout_seconds: float) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     payload, err = _http_get_json(
         "/wiki_pages.json",
@@ -252,6 +292,8 @@ def _fetch_wiki(tag: str, timeout_seconds: float) -> Tuple[Optional[Dict[str, An
         {
             "title": str(item.get("title") or tag),
             "body": str(body or ""),
+            "other_names": [str(name) for name in (item.get("other_names") or []) if str(name or "").strip()],
+            "updated_at": str(item.get("updated_at") or ""),
         },
         None,
     )
@@ -265,6 +307,11 @@ def _extract_related_tag(item: Any) -> str:
         if isinstance(first, str):
             return normalize_tag(first)
     if isinstance(item, dict):
+        nested = item.get("tag")
+        if isinstance(nested, dict):
+            value = nested.get("name")
+            if isinstance(value, str):
+                return normalize_tag(value)
         for key in ("name", "tag", "title"):
             value = item.get(key)
             if isinstance(value, str):
@@ -305,6 +352,150 @@ def _fetch_related(tag: str, timeout_seconds: float) -> Tuple[List[str], Optiona
     if err:
         return [], err
     return _extract_related_tags(payload, tag), None
+
+
+def _tag_summary(item: Any) -> Optional[Dict[str, Any]]:
+    if not isinstance(item, dict):
+        return None
+    tag = item.get("tag") if isinstance(item.get("tag"), dict) else item
+    name = normalize_tag(tag.get("name"))
+    if not name:
+        return None
+    category = _to_int(tag.get("category"))
+    summary: Dict[str, Any] = {
+        "name": name,
+        "category": category,
+        "category_name": CATEGORY_NAMES.get(category, "unknown"),
+        "post_count": _to_int(tag.get("post_count")),
+    }
+    for key in ("cosine_similarity", "jaccard_similarity", "overlap_coefficient", "frequency"):
+        try:
+            summary[key] = float(item.get(key))
+        except Exception:
+            continue
+    return summary
+
+
+def _extract_related_context(payload: Any, source_tag: str) -> Dict[str, List[Dict[str, Any]]]:
+    source = normalize_tag(source_tag)
+    related: List[Dict[str, Any]] = []
+    wiki_tags: List[Dict[str, Any]] = []
+    if isinstance(payload, dict):
+        raw_related = payload.get("related_tags")
+        raw_wiki_tags = payload.get("wiki_page_tags")
+        if isinstance(raw_related, list):
+            for item in raw_related:
+                summary = _tag_summary(item)
+                if not summary or summary["name"] == source:
+                    continue
+                related.append(summary)
+                if len(related) >= 40:
+                    break
+        if isinstance(raw_wiki_tags, list):
+            seen = set()
+            for item in raw_wiki_tags:
+                summary = _tag_summary(item)
+                if not summary or summary["name"] == source or summary["name"] in seen:
+                    continue
+                seen.add(summary["name"])
+                wiki_tags.append(summary)
+                if len(wiki_tags) >= 40:
+                    break
+    if not related:
+        related = [{"name": name} for name in _extract_related_tags(payload, source)[:40]]
+    return {"related": related, "wiki_tags": wiki_tags}
+
+
+def _fetch_related_context(tag: str, timeout_seconds: float) -> Tuple[Dict[str, List[Dict[str, Any]]], Optional[str]]:
+    payload, err = _http_get_json(
+        "/related_tag.json",
+        {"query": tag},
+        timeout_seconds,
+    )
+    if err:
+        return {"related": [], "wiki_tags": []}, err
+    return _extract_related_context(payload, tag), None
+
+
+def _relationship_names(payload: Any, field: str) -> List[str]:
+    names: List[str] = []
+    seen = set()
+    if not isinstance(payload, list):
+        return names
+    for item in payload:
+        if not isinstance(item, dict) or str(item.get("status") or "").lower() != "active":
+            continue
+        name = normalize_tag(item.get(field))
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        names.append(name)
+    return names
+
+
+def _fetch_relationships(tag: str, timeout_seconds: float) -> Tuple[Dict[str, List[str]], List[str]]:
+    requests = (
+        ("implies", "/tag_implications.json", {"search[antecedent_name]": tag, "limit": 40}, "consequent_name"),
+        ("implied_by", "/tag_implications.json", {"search[consequent_name]": tag, "limit": 40}, "antecedent_name"),
+        ("aliases_to", "/tag_aliases.json", {"search[antecedent_name]": tag, "limit": 40}, "consequent_name"),
+        ("aliases_from", "/tag_aliases.json", {"search[consequent_name]": tag, "limit": 40}, "antecedent_name"),
+    )
+    relationships: Dict[str, List[str]] = {}
+    errors: List[str] = []
+    for key, path, params, field in requests:
+        payload, err = _http_get_json(path, params, timeout_seconds)
+        relationships[key] = _relationship_names(payload, field)
+        if err:
+            errors.append(err)
+    return relationships, errors
+
+
+_WIKI_LINK_RE = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]")
+_DText_POST_RE = re.compile(r"!post\s+#?\d+(?::\s*)?")
+
+
+def _clean_dtext(raw: Any) -> str:
+    text = str(raw or "").replace("\r\n", "\n").replace("\r", "\n")
+    text = _WIKI_LINK_RE.sub(lambda match: match.group(1).replace("_", " "), text)
+    text = _DText_POST_RE.sub("", text)
+    text = re.sub(r"(?m)^h[1-6]\.\s*", "", text)
+    text = re.sub(r"(?m)^\*\s*", "", text)
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
+def _wiki_links(raw: Any) -> Tuple[List[str], List[str]]:
+    tag_links: List[str] = []
+    group_links: List[str] = []
+    seen_tags = set()
+    seen_groups = set()
+    for match in _WIKI_LINK_RE.finditer(str(raw or "")):
+        title = match.group(1).strip()
+        if not title:
+            continue
+        if title.lower().startswith("tag group:"):
+            group = title.split(":", 1)[1].strip()
+            if group and group.lower() not in seen_groups:
+                seen_groups.add(group.lower())
+                group_links.append(group)
+            continue
+        tag = normalize_tag(title)
+        if tag and tag not in seen_tags:
+            seen_tags.add(tag)
+            tag_links.append(tag)
+    return tag_links, group_links
+
+
+def _wiki_guidance(raw: Any) -> Dict[str, List[str]]:
+    text = _clean_dtext(raw)
+    paragraphs = [part.strip() for part in text.split("\n\n") if part.strip()]
+    sentences = re.split(r"(?<=[.!?])\s+", paragraphs[0] if paragraphs else "")
+    avoid_markers = (" instead", "do not ", "don't ", " not ", " should not ", " rather than ", " use ", " see ")
+    avoid = [sentence.strip() for sentence in sentences if any(marker in sentence.lower() for marker in avoid_markers)]
+    use_when = [sentence.strip() for sentence in sentences if sentence.strip() and sentence.strip() not in avoid]
+    return {
+        "use_when": use_when[:3],
+        "avoid_when": avoid[:4],
+    }
 
 
 def _absolute_url(raw: Any) -> str:
@@ -470,5 +661,61 @@ def lookup_tag_info(
     if include_preview and preview_err and found:
         result["previews"] = []
 
+    _cache_put(cache_key, result)
+    return result
+
+
+def lookup_tag_wiki(raw_tag: Any, preview_limit: Optional[int] = None) -> Dict[str, Any]:
+    tag = normalize_tag(raw_tag)
+    if not tag:
+        return _error_result("", "tag is required", "invalid_input")
+    if len(tag) > _MAX_TAG_LENGTH:
+        return _error_result(tag, f"tag must be <= {_MAX_TAG_LENGTH} chars", "invalid_input")
+
+    normalized_preview_limit = _normalize_preview_limit(preview_limit)
+    cache_key = f"wiki|{tag}|l{normalized_preview_limit}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        cached["cached"] = True
+        return cached
+
+    base = lookup_tag_info(
+        tag,
+        include_related=False,
+        include_preview=True,
+        preview_limit=normalized_preview_limit,
+    )
+    if not base.get("ok"):
+        return base
+
+    timeout_seconds = _request_timeout_seconds()
+    related_context, related_err = _fetch_related_context(tag, timeout_seconds)
+    relationships, relationship_errors = _fetch_relationships(tag, timeout_seconds)
+    wiki = base.get("wiki") or {}
+    wiki_body = str(wiki.get("body") or "")
+    wiki_links, group_links = _wiki_links(wiki_body)
+    wiki_linked = list(related_context.get("wiki_tags") or [])
+    known_linked = {str(item.get("name") or "") for item in wiki_linked}
+    for linked_tag in wiki_links:
+        if linked_tag == tag or linked_tag in known_linked:
+            continue
+        known_linked.add(linked_tag)
+        wiki_linked.append({"name": linked_tag})
+
+    warnings = []
+    if related_err:
+        warnings.append(related_err)
+    warnings.extend(relationship_errors)
+    result: Dict[str, Any] = {
+        **base,
+        "cached": False,
+        "wiki_plain": _clean_dtext(wiki_body),
+        "guidance": _wiki_guidance(wiki_body),
+        "related_details": related_context.get("related") or [],
+        "wiki_linked_tags": wiki_linked[:60],
+        "tag_groups": group_links[:30],
+        "relationships": relationships,
+        "warnings": list(dict.fromkeys(warnings)),
+    }
     _cache_put(cache_key, result)
     return result

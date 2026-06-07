@@ -1,26 +1,53 @@
 {% extends "base.html" %}
-{% block content %}
+{% block navbar_menu %}
   {% set tab = active_tab or 'guide' %}
-
-  <ul class="nav nav-tabs mb-3" role="tablist">
-    <li class="nav-item"><button class="nav-link bb-tab-link {{ 'active' if tab=='guide' }}" data-bs-toggle="tab" data-bs-target="#tab-guide" type="button"><i class="bi bi-signpost-split" aria-hidden="true"></i><span>Workflow Guide</span></button></li>
-    <li class="nav-item"><button class="nav-link bb-tab-link {{ 'active' if tab=='webp' }}" data-bs-toggle="tab" data-bs-target="#tab-webp" type="button"><i class="bi bi-images" aria-hidden="true"></i><span>Image -&gt; PNG Converter</span></button></li>
-    <li class="nav-item"><button class="nav-link bb-tab-link {{ 'active' if tab=='batch' }}" data-bs-toggle="tab" data-bs-target="#tab-batch" type="button"><i class="bi bi-sliders2" aria-hidden="true"></i><span>Photo Adjust (preset)</span></button></li>
-    <li class="nav-item"><button class="nav-link bb-tab-link {{ 'active' if tab=='tags' }}" data-bs-toggle="tab" data-bs-target="#tab-tags" type="button"><i class="bi bi-tags" aria-hidden="true"></i><span>Dataset Tag Editor</span></button></li>
-    <li class="nav-item"><button class="nav-link bb-tab-link {{ 'active' if tab=='offline_tagger' }}" data-bs-toggle="tab" data-bs-target="#tab-offline-tagger" type="button"><i class="bi bi-cpu" aria-hidden="true"></i><span>Offline Tagger (WD v3)</span></button></li>
-    <li class="nav-item"><button class="nav-link bb-tab-link {{ 'active' if tab=='normalize' }}" data-bs-toggle="tab" data-bs-target="#tab-normalize" type="button"><i class="bi bi-funnel" aria-hidden="true"></i><span>Dataset Normalization</span></button></li>
-    <li class="nav-item"><button class="nav-link bb-tab-link {{ 'active' if tab=='combine' }}" data-bs-toggle="tab" data-bs-target="#tab-combine" type="button"><i class="bi bi-collection" aria-hidden="true"></i><span>Combine Dataset</span></button></li>
-    <li class="nav-item"><button class="nav-link bb-tab-link {{ 'active' if tab=='rename' }}" data-bs-toggle="tab" data-bs-target="#tab-rename" type="button"><i class="bi bi-sort-numeric-down" aria-hidden="true"></i><span>Flatten &amp; Renumber</span></button></li>
-    <li class="nav-item"><button class="nav-link bb-tab-link {{ 'active' if tab=='merge' }}" data-bs-toggle="tab" data-bs-target="#tab-merge" type="button"><i class="bi bi-columns-gap" aria-hidden="true"></i><span>Stitch Groups</span></button></li>
-    <li class="nav-item"><button class="nav-link bb-tab-link {{ 'active' if tab=='webtoon' }}" data-bs-toggle="tab" data-bs-target="#tab-webtoon" type="button"><i class="bi bi-scissors" aria-hidden="true"></i><span>Webtoon Panel Splitter</span></button></li>
-    <li class="nav-item"><button class="nav-link bb-tab-link {{ 'active' if tab=='blur_brush' }}" data-bs-toggle="tab" data-bs-target="#tab-blur-brush" type="button"><i class="bi bi-brush" aria-hidden="true"></i><span>Brush Blur</span></button></li>
-    <li class="nav-item"><button class="nav-link bb-tab-link {{ 'active' if tab=='clip_tokens' }}" data-bs-toggle="tab" data-bs-target="#tab-clip-tokens" type="button"><i class="bi bi-body-text" aria-hidden="true"></i><span>CLIP Token Check</span></button></li>
-    <li class="nav-item"><button class="nav-link bb-tab-link {{ 'active' if tab=='pipeline' }}" data-bs-toggle="tab" data-bs-target="#tab-pipeline" type="button"><i class="bi bi-diagram-3" aria-hidden="true"></i><span>Pipeline (beta)</span></button></li>
-    <li class="nav-item ms-auto {{ '' if tab=='batch' else 'd-none' }}" id="batch-preset-info">
-      <span class="nav-link disabled">Presets loaded: {{ preset_names|length }}</span>
+  <ul class="navbar-nav bb-tool-menu flex-grow-1" role="tablist">
+    <li class="nav-item">
+      <button class="nav-link bb-menu-link {{ 'active' if tab=='guide' }}" data-bs-toggle="tab" data-bs-target="#tab-guide" type="button"><i class="bi bi-signpost-split" aria-hidden="true"></i><span>Workflow Guide</span></button>
+    </li>
+    <li class="nav-item dropdown">
+      <button class="nav-link bb-menu-link dropdown-toggle {{ 'active' if tab in ['webp', 'batch', 'blur_brush'] }}" data-bs-toggle="dropdown" type="button" aria-expanded="false"><i class="bi bi-images" aria-hidden="true"></i><span>Image Tools</span></button>
+      <ul class="dropdown-menu">
+        <li><button class="dropdown-item {{ 'active' if tab=='webp' }}" data-bs-toggle="tab" data-bs-target="#tab-webp" type="button"><i class="bi bi-images" aria-hidden="true"></i><span>Image -&gt; PNG Converter</span></button></li>
+        <li><button class="dropdown-item {{ 'active' if tab=='batch' }}" data-bs-toggle="tab" data-bs-target="#tab-batch" type="button"><i class="bi bi-sliders2" aria-hidden="true"></i><span>Photo Adjust (preset)</span></button></li>
+        <li><button class="dropdown-item {{ 'active' if tab=='blur_brush' }}" data-bs-toggle="tab" data-bs-target="#tab-blur-brush" type="button"><i class="bi bi-brush" aria-hidden="true"></i><span>Brush Blur</span></button></li>
+      </ul>
+    </li>
+    <li class="nav-item dropdown">
+      <button class="nav-link bb-menu-link dropdown-toggle {{ 'active' if tab in ['webtoon', 'merge', 'rename', 'combine'] }}" data-bs-toggle="dropdown" type="button" aria-expanded="false"><i class="bi bi-collection" aria-hidden="true"></i><span>Dataset Assembly</span></button>
+      <ul class="dropdown-menu">
+        <li><button class="dropdown-item {{ 'active' if tab=='webtoon' }}" data-bs-toggle="tab" data-bs-target="#tab-webtoon" type="button"><i class="bi bi-scissors" aria-hidden="true"></i><span>Webtoon Panel Splitter</span></button></li>
+        <li><button class="dropdown-item {{ 'active' if tab=='merge' }}" data-bs-toggle="tab" data-bs-target="#tab-merge" type="button"><i class="bi bi-columns-gap" aria-hidden="true"></i><span>Stitch Groups</span></button></li>
+        <li><button class="dropdown-item {{ 'active' if tab=='rename' }}" data-bs-toggle="tab" data-bs-target="#tab-rename" type="button"><i class="bi bi-sort-numeric-down" aria-hidden="true"></i><span>Flatten &amp; Renumber</span></button></li>
+        <li><button class="dropdown-item {{ 'active' if tab=='combine' }}" data-bs-toggle="tab" data-bs-target="#tab-combine" type="button"><i class="bi bi-collection" aria-hidden="true"></i><span>Combine Dataset</span></button></li>
+      </ul>
+    </li>
+    <li class="nav-item dropdown">
+      <button class="nav-link bb-menu-link dropdown-toggle {{ 'active' if tab in ['tags', 'normalize', 'offline_tagger', 'clip_tokens'] }}" data-bs-toggle="dropdown" type="button" aria-expanded="false"><i class="bi bi-tags" aria-hidden="true"></i><span>Tag Tools</span></button>
+      <ul class="dropdown-menu">
+        <li><button class="dropdown-item {{ 'active' if tab=='tags' }}" data-bs-toggle="tab" data-bs-target="#tab-tags" type="button"><i class="bi bi-tags" aria-hidden="true"></i><span>Dataset Tag Editor</span></button></li>
+        <li><button class="dropdown-item {{ 'active' if tab=='normalize' }}" data-bs-toggle="tab" data-bs-target="#tab-normalize" type="button"><i class="bi bi-funnel" aria-hidden="true"></i><span>Dataset Normalization</span></button></li>
+        <li><button class="dropdown-item {{ 'active' if tab=='offline_tagger' }}" data-bs-toggle="tab" data-bs-target="#tab-offline-tagger" type="button"><i class="bi bi-cpu" aria-hidden="true"></i><span>Offline Tagger (WD v3)</span></button></li>
+        <li><button class="dropdown-item {{ 'active' if tab=='clip_tokens' }}" data-bs-toggle="tab" data-bs-target="#tab-clip-tokens" type="button"><i class="bi bi-body-text" aria-hidden="true"></i><span>CLIP Token Check</span></button></li>
+      </ul>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link bb-menu-link {{ 'active' if tab=='pipeline' }}" data-bs-toggle="tab" data-bs-target="#tab-pipeline" type="button"><i class="bi bi-diagram-3" aria-hidden="true"></i><span>Pipeline</span></button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link bb-menu-link {{ 'active' if tab=='tag_wiki' }}" data-bs-toggle="tab" data-bs-target="#tab-tag-wiki" type="button"><i class="bi bi-journal-richtext" aria-hidden="true"></i><span>Tag Glossary Wiki</span></button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link bb-menu-link {{ 'active' if tab=='settings' }}" data-bs-toggle="tab" data-bs-target="#tab-settings" type="button"><i class="bi bi-gear" aria-hidden="true"></i><span>Settings</span></button>
+    </li>
+    <li class="nav-item ms-lg-auto {{ '' if tab=='batch' else 'd-none' }}" id="batch-preset-info">
+      <span class="navbar-text bb-menu-note">Presets loaded: {{ preset_names|length }}</span>
     </li>
   </ul>
+{% endblock %}
 
+{% block content %}
+  {% set tab = active_tab or 'guide' %}
   <div class="tab-content">
     <div class="tab-pane fade {{ 'show active' if tab=='guide' }}" id="tab-guide">
       {% include "guide.html" %}
@@ -48,6 +75,15 @@
 
     <div class="tab-pane fade {{ 'show active' if tab=='tags' }}" id="tab-tags">
       {% include "dataset_labeling.html" %}
+      {% include "review_quiz_modal.html" %}
+    </div>
+
+    <div class="tab-pane fade {{ 'show active' if tab=='tag_wiki' }}" id="tab-tag-wiki">
+      {% include "tag_glossary_wiki.html" %}
+    </div>
+
+    <div class="tab-pane fade {{ 'show active' if tab=='settings' }}" id="tab-settings">
+      {% include "settings.html" %}
     </div>
 
     <div class="tab-pane fade {{ 'show active' if tab=='offline_tagger' }}" id="tab-offline-tagger">
@@ -144,18 +180,60 @@
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       const infoEl = document.getElementById('batch-preset-info');
-      if(!infoEl) return;
+      const menu = document.querySelector('.bb-tool-menu');
+      if(!menu) return;
+      const tabStorageKey = 'bb-active-tab';
+      const targetToTab = (target) => String(target || '').replace(/^#tab-/, '').replace(/-/g, '_');
+      const tabToTarget = (tab) => tab ? `#tab-${String(tab).replace(/_/g, '-')}` : '';
+      const validTargets = new Set(Array.from(menu.querySelectorAll('[data-bs-toggle="tab"]')).map(btn => btn.getAttribute('data-bs-target')).filter(Boolean));
 
       const setInfoVisible = (target) => {
+        if(!infoEl) return;
         infoEl.classList.toggle('d-none', target !== '#tab-batch');
       };
 
-      const activeTab = document.querySelector('.nav-tabs [data-bs-toggle="tab"].active');
-      setInfoVisible(activeTab?.getAttribute('data-bs-target') || '');
+      const syncDropdownStates = () => {
+        menu.querySelectorAll('.dropdown').forEach(dropdown => {
+          dropdown.querySelector('.dropdown-toggle')?.classList.toggle('active', !!dropdown.querySelector('.dropdown-item.active'));
+        });
+      };
 
-      document.querySelectorAll('.nav-tabs [data-bs-toggle="tab"]').forEach(btn => {
+      const activateTarget = (target) => {
+        if(!target || !validTargets.has(target)) return false;
+        const trigger = menu.querySelector(`[data-bs-target="${target}"]`);
+        if(!trigger || trigger.classList.contains('active')) return false;
+        bootstrap.Tab.getOrCreateInstance(trigger).show();
+        return true;
+      };
+
+      const params = new URLSearchParams(window.location.search);
+      const queryTarget = tabToTarget(params.get('tab') || '');
+      let savedTarget = '';
+      try { savedTarget = tabToTarget(localStorage.getItem(tabStorageKey) || ''); } catch(_){}
+      if(!validTargets.has(queryTarget) && validTargets.has(savedTarget)){
+        activateTarget(savedTarget);
+      }
+
+      const activeTab = menu.querySelector('[data-bs-toggle="tab"].active');
+      setInfoVisible(activeTab?.getAttribute('data-bs-target') || '');
+      syncDropdownStates();
+      const initialTab = targetToTab(activeTab?.getAttribute('data-bs-target') || '');
+      if(initialTab){
+        try { localStorage.setItem(tabStorageKey, initialTab); } catch(_){}
+      }
+
+      menu.querySelectorAll('[data-bs-toggle="tab"]').forEach(btn => {
         btn.addEventListener('shown.bs.tab', (ev) => {
-          setInfoVisible(ev.target?.getAttribute('data-bs-target') || '');
+          const target = ev.target?.getAttribute('data-bs-target') || '';
+          setInfoVisible(target);
+          syncDropdownStates();
+          const tab = targetToTab(target);
+          if(tab){
+            try { localStorage.setItem(tabStorageKey, tab); } catch(_){}
+            const url = new URL(window.location.href);
+            url.searchParams.set('tab', tab);
+            window.history.replaceState({}, '', url.toString());
+          }
         });
       });
     });

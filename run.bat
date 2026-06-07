@@ -25,5 +25,5 @@ if errorlevel 1 (
 set FLASK_APP=app.py
 set FLASK_RUN_PORT=5000
 echo Open in browser: http://127.0.0.1:%FLASK_RUN_PORT%
-"%VENV_PY%" -m flask run --host 127.0.0.1 --port %FLASK_RUN_PORT%
+"%VENV_PY%" -m flask run --debug --no-debugger --host 127.0.0.1 --port %FLASK_RUN_PORT%
 pause

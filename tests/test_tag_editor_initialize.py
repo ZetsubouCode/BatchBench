@@ -15,11 +15,13 @@ class TagEditorInitializeTests(unittest.TestCase):
             (dataset / "train_a.png").write_bytes(b"img")
             (dataset / "train_b.png").write_bytes(b"img")
             (dataset / "train_b.txt").write_text("keep_existing", encoding="utf-8")
-            (project / "prompt.txt").write_text("my_trigger\n", encoding="utf-8")
+            existing_prompt = "my_trigger\n"
+            (project / "prompt.txt").write_text(existing_prompt, encoding="utf-8")
 
             result = tag_editor.initialize_project_layout(project, [".png"], create_prompt=True)
 
             self.assertTrue(result.get("ok"), msg=result)
+            self.assertEqual((project / "prompt.txt").read_text(encoding="utf-8"), existing_prompt)
             database = project / "database"
             self.assertFalse((project / "root.png").exists())
             self.assertTrue((database / "root.png").exists())

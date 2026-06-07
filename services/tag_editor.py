@@ -2,6 +2,9 @@ from collections import Counter, OrderedDict
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
+import hashlib
+import json
+import os
 import re
 import shutil
 import zipfile
@@ -12,7 +15,7 @@ from utils.parse import parse_bool, parse_exts, parse_tag_list
 from utils.text_io import read_text_best_effort
 from utils.tool_result import build_tool_result
 
-EDIT_MODES = {"insert", "delete", "replace", "dedup"}
+EDIT_MODES = {"insert", "delete", "replace", "dedup", "move"}
 DEFAULT_PROJECT_PROMPT = """trigger_word
 
 appearance:
@@ -27,6 +30,27 @@ top, bottom, footwear
 optional:
 expression, pose, background
 """
+DEFAULT_QUIZ_SEGMENTS = [
+    {"id": "identity_appearance", "label": "Identity / Appearance", "order": 1},
+    {"id": "outfit", "label": "Outfit", "order": 2},
+    {"id": "expression", "label": "Expression", "order": 3},
+    {"id": "body_composition", "label": "Body Composition / Pose", "order": 4},
+    {"id": "camera_angle", "label": "POV / Camera Angle", "order": 5},
+    {"id": "lighting", "label": "Lighting", "order": 6},
+    {"id": "background", "label": "Background Details", "order": 7},
+]
+DEFAULT_TAGGING_QUIZ_SETTINGS = {
+    "segments": DEFAULT_QUIZ_SEGMENTS,
+    "prompt_init": {
+        "mode": "quiz_segment_template",
+        "overwrite_existing": False,
+        "backup_before_overwrite": True,
+        "append_missing_sections": False,
+        "custom_template": "",
+    },
+}
+TAGGING_QUIZ_SETTINGS_PATH = Path(__file__).resolve().parent.parent / "settings" / "tagging_quiz.json"
+TAGGING_SESSION_REL = Path("dataset") / "_temp" / "tagging_session.json"
 _TXT_TAG_CACHE: "OrderedDict[str, Tuple[Tuple[int, int], List[str]]]" = OrderedDict()
 _TXT_TAG_CACHE_MAX = 4096
 
@@ -270,6 +294,262 @@ def _clean_messages(*items: str) -> List[str]:
     return [str(item).strip() for item in items if str(item or "").strip()]
 
 
+def _utc_now_iso() -> str:
+    return datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+
+
+def _json_clone(value: Any) -> Any:
+    return json.loads(json.dumps(value))
+
+
+def _settings_path() -> Path:
+    return TAGGING_QUIZ_SETTINGS_PATH
+
+
+def _normalize_quiz_segments(raw_segments: Any) -> List[Dict[str, Any]]:
+    src = raw_segments if isinstance(raw_segments, list) else DEFAULT_QUIZ_SEGMENTS
+    out: List[Dict[str, Any]] = []
+    seen: Set[str] = set()
+    for idx, raw in enumerate(src):
+        if not isinstance(raw, dict):
+            continue
+        seg_id = re.sub(r"[^a-z0-9_]+", "_", str(raw.get("id") or "").strip().lower()).strip("_")
+        label = re.sub(r"\s+", " ", str(raw.get("label") or "").strip())
+        if not seg_id or seg_id in seen:
+            continue
+        seen.add(seg_id)
+        try:
+            order = int(raw.get("order", idx + 1))
+        except Exception:
+            order = idx + 1
+        out.append({"id": seg_id, "label": label or seg_id.replace("_", " ").title(), "order": order})
+    if not out:
+        out = _json_clone(DEFAULT_QUIZ_SEGMENTS)
+    return sorted(out, key=lambda item: (int(item.get("order") or 0), str(item.get("id") or "")))
+
+
+def default_tagging_quiz_settings() -> Dict[str, Any]:
+    return _json_clone(DEFAULT_TAGGING_QUIZ_SETTINGS)
+
+
+def normalize_tagging_quiz_settings(payload: Any) -> Dict[str, Any]:
+    src = payload if isinstance(payload, dict) else {}
+    default = default_tagging_quiz_settings()
+    prompt_src = src.get("prompt_init") if isinstance(src.get("prompt_init"), dict) else {}
+    prompt_default = default["prompt_init"]
+    mode = str(prompt_src.get("mode") or prompt_default["mode"]).strip().lower()
+    if mode not in {"default_template", "quiz_segment_template", "custom_template", "blank", "none"}:
+        mode = prompt_default["mode"]
+    return {
+        "segments": _normalize_quiz_segments(src.get("segments")),
+        "prompt_init": {
+            "mode": mode,
+            "overwrite_existing": bool(prompt_src.get("overwrite_existing", prompt_default["overwrite_existing"])),
+            "backup_before_overwrite": bool(
+                prompt_src.get("backup_before_overwrite", prompt_default["backup_before_overwrite"])
+            ),
+            "append_missing_sections": bool(
+                prompt_src.get("append_missing_sections", prompt_default["append_missing_sections"])
+            ),
+            "custom_template": str(prompt_src.get("custom_template") or "")[:20000],
+        },
+    }
+
+
+def load_tagging_quiz_settings() -> Dict[str, Any]:
+    path = _settings_path()
+    if not path.exists():
+        return default_tagging_quiz_settings()
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return default_tagging_quiz_settings()
+    return normalize_tagging_quiz_settings(data)
+
+
+def save_tagging_quiz_settings(payload: Any) -> Dict[str, Any]:
+    settings = normalize_tagging_quiz_settings(payload)
+    path = _settings_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write_json(path, settings)
+    return settings
+
+
+def _prompt_section_name(label: str) -> str:
+    label = re.sub(r"\s+", " ", str(label or "").strip())
+    return label.lower() or "tags"
+
+
+def _quiz_segment_prompt_tags(seg_id: str) -> List[str]:
+    defaults = {
+        "identity_appearance": ["hair_color", "eye_color", "hairstyle"],
+        "outfit": ["top", "bottom", "footwear"],
+        "expression": ["smile", "serious", "angry"],
+        "body_composition": ["standing", "sitting", "cowboy_shot", "full_body"],
+        "camera_angle": ["looking_at_viewer", "from_above", "from_below"],
+        "lighting": ["soft_lighting", "backlighting", "dim_lighting"],
+        "background": ["indoors", "outdoors", "classroom"],
+    }
+    return defaults.get(seg_id, ["tag_a", "tag_b", "tag_c"])
+
+
+def _build_quiz_segment_prompt(segments: List[Dict[str, Any]]) -> str:
+    blocks = ["trigger_word", ""]
+    for segment in _normalize_quiz_segments(segments):
+        blocks.append(f"{_prompt_section_name(segment.get('label') or segment.get('id'))}:")
+        blocks.append(join_tags(_quiz_segment_prompt_tags(str(segment.get("id") or ""))))
+        blocks.append("")
+    return "\n".join(blocks).rstrip() + "\n"
+
+
+def _build_prompt_content(settings: Dict[str, Any]) -> str:
+    prompt_init = settings.get("prompt_init") or {}
+    mode = str(prompt_init.get("mode") or "quiz_segment_template").strip().lower()
+    if mode == "none":
+        return ""
+    if mode == "blank":
+        return "trigger_word\n"
+    if mode == "custom_template":
+        return str(prompt_init.get("custom_template") or "")
+    if mode == "default_template":
+        return DEFAULT_PROJECT_PROMPT
+    return _build_quiz_segment_prompt(settings.get("segments") or DEFAULT_QUIZ_SEGMENTS)
+
+
+def parse_cheatsheet_text(content: str) -> Dict[str, Any]:
+    raw_lines = str(content or "").replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    lines = [line.strip() for line in raw_lines]
+    trigger = ""
+    sections: List[Dict[str, Any]] = []
+    all_tags: List[str] = []
+
+    def _extend_unique(items: List[str]):
+        for item in items:
+            tag = _sanitize_tag(item)
+            if tag and tag not in all_tags:
+                all_tags.append(tag)
+
+    idx = 0
+    while idx < len(lines) and not lines[idx]:
+        idx += 1
+    if idx < len(lines) and ":" not in lines[idx]:
+        trigger = lines[idx].strip().strip(",")
+        idx += 1
+
+    current: Optional[Dict[str, Any]] = None
+    while idx < len(lines):
+        line = lines[idx]
+        idx += 1
+        if not line:
+            continue
+        if ":" in line:
+            left, right = line.split(":", 1)
+            name = re.sub(r"\s+", " ", left.strip())
+            if name:
+                base_tags = _dedup_tags(parse_tag_list(right or "", dedupe=False))
+                current = {"name": name, "category": name, "tags": base_tags, "conditionals": []}
+                sections.append(current)
+                _extend_unique(base_tags)
+                continue
+        tags = _dedup_tags(parse_tag_list(line, dedupe=False))
+        if current and tags:
+            current["conditionals"].append(tags)
+            _extend_unique(tags)
+        elif tags:
+            _extend_unique(tags)
+    return {"trigger": trigger, "sections": sections, "tags": all_tags}
+
+
+def parse_cheatsheet_file(project_root: Path, prompt_file: str = "prompt.txt") -> Dict[str, Any]:
+    paths = resolve_project_paths(project_root)
+    rel_path = Path(str(prompt_file or "prompt.txt").replace("\\", "/").lstrip("/"))
+    if rel_path.is_absolute() or any(part == ".." for part in rel_path.parts):
+        return {"ok": False, "error": "Invalid prompt file", **_make_serializable_path_info(paths)}
+    target = paths["project_root"] / rel_path
+    if not target.exists() or not target.is_file():
+        return {
+            "ok": False,
+            "error": f"Cheatsheet not found: {rel_path.as_posix()}",
+            "trigger": "",
+            "sections": [],
+            "tags": [],
+            **_make_serializable_path_info(paths),
+        }
+    try:
+        text, _, _ = read_text_best_effort(target)
+    except Exception as exc:
+        return {"ok": False, "error": str(exc), **_make_serializable_path_info(paths)}
+    parsed = parse_cheatsheet_text(text)
+    return {"ok": True, "rel": rel_path.as_posix(), **parsed, **_make_serializable_path_info(paths)}
+
+
+def _existing_prompt_sections(content: str) -> Set[str]:
+    sections: Set[str] = set()
+    for raw in str(content or "").replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+        line = raw.strip()
+        if not line or ":" not in line:
+            continue
+        left, _ = line.split(":", 1)
+        name = re.sub(r"\s+", " ", left.strip().lower())
+        if name:
+            sections.add(name)
+    return sections
+
+
+def _section_blocks_from_prompt(content: str) -> Dict[str, str]:
+    blocks: Dict[str, str] = {}
+    lines = str(content or "").replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    idx = 0
+    while idx < len(lines):
+        line = lines[idx].strip()
+        if not line or ":" not in line:
+            idx += 1
+            continue
+        left, _ = line.split(":", 1)
+        name = re.sub(r"\s+", " ", left.strip().lower())
+        start = idx
+        idx += 1
+        while idx < len(lines):
+            next_line = lines[idx].strip()
+            if next_line and ":" in next_line:
+                break
+            idx += 1
+        if name:
+            blocks[name] = "\n".join(lines[start:idx]).strip()
+    return blocks
+
+
+def handle_prompt_init(project_root: Path, settings: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    paths = resolve_project_paths(project_root)
+    prompt_path = paths["prompt_path"]
+    settings = normalize_tagging_quiz_settings(settings or load_tagging_quiz_settings())
+    prompt_init = settings.get("prompt_init") or {}
+    mode = str(prompt_init.get("mode") or "quiz_segment_template").strip().lower()
+    logs: List[str] = [f"prompt mode used: {mode}"]
+    warnings: List[str] = []
+    errors: List[str] = []
+    action = "skipped"
+
+    if mode == "none":
+        logs.append("prompt.txt skipped: mode none")
+        return {"ok": True, "action": action, "logs": logs, "warnings": warnings, "errors": errors}
+
+    if prompt_path.exists():
+        logs.append("prompt.txt skipped: existing file protected")
+    else:
+        try:
+            desired = _build_prompt_content(settings)
+            prompt_path.write_text(desired, encoding="utf-8")
+            action = "created"
+            logs.append("prompt.txt created")
+        except Exception as exc:
+            errors.append(f"prompt.txt: {exc}")
+
+    trigger = extract_trigger_word(prompt_path)
+    logs.append(f"trigger detected: {trigger}" if trigger else "trigger not detected")
+    return {"ok": len(errors) == 0, "action": action, "logs": logs, "warnings": warnings, "errors": errors}
+
+
 def _is_image_file(path: Path, extset: Set[str]) -> bool:
     return path.is_file() and path.suffix.lower() in extset
 
@@ -450,7 +730,12 @@ def inspect_project_layout(project_root: Path, exts: List[str]) -> Dict[str, Any
     }
 
 
-def initialize_project_layout(project_root: Path, exts: List[str], create_prompt: bool = True) -> Dict[str, Any]:
+def initialize_project_layout(
+    project_root: Path,
+    exts: List[str],
+    create_prompt: bool = True,
+    tagging_quiz_settings: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     paths = resolve_project_paths(project_root)
     root = paths["project_root"]
     inspect = inspect_project_layout(root, exts)
@@ -481,18 +766,17 @@ def initialize_project_layout(project_root: Path, exts: List[str], create_prompt
             path.mkdir(parents=True, exist_ok=False)
             created_dirs.append(name)
             logs.append(f"[mkdir] {name}")
+            logs.append(f"folder created: {name}/")
         except Exception as exc:
             errors.append(f"{name}: {exc}")
 
+    prompt_result = {"ok": True, "action": "skipped", "logs": ["prompt mode used: disabled"], "errors": []}
     if create_prompt:
-        if paths["prompt_path"].exists():
+        prompt_result = handle_prompt_init(root, tagging_quiz_settings)
+        logs.extend(prompt_result.get("logs") or [])
+        errors.extend(prompt_result.get("errors") or [])
+        if prompt_result.get("action") == "skipped" and paths["prompt_path"].exists():
             skipped.append("prompt.txt: already exists")
-        else:
-            try:
-                paths["prompt_path"].write_text(DEFAULT_PROJECT_PROMPT, encoding="utf-8")
-                logs.append("[create] prompt.txt")
-            except Exception as exc:
-                errors.append(f"prompt.txt: {exc}")
 
     trigger_word = extract_trigger_word(paths["prompt_path"])
     extset = _normalize_exts(exts)
@@ -570,6 +854,12 @@ def initialize_project_layout(project_root: Path, exts: List[str], create_prompt
             errors.append(f"database/{src_img.name}: {exc}")
             logs.append(f"[error] move {src_img.name} -> database: {exc}")
 
+    logs.append(f"copied images count: {len(copied_dataset) + len(moved_database)}")
+    logs.append(f"created txt count: {len(generated_txt)}")
+    logs.append(f"skipped existing count: {len(skipped)}")
+    logs.append(f"conflict renamed count: {len(renamed)}")
+    logs.append(f"error count: {len(errors)}")
+
     return {
         "ok": len(errors) == 0,
         **_make_serializable_path_info(paths),
@@ -584,6 +874,7 @@ def initialize_project_layout(project_root: Path, exts: List[str], create_prompt
         "warnings": _clean_messages(
             f"Trigger word detected: {trigger_word}" if trigger_word else "",
             "Some files were skipped or renamed during initialization." if skipped or renamed else "",
+            *(prompt_result.get("warnings") or []),
         ),
         "errors": errors,
         "logs": logs,
@@ -597,7 +888,477 @@ def initialize_project_layout(project_root: Path, exts: List[str], create_prompt
             "skipped": len(skipped),
             "renamed": len(renamed),
             "errors": len(errors),
+            "prompt_action": prompt_result.get("action") or "skipped",
         },
+    }
+
+
+def atomic_write_json(path: Path, payload: Dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = Path(str(path) + ".tmp")
+    with tmp.open("w", encoding="utf-8") as fh:
+        json.dump(payload, fh, ensure_ascii=False, indent=2)
+        fh.write("\n")
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(str(tmp), str(path))
+
+
+def tagging_session_path(project_root: Path) -> Path:
+    paths = resolve_project_paths(project_root)
+    return paths["project_root"] / TAGGING_SESSION_REL
+
+
+def _stable_hash(value: Any) -> str:
+    text = json.dumps(value, ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _prompt_mtime(paths: Dict[str, Any]) -> int:
+    try:
+        return int(paths["prompt_path"].stat().st_mtime)
+    except Exception:
+        return 0
+
+
+def _image_list_hash(images: List[Path], root: Path) -> str:
+    rels = []
+    for img in images:
+        try:
+            rels.append(img.relative_to(root).as_posix())
+        except Exception:
+            rels.append(str(img))
+    return _stable_hash(rels)
+
+
+def _normalize_mapping_rows(rows: Any) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    if not isinstance(rows, list):
+        return out
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        left: List[str] = []
+        seen: Set[str] = set()
+        for raw in row.get("left_sections") or []:
+            name = re.sub(r"\s+", " ", str(raw or "").strip())
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            left.append(name)
+        right_raw = row.get("right_segment")
+        right = str(right_raw).strip() if right_raw not in (None, "", "null") else None
+        if not left and not right:
+            out.append({"left_sections": [], "right_segment": None})
+        else:
+            out.append({"left_sections": left, "right_segment": right})
+    return out
+
+
+def _section_tag_index(parsed: Dict[str, Any]) -> Dict[str, List[str]]:
+    index: Dict[str, List[str]] = {}
+    for section in parsed.get("sections") or []:
+        name = re.sub(r"\s+", " ", str(section.get("name") or section.get("category") or "").strip())
+        if not name:
+            continue
+        tags: List[str] = []
+        tags.extend(section.get("tags") or [])
+        for cond in section.get("conditionals") or []:
+            tags.extend(cond or [])
+        index[name.lower()] = _dedup_tags(tags)
+    return index
+
+
+def build_tagging_quiz_recommendations(
+    project_root: Path,
+    mapping_rows: List[Dict[str, Any]],
+    prompt_file: str = "prompt.txt",
+    settings: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    paths = resolve_project_paths(project_root)
+    settings = normalize_tagging_quiz_settings(settings or load_tagging_quiz_settings())
+    parsed = parse_cheatsheet_file(paths["project_root"], prompt_file)
+    warnings: List[str] = []
+    if not parsed.get("ok"):
+        warnings.append(parsed.get("error") or "Cheatsheet not available; recommendations are empty.")
+        parsed = {"sections": [], "trigger": "", "tags": []}
+    index = _section_tag_index(parsed)
+    recommendations: Dict[str, List[str]] = {segment["id"]: [] for segment in settings.get("segments") or []}
+    for row in _normalize_mapping_rows(mapping_rows):
+        segment_id = row.get("right_segment")
+        if not segment_id:
+            continue
+        if segment_id not in recommendations:
+            warnings.append(f"Mapped segment no longer exists: {segment_id}")
+            recommendations.setdefault(segment_id, [])
+        tags: List[str] = []
+        for section_name in row.get("left_sections") or []:
+            found = index.get(str(section_name).lower())
+            if found is None:
+                warnings.append(f"Mapped cheatsheet section no longer exists: {section_name}")
+                continue
+            tags.extend(found)
+        recommendations[segment_id] = _dedup_tags((recommendations.get(segment_id) or []) + tags)
+    logs = [f"Built recommendations: {len(recommendations)} segments"]
+    for seg_id, tags in recommendations.items():
+        if not tags:
+            logs.append(f"Warning: {seg_id} segment has no connected cheatsheet section")
+    return {
+        "ok": True,
+        "recommendations": recommendations,
+        "trigger": parsed.get("trigger") or "",
+        "warnings": warnings,
+        "logs": logs,
+        **_make_serializable_path_info(paths),
+    }
+
+
+def _image_rel_for_session(dataset_root: Path, img: Path) -> str:
+    return "dataset/" + img.relative_to(dataset_root).as_posix()
+
+
+def _dataset_path_from_image_rel(project_root: Path, image_rel: str) -> Optional[Path]:
+    paths = resolve_project_paths(project_root)
+    rel = str(image_rel or "").replace("\\", "/").lstrip("/")
+    if rel.lower().startswith("dataset/"):
+        rel = rel[8:]
+    elif rel.lower().startswith("database/"):
+        rel = rel[9:]
+    rel_path = Path(rel)
+    if not str(rel_path) or rel_path.is_absolute() or any(part == ".." for part in rel_path.parts):
+        return None
+    target = paths["dataset_root"] / rel_path
+    try:
+        target_res = target.resolve()
+        root_res = paths["dataset_root"].resolve()
+    except Exception:
+        return None
+    if target_res != root_res and root_res not in target_res.parents:
+        return None
+    return target
+
+
+def _default_segment_state(default_tags: List[str]) -> Dict[str, Any]:
+    return {
+        "selected": _dedup_tags(default_tags),
+        "manual": [],
+        "removed_defaults": [],
+        "skipped": False,
+        "updated_at": _utc_now_iso(),
+    }
+
+
+def _map_existing_tags_to_segments(
+    tags: List[str],
+    segments: List[Dict[str, Any]],
+    recommendations: Dict[str, List[str]],
+    session_defaults: Dict[str, List[str]],
+) -> Dict[str, Dict[str, Any]]:
+    segment_states: Dict[str, Dict[str, Any]] = {}
+    pools = {
+        seg["id"]: set((recommendations.get(seg["id"]) or []) + (session_defaults.get(seg["id"]) or []))
+        for seg in segments
+    }
+    unsorted: List[str] = []
+    for tag in _dedup_tags(tags):
+        placed = False
+        for seg in segments:
+            seg_id = seg["id"]
+            if tag not in pools.get(seg_id, set()):
+                continue
+            state = segment_states.setdefault(seg_id, _default_segment_state([]))
+            state["selected"] = _dedup_tags((state.get("selected") or []) + [tag])
+            placed = True
+            break
+        if not placed:
+            unsorted.append(tag)
+    if unsorted:
+        segment_states["__unsorted__"] = _default_segment_state([])
+        segment_states["__unsorted__"]["selected"] = unsorted
+    return segment_states
+
+
+def _ensure_session_image_entry(session: Dict[str, Any], image_rel: str) -> Dict[str, Any]:
+    images = session.setdefault("images", {})
+    entry = images.setdefault(
+        image_rel,
+        {"status": "pending", "segments": {}, "final_tags_written": False, "missing": False},
+    )
+    entry.setdefault("segments", {})
+    entry.setdefault("status", "pending")
+    entry.setdefault("final_tags_written", False)
+    return entry
+
+
+def load_tagging_session(project_root: Path) -> Dict[str, Any]:
+    paths = resolve_project_paths(project_root)
+    session_path = tagging_session_path(paths["project_root"])
+    if not session_path.exists():
+        return {"ok": True, "session": None, "exists": False, **_make_serializable_path_info(paths)}
+    try:
+        session = json.loads(session_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return {"ok": False, "error": f"Could not read tagging session: {exc}", **_make_serializable_path_info(paths)}
+    warnings: List[str] = []
+    fp = session.get("source_fingerprint") if isinstance(session.get("source_fingerprint"), dict) else {}
+    current_prompt_mtime = _prompt_mtime(paths)
+    if fp.get("prompt_txt_mtime") and int(fp.get("prompt_txt_mtime") or 0) != current_prompt_mtime:
+        warnings.append("Cheatsheet changed since this session started.")
+
+    exts = [".jpg", ".jpeg", ".png", ".webp"]
+    images = _list_images(paths["dataset_root"], exts, recursive=True, exclude_dir=paths["temp_root"])
+    image_rels = [_image_rel_for_session(paths["dataset_root"], img) for img in images]
+    existing_set = set(image_rels)
+    for rel in image_rels:
+        _ensure_session_image_entry(session, rel)
+    for rel, entry in (session.get("images") or {}).items():
+        if rel not in existing_set:
+            if isinstance(entry, dict):
+                entry["missing"] = True
+            warnings.append(f"Image missing: {rel}")
+
+    current = session.setdefault("current", {})
+    current_rel = current.get("image_rel")
+    if current_rel and current_rel not in existing_set:
+        for idx, rel in enumerate(image_rels):
+            entry = session.get("images", {}).get(rel) or {}
+            if entry.get("status") != "completed":
+                current["image_index"] = idx
+                current["image_rel"] = rel
+                current["segment_index"] = 0
+                segments = session.get("quiz_segments") or []
+                current["segment_id"] = segments[0]["id"] if segments else ""
+                warnings.append("Current image was missing; moved to nearest unfinished image.")
+                break
+
+    session["updated_at"] = session.get("updated_at") or _utc_now_iso()
+    return {
+        "ok": True,
+        "exists": True,
+        "session": session,
+        "warnings": warnings,
+        "logs": ["Loaded tagging session"],
+        **_make_serializable_path_info(paths),
+    }
+
+
+def save_tagging_session(project_root: Path, session: Dict[str, Any]) -> Dict[str, Any]:
+    paths = resolve_project_paths(project_root)
+    if not isinstance(session, dict):
+        return {"ok": False, "error": "session must be an object", **_make_serializable_path_info(paths)}
+    session["project_root"] = str(paths["project_root"])
+    session["updated_at"] = _utc_now_iso()
+    atomic_write_json(tagging_session_path(paths["project_root"]), session)
+    return {"ok": True, "session": session, "logs": ["Autosaved session"], **_make_serializable_path_info(paths)}
+
+
+def start_tagging_session(
+    project_root: Path,
+    exts: List[str],
+    mapping_rows: Optional[List[Dict[str, Any]]] = None,
+    session_defaults: Optional[Dict[str, List[str]]] = None,
+    recommendations: Optional[Dict[str, List[str]]] = None,
+    settings: Optional[Dict[str, Any]] = None,
+    replace: bool = True,
+) -> Dict[str, Any]:
+    paths = resolve_project_paths(project_root)
+    settings = normalize_tagging_quiz_settings(settings or load_tagging_quiz_settings())
+    segments = _normalize_quiz_segments(settings.get("segments"))
+    mapping_rows = _normalize_mapping_rows(mapping_rows or [])
+    session_defaults = {
+        str(k): _dedup_tags(v if isinstance(v, list) else parse_tag_list(v))
+        for k, v in (session_defaults or {}).items()
+    }
+    if recommendations is None:
+        recommendations = build_tagging_quiz_recommendations(
+            paths["project_root"],
+            mapping_rows,
+            settings=settings,
+        ).get("recommendations") or {}
+    images = _list_images(paths["dataset_root"], exts, recursive=True, exclude_dir=paths["temp_root"])
+    image_rels = [_image_rel_for_session(paths["dataset_root"], img) for img in images]
+    now = _utc_now_iso()
+    session: Dict[str, Any] = {
+        "version": 1,
+        "project_root": str(paths["project_root"]),
+        "status": "active",
+        "created_at": now,
+        "updated_at": now,
+        "current": {
+            "image_index": 0,
+            "image_rel": image_rels[0] if image_rels else "",
+            "segment_index": 0,
+            "segment_id": segments[0]["id"] if segments else "",
+        },
+        "quiz_segments": segments,
+        "mapping_rows": mapping_rows,
+        "recommendations": recommendations or {},
+        "session_defaults": session_defaults,
+        "images": {},
+        "source_fingerprint": {
+            "prompt_txt_mtime": _prompt_mtime(paths),
+            "segment_settings_hash": _stable_hash(segments),
+            "image_list_hash": _image_list_hash(images, paths["dataset_root"]),
+        },
+    }
+    for img, image_rel in zip(images, image_rels):
+        txt = img.with_suffix(".txt")
+        existing = _read_tags_cached(txt) if txt.exists() else []
+        segment_states = _map_existing_tags_to_segments(existing, segments, recommendations or {}, session_defaults)
+        for segment in segments:
+            seg_id = segment["id"]
+            state = segment_states.setdefault(seg_id, _default_segment_state(session_defaults.get(seg_id, [])))
+            state["selected"] = _dedup_tags((session_defaults.get(seg_id, []) or []) + (state.get("selected") or []))
+        session["images"][image_rel] = {
+            "status": "pending",
+            "segments": segment_states,
+            "final_tags_written": False,
+            "missing": False,
+        }
+    if replace:
+        save_tagging_session(paths["project_root"], session)
+    return {
+        "ok": True,
+        "session": session,
+        "logs": [f"Started quiz: {len(images)} images, {len(segments)} segments"],
+        **_make_serializable_path_info(paths),
+    }
+
+
+def _tags_for_segment_state(state: Dict[str, Any]) -> List[str]:
+    return _dedup_tags((state.get("selected") or []) + (state.get("manual") or []))
+
+
+def final_tags_from_segments(
+    segments: Dict[str, Any],
+    quiz_segments: List[Dict[str, Any]],
+) -> List[str]:
+    tags: List[str] = []
+    unsorted = segments.get("__unsorted__") if isinstance(segments.get("__unsorted__"), dict) else None
+    if unsorted:
+        tags.extend(_tags_for_segment_state(unsorted))
+    for segment in _normalize_quiz_segments(quiz_segments):
+        state = segments.get(segment["id"])
+        if isinstance(state, dict):
+            tags.extend(_tags_for_segment_state(state))
+    return _dedup_tags(tags)
+
+
+def save_tagging_quiz_image(
+    project_root: Path,
+    image_rel: str,
+    segments: Dict[str, Any],
+    session_payload: Optional[Dict[str, Any]] = None,
+    backup: bool = True,
+) -> Dict[str, Any]:
+    paths = resolve_project_paths(project_root)
+    img = _dataset_path_from_image_rel(paths["project_root"], image_rel)
+    if not img:
+        return {"ok": False, "error": "Invalid image path", **_make_serializable_path_info(paths)}
+    if not img.exists() or not img.is_file():
+        return {"ok": False, "error": f"Image not found: {image_rel}", **_make_serializable_path_info(paths)}
+    session = session_payload
+    if not isinstance(session, dict):
+        loaded = load_tagging_session(paths["project_root"])
+        session = loaded.get("session") if loaded.get("ok") else None
+    if not isinstance(session, dict):
+        return {"ok": False, "error": "No tagging session loaded", **_make_serializable_path_info(paths)}
+    quiz_segments = session.get("quiz_segments") or load_tagging_quiz_settings().get("segments") or []
+    final_tags = final_tags_from_segments(segments or {}, quiz_segments)
+    txt_path = img.with_suffix(".txt")
+    old_text = ""
+    had_txt = txt_path.exists()
+    if had_txt:
+        try:
+            old_text, _, _ = read_text_best_effort(txt_path)
+        except Exception:
+            old_text = ""
+    if backup and had_txt:
+        try:
+            txt_path.with_suffix(txt_path.suffix + ".bak").write_text(old_text, encoding="utf-8")
+        except Exception as exc:
+            return {"ok": False, "error": f"Could not back up txt: {exc}", **_make_serializable_path_info(paths)}
+    try:
+        txt_path.write_text(join_tags(final_tags), encoding="utf-8")
+        _invalidate_cache(txt_path)
+    except Exception as exc:
+        return {"ok": False, "error": f"Could not write txt: {exc}", **_make_serializable_path_info(paths)}
+
+    image_rel_norm = image_rel.replace("\\", "/").lstrip("/")
+    if not image_rel_norm.lower().startswith("dataset/"):
+        try:
+            image_rel_norm = "dataset/" + img.relative_to(paths["dataset_root"]).as_posix()
+        except Exception:
+            pass
+    entry = _ensure_session_image_entry(session, image_rel_norm)
+    entry["segments"] = segments or {}
+    entry["status"] = "completed"
+    entry["final_tags_written"] = True
+    entry["updated_at"] = _utc_now_iso()
+
+    image_rels = list(session.get("images") or {})
+    completed = 0
+    for rel, item in (session.get("images") or {}).items():
+        if isinstance(item, dict) and item.get("status") == "completed":
+            completed += 1
+    if image_rels and completed >= len([rel for rel, item in session.get("images", {}).items() if not item.get("missing")]):
+        session["status"] = "completed"
+    else:
+        try:
+            idx = image_rels.index(image_rel_norm)
+        except ValueError:
+            idx = -1
+        next_idx = idx + 1
+        while next_idx < len(image_rels):
+            next_entry = session.get("images", {}).get(image_rels[next_idx]) or {}
+            if next_entry.get("status") != "completed" and not next_entry.get("missing"):
+                break
+            next_idx += 1
+        if next_idx < len(image_rels):
+            first_seg = (session.get("quiz_segments") or [{}])[0].get("id") or ""
+            session["current"] = {
+                "image_index": next_idx,
+                "image_rel": image_rels[next_idx],
+                "segment_index": 0,
+                "segment_id": first_seg,
+            }
+
+    save_tagging_session(paths["project_root"], session)
+    logs = [f"Saved image {img.name}: {len(final_tags)} tags written"]
+    if session.get("status") == "completed":
+        logs.append(f"Session completed: {completed} / {len(image_rels)} images")
+    return {
+        "ok": True,
+        "tags": final_tags,
+        "txt_rel": txt_path.relative_to(paths["dataset_root"]).as_posix(),
+        "session": session,
+        "logs": logs,
+        **_make_serializable_path_info(paths),
+    }
+
+
+def delete_tagging_session(project_root: Path) -> Dict[str, Any]:
+    paths = resolve_project_paths(project_root)
+    path = tagging_session_path(paths["project_root"])
+    if path.exists():
+        path.unlink()
+    return {"ok": True, "deleted": True, "logs": ["Deleted tagging session"], **_make_serializable_path_info(paths)}
+
+
+def archive_tagging_session(project_root: Path) -> Dict[str, Any]:
+    paths = resolve_project_paths(project_root)
+    path = tagging_session_path(paths["project_root"])
+    if not path.exists():
+        return {"ok": False, "error": "No tagging session to archive", **_make_serializable_path_info(paths)}
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    target = path.with_name(f"tagging_session_{stamp}.json")
+    target, _ = _next_unique_file(target)
+    shutil.move(str(path), str(target))
+    return {
+        "ok": True,
+        "archive": target.name,
+        "logs": [f"Archived tagging session: {target.name}"],
+        **_make_serializable_path_info(paths),
     }
 
 
@@ -911,8 +1672,15 @@ def handle(form, ctx):
         lines.append(f"Dataset folder not found: {dataset_root}")
         return _done(False, f"Dataset folder not found: {dataset_root}")
     if not temp_folder.exists() or not temp_folder.is_dir():
-        lines.append(f"Temp folder not found: {temp_folder}")
-        return _done(False, f"Temp folder not found: {temp_folder}")
+        if mode == "move":
+            try:
+                temp_folder.mkdir(parents=True, exist_ok=True)
+            except Exception as exc:
+                lines.append(f"Could not create temp folder: {temp_folder}: {exc}")
+                return _done(False, f"Could not create temp folder: {temp_folder}")
+        else:
+            lines.append(f"Temp folder not found: {temp_folder}")
+            return _done(False, f"Temp folder not found: {temp_folder}")
     if (not compatibility_mode) and (not paths.get("normalized_from_legacy")):
         project_state = inspect_project_layout(paths["project_root"], exts)
         if not project_state.get("ok"):
@@ -949,6 +1717,42 @@ def handle(form, ctx):
             if old:
                 mapping[old] = new
         return mapping
+
+    if mode == "move":
+        move_tags = set(_parse_tag_input(tags_field))
+        images = _list_images(dataset_root, exts, recursive=True, exclude_dir=temp_folder)
+        if not images:
+            lines.append(f"No image files with {exts} found in {dataset_root}.")
+            return _done(False, f"No image files found in {dataset_root}.")
+        moved = 0
+        errors = 0
+        for img in images:
+            txt = img.with_suffix(".txt")
+            if move_tags:
+                if not txt.exists():
+                    continue
+                current_tags = set(_read_tags_cached(txt))
+                if not move_tags.intersection(current_tags):
+                    continue
+            rel_parent = img.parent.relative_to(dataset_root)
+            dst_parent = temp_folder if rel_parent == Path(".") else temp_folder / rel_parent
+            try:
+                dst_parent.mkdir(parents=True, exist_ok=True)
+            except Exception as exc:
+                lines.append(f"[ERROR] creating {dst_parent}: {exc}")
+                errors += 1
+                continue
+            dst_img, dst_txt, renamed = _next_pair_target(dst_parent, img.stem, img.suffix.lower())
+            ok, error = _move_pair_transaction(img, txt, dst_img, dst_txt, require_txt=False)
+            if not ok:
+                lines.append(f"[ERROR] moving {img.name}: {error}")
+                errors += 1
+                continue
+            moved += 1
+            rel_out = dst_img.relative_to(dataset_root)
+            lines.append(f"Moved: {rel_out}{' (renamed)' if renamed else ''}")
+        lines.append(f"Done. {moved} file(s) moved into {temp_folder}. Errors: {errors}.")
+        return _done(errors == 0, "" if errors == 0 else f"{errors} move operation(s) failed.")
 
     if mode == "undo":
         images_in_temp = _list_images(temp_folder, exts, recursive=True)

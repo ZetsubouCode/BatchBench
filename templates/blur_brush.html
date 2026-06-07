@@ -441,7 +441,7 @@
       setStatus("Gagal load image.");
       setLog(["[ERROR] Gagal load image from server."]);
     };
-    img.src = `/api/tags/image?folder=${encodeURIComponent(folder)}&path=${encodeURIComponent(rel)}&t=${Date.now()}`;
+    img.src = `/api/blur_brush/image?folder=${encodeURIComponent(folder)}&path=${encodeURIComponent(rel)}&t=${Date.now()}`;
   }
 
   async function previewMask() {

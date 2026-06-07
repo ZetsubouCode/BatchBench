@@ -1,0 +1,730 @@
+<style>
+  .quiz-review-modal .modal-dialog { width:min(1560px, calc(100vw - 1rem)); max-width:none; height:calc(100vh - 1rem); height:calc(100dvh - 1rem); margin:.5rem auto; }
+  .quiz-review-modal .modal-content { height:100%; max-height:none; background:#08111f; color:var(--bb-text); border:1px solid var(--bb-border); overflow:hidden; }
+  .quiz-review-modal .modal-body { display:flex; flex-direction:column; min-height:0; overflow:hidden; }
+  .quiz-review-toolbar { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; flex:0 0 auto; }
+  .quiz-review-grid { display:grid; grid-template-columns:minmax(0, 1.55fr) minmax(340px, .85fr); gap:1rem; flex:1 1 auto; min-height:0; }
+  .quiz-review-stage { border:1px solid var(--bb-border); border-radius:.65rem; background:#030712; display:flex; flex-direction:column; min-height:0; overflow:hidden; }
+  .quiz-review-image-wrap { flex:1; min-height:0; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+  .quiz-review-image { display:block; width:100%; height:100%; min-width:0; min-height:0; object-fit:contain; }
+  .quiz-review-image.is-cover { object-fit:cover; }
+  .quiz-review-image-empty { color:var(--bb-muted); font-size:.9rem; }
+  .quiz-review-stage-foot { display:flex; align-items:center; justify-content:space-between; gap:.5rem; border-top:1px solid var(--bb-border); padding:.65rem; flex-wrap:wrap; }
+  .quiz-review-stage:fullscreen { width:100vw; height:100vh; border:0; border-radius:0; background:#020611; }
+  .quiz-review-side { display:flex; flex-direction:column; gap:.75rem; min-width:0; min-height:0; overflow:auto; padding-right:.2rem; }
+  .quiz-review-card { border:1px solid var(--bb-border); border-radius:.6rem; background:var(--bb-card); padding:.75rem; }
+  .quiz-review-options { display:flex; flex-direction:column; gap:.45rem; max-height:min(42vh, 430px); overflow:auto; padding-right:.2rem; }
+  .quiz-review-option { display:flex; align-items:center; gap:.55rem; width:100%; border:1px solid #334a76; border-radius:.55rem; background:#101b30; color:var(--bb-text); padding:.65rem .7rem; text-align:left; }
+  .quiz-review-option:hover { border-color:var(--bb-link); }
+  .quiz-review-option.is-selected { border-color:#79c0ff; background:#1b3b67; box-shadow:0 0 0 1px rgba(121,192,255,.35); color:#fff; }
+  .quiz-review-key { display:inline-flex; align-items:center; justify-content:center; min-width:1.7rem; height:1.45rem; border:1px solid #6f8fcb; border-radius:.35rem; background:#18294a; color:#f6f9ff; font-size:.72rem; font-weight:700; }
+  .quiz-review-badges { display:flex; flex-wrap:wrap; gap:.35rem; }
+  .quiz-review-badge { border:1px solid var(--bb-border); border-radius:999px; color:var(--bb-muted); font-size:.7rem; padding:.1rem .42rem; }
+  .quiz-review-tags { display:flex; flex-wrap:wrap; gap:.25rem; max-height:105px; overflow:auto; }
+  .quiz-review-tag { border:1px solid var(--bb-border); border-radius:999px; background:var(--bb-code-bg); color:var(--bb-muted); font-size:.7rem; padding:.08rem .36rem; }
+  .quiz-review-manual-tags { display:flex; flex-wrap:wrap; gap:.3rem; max-height:135px; overflow:auto; }
+  .quiz-review-manual-tag { display:inline-flex; align-items:center; gap:.28rem; border:1px solid #33647b; border-radius:999px; background:#0d2630; color:#d6f6ff; font-size:.74rem; padding:.1rem .38rem; }
+  .quiz-review-manual-remove { border:0; background:transparent; color:#a8ddeb; padding:0; line-height:1; }
+  .quiz-review-manual-remove:hover { color:#fff; }
+  .quiz-review-manual-input-wrap { position:relative; }
+  .quiz-review-manual-suggest { position:absolute; z-index:8; display:none; left:0; right:0; top:calc(100% + .25rem); max-height:230px; overflow:auto; border:1px solid #3d628d; border-radius:.5rem; background:#0b1628; box-shadow:0 14px 32px rgba(0,0,0,.42); }
+  .quiz-review-manual-suggest.is-open { display:block; }
+  .quiz-review-manual-suggest-item { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:.55rem; width:100%; border:0; border-bottom:1px solid rgba(119,153,194,.16); padding:.45rem .58rem; background:transparent; color:var(--bb-text); text-align:left; }
+  .quiz-review-manual-suggest-item:last-child { border-bottom:0; }
+  .quiz-review-manual-suggest-item:hover, .quiz-review-manual-suggest-item.is-active { background:#183255; color:#f2f7ff; }
+  .quiz-review-manual-suggest-source { color:#9fc8ff; font-size:.7rem; white-space:nowrap; }
+  .quiz-review-glossary-controls { display:grid; grid-template-columns:minmax(0,1fr) 145px auto; gap:.4rem; }
+  .quiz-review-glossary-list { display:flex; flex-wrap:wrap; gap:.3rem; max-height:180px; overflow:auto; }
+  .quiz-review-glossary-chip { border:1px solid #1f6f8f; border-radius:999px; padding:.16rem .5rem; font-size:.74rem; background:#0d2630; color:#d6f6ff; }
+  .quiz-review-glossary-chip:hover { border-color:#7fd7ff; color:#f1fbff; }
+  .quiz-review-hotkeys { position:relative; margin-left:auto; }
+  .quiz-review-hotkeys summary { list-style:none; cursor:pointer; border:1px solid #3b4b6b; border-radius:.4rem; color:var(--bb-text); background:#101b30; padding:.3rem .55rem; font-size:.78rem; white-space:nowrap; }
+  .quiz-review-hotkeys summary::-webkit-details-marker { display:none; }
+  .quiz-review-hotkeys[open] summary { border-color:var(--bb-link); color:var(--bb-link-hover); }
+  .quiz-review-hotkeys-panel { position:absolute; z-index:5; top:calc(100% + .45rem); right:0; width:min(460px, 90vw); border:1px solid #47679a; border-radius:.65rem; background:linear-gradient(145deg, #0f1b34 0%, #111326 100%); box-shadow:0 12px 28px rgba(0,0,0,.35); padding:.7rem .8rem; }
+  .quiz-review-hotkeys-title { font-size:.78rem; letter-spacing:.08em; text-transform:uppercase; color:#9fc8ff; margin-bottom:.45rem; }
+  .quiz-review-hotkeys-list { display:flex; flex-direction:column; gap:.3rem; }
+  .quiz-review-hotkey-row { display:grid; grid-template-columns:minmax(92px, auto) 1fr; gap:.55rem; align-items:center; }
+  .quiz-review-hotkey-action { color:#dbe8ff; font-size:.8rem; line-height:1.2; }
+  .quiz-review-key-combo { display:inline-flex; flex-wrap:wrap; align-items:center; gap:.2rem; }
+  .quiz-review-key-plus { color:#a9bfeb; font-size:.74rem; }
+  .quiz-review-status { color:var(--bb-muted); font-size:.8rem; min-height:1.2rem; }
+  .quiz-review-status.is-error { color:#ffc6ce; }
+  .quiz-review-status.is-success { color:#c5ffd9; }
+  .quiz-review-warning { color:#ffe0b2; font-size:.8rem; }
+  @media (max-width: 991.98px) {
+    .quiz-review-modal .modal-body { overflow:auto; }
+    .quiz-review-grid { grid-template-columns:1fr; flex:0 0 auto; }
+    .quiz-review-stage { min-height:52vh; }
+    .quiz-review-hotkeys { margin-left:0; }
+    .quiz-review-hotkeys-panel { position:static; width:100%; margin-top:.45rem; }
+    .quiz-review-glossary-controls { grid-template-columns:1fr; }
+  }
+</style>
+
+<div class="modal fade quiz-review-modal" id="quiz-review-modal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h5 class="modal-title">Quiz Review</h5>
+          <div class="small text-muted">Review one configured category at a time. Caption metadata stays separate from .txt tags.</div>
+        </div>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="quiz-review-toolbar mb-2">
+          <select class="form-select form-select-sm" id="quiz-review-step" style="max-width:250px;"></select>
+          <select class="form-select form-select-sm" id="quiz-review-queue" style="max-width:180px;">
+            <option value="missing_only">Missing only</option>
+            <option value="all">All images</option>
+            <option value="conflict_only">Conflict only</option>
+            <option value="not_reviewed">Not reviewed</option>
+          </select>
+          <select class="form-select form-select-sm" id="quiz-review-area" style="max-width:180px;">
+            <option value="temp">dataset/_temp</option>
+            <option value="dataset">dataset/ directly</option>
+          </select>
+          <button type="button" class="btn btn-sm btn-outline-light" id="quiz-review-reload">Reload queue</button>
+          <button type="button" class="btn btn-sm btn-outline-info" id="quiz-review-next-step">Next step</button>
+          <details class="quiz-review-hotkeys" id="quiz-review-hotkeys">
+            <summary><i class="bi bi-keyboard me-1"></i>Shortcuts</summary>
+            <div class="quiz-review-hotkeys-panel">
+              <div class="quiz-review-hotkeys-title">Quiz Review Hotkeys</div>
+              <div class="quiz-review-hotkeys-list">
+                <div class="quiz-review-hotkey-row"><span class="quiz-review-key">1..9</span><span class="quiz-review-hotkey-action">Choose visible option</span></div>
+                <div class="quiz-review-hotkey-row"><span class="quiz-review-key">Enter</span><span class="quiz-review-hotkey-action">Save selection and continue</span></div>
+                <div class="quiz-review-hotkey-row"><span class="quiz-review-key-combo"><span class="quiz-review-key">Left</span><span class="quiz-review-key-plus">/</span><span class="quiz-review-key">Right</span></span><span class="quiz-review-hotkey-action">Previous or next image</span></div>
+                <div class="quiz-review-hotkey-row"><span class="quiz-review-key">S</span><span class="quiz-review-hotkey-action">Skip current image</span></div>
+                <div class="quiz-review-hotkey-row"><span class="quiz-review-key">N</span><span class="quiz-review-hotkey-action">Mark Not Applicable when allowed</span></div>
+                <div class="quiz-review-hotkey-row"><span class="quiz-review-key">R</span><span class="quiz-review-hotkey-action">Repeat previous selection</span></div>
+                <div class="quiz-review-hotkey-row"><span class="quiz-review-key">Z</span><span class="quiz-review-hotkey-action">Undo last save</span></div>
+                <div class="quiz-review-hotkey-row"><span class="quiz-review-key">F</span><span class="quiz-review-hotkey-action">Toggle fullscreen image view</span></div>
+                <div class="quiz-review-hotkey-row"><span class="quiz-review-key-combo"><span class="quiz-review-key">Ctrl</span><span class="quiz-review-key-plus">+</span><span class="quiz-review-key">Alt</span><span class="quiz-review-key-plus">+</span><span class="quiz-review-key">C</span></span><span class="quiz-review-hotkey-action">Overlay Cheat Sheet; manual-step tag clicks append to the pending caption</span></div>
+                <div class="quiz-review-hotkey-row"><span class="quiz-review-key">Esc</span><span class="quiz-review-hotkey-action">Exit fullscreen or close review</span></div>
+              </div>
+            </div>
+          </details>
+        </div>
+        <div class="quiz-review-status mb-2" id="quiz-review-status"></div>
+        <div class="quiz-review-grid">
+          <section class="quiz-review-stage" id="quiz-review-stage">
+            <div class="quiz-review-image-wrap" id="quiz-review-image-wrap">
+              <div class="quiz-review-image-empty">Load a queue to begin.</div>
+            </div>
+            <div class="quiz-review-stage-foot">
+              <div>
+                <div class="fw-semibold" id="quiz-review-filename">No image loaded</div>
+                <div class="small text-muted" id="quiz-review-index">0 / 0</div>
+              </div>
+              <div class="d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-outline-info" id="quiz-review-fullscreen"
+                        title="Fullscreen image stage (F)">
+                  <i class="bi bi-arrows-fullscreen me-1"></i><span>Fullscreen</span>
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-light" id="quiz-review-prev">Previous</button>
+                <button type="button" class="btn btn-sm btn-outline-light" id="quiz-review-next">Next</button>
+              </div>
+            </div>
+          </section>
+          <aside class="quiz-review-side">
+            <section class="quiz-review-card">
+              <div class="d-flex justify-content-between gap-2 align-items-start">
+                <div>
+                  <h5 class="mb-1" id="quiz-review-title">Choose a step</h5>
+                  <div class="quiz-review-badges" id="quiz-review-badges"></div>
+                </div>
+                <span class="small text-muted" id="quiz-review-progress"></span>
+              </div>
+              <div class="quiz-review-warning mt-2" id="quiz-review-warning"></div>
+            </section>
+            <section class="quiz-review-card" id="quiz-review-fixed-card">
+              <div class="quiz-review-options" id="quiz-review-options"></div>
+              <div class="d-flex flex-wrap gap-2 mt-3">
+                <button type="button" class="btn btn-primary" id="quiz-review-save">Save &amp; Next</button>
+                <button type="button" class="btn btn-outline-light" id="quiz-review-skip">Skip</button>
+                <button type="button" class="btn btn-outline-warning d-none" id="quiz-review-na">Not Applicable</button>
+                <button type="button" class="btn btn-outline-info" id="quiz-review-repeat">Repeat previous</button>
+                <button type="button" class="btn btn-outline-secondary" id="quiz-review-undo">Undo</button>
+              </div>
+            </section>
+            <section class="quiz-review-card d-none" id="quiz-review-manual-card">
+              <div class="small fw-semibold mb-2">Manual caption tags</div>
+              <div class="quiz-review-manual-tags" id="quiz-review-manual-tags"></div>
+              <div class="quiz-review-manual-input-wrap mt-3">
+                <div class="input-group input-group-sm">
+                  <input type="text" class="form-control" id="quiz-review-manual-input" placeholder="Add tags, comma separated" autocomplete="off">
+                  <button type="button" class="btn btn-outline-light" id="quiz-review-manual-add">Add tags</button>
+                </div>
+                <div class="quiz-review-manual-suggest" id="quiz-review-manual-suggest"></div>
+              </div>
+              <div class="quiz-review-status mt-2" id="quiz-review-manual-status"></div>
+              <div class="small fw-semibold mt-3 mb-2">Glossary quick pick</div>
+              <div class="quiz-review-glossary-controls">
+                <input type="text" class="form-control form-control-sm" id="quiz-review-glossary-search" placeholder="Search glossary tags">
+                <select class="form-select form-select-sm" id="quiz-review-glossary-filter"></select>
+                <button type="button" class="btn btn-sm btn-outline-light" id="quiz-review-glossary-clear">Clear</button>
+              </div>
+              <div class="quiz-review-glossary-list mt-2" id="quiz-review-glossary-list"></div>
+              <div class="d-flex flex-wrap gap-2 mt-3">
+                <button type="button" class="btn btn-primary" id="quiz-review-manual-save">Save &amp; Next</button>
+                <button type="button" class="btn btn-outline-light" id="quiz-review-manual-skip">Skip</button>
+                <button type="button" class="btn btn-outline-secondary" id="quiz-review-manual-undo">Undo</button>
+              </div>
+            </section>
+            <details class="quiz-review-card" id="quiz-review-current-wrap">
+              <summary>Current caption tags</summary>
+              <div class="quiz-review-tags mt-2" id="quiz-review-current-tags"></div>
+            </details>
+          </aside>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const q = (id) => document.getElementById(id);
+  const state = {
+    config:null, steps:[], currentStepId:'', queue:'missing_only', area:'temp',
+    items:[], index:0, selected:new Set(), manualTags:new Set(), undoStack:[], previousStepSelection:{}, summary:{}, busy:false,
+    glossary:{ categories:{ Unsorted:[] } }, glossarySearch:'', glossaryFilter:'__all__',
+    initialManualTags:new Set(), recentManualTags:[], suggestRows:[], suggestIndex:-1
+  };
+  const MANUAL_RECENT_KEY = 'batchbench_quiz_manual_recent_tags_v1';
+  const MANUAL_RESUME_KEY = 'batchbench_quiz_manual_resume_v1';
+  const root = () => (q('folder_tags')?.value || '').trim();
+  const step = () => state.steps.find(item => item.id === state.currentStepId) || null;
+  const item = () => state.items[state.index] || null;
+  const manualTagging = () => step()?.mode === 'manual';
+  const isOpen = () => q('quiz-review-modal')?.classList.contains('show');
+  const fullscreenElement = () => document.fullscreenElement || document.webkitFullscreenElement || null;
+  const isStageFullscreen = () => fullscreenElement() === q('quiz-review-stage');
+  const editable = (target) => ['INPUT','TEXTAREA','SELECT'].includes(target?.tagName) || target?.isContentEditable;
+  const normalizeTag = (raw) => String(raw || '').trim().toLowerCase().replace(/\s+/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+  const tagsFrom = (raw) => {
+    const seen = new Set();
+    return String(raw || '').split(/[,;\n]+/).map(normalizeTag).filter(tag => tag && !seen.has(tag) && seen.add(tag));
+  };
+  const sameTags = (a, b) => a.size === b.size && Array.from(a).every(tag => b.has(tag));
+  const manualInput = () => q('quiz-review-manual-input');
+  function readStoredJson(key, fallback) {
+    try { return JSON.parse(localStorage.getItem(key) || '') || fallback; } catch (_) { return fallback; }
+  }
+  function writeStoredJson(key, payload) {
+    try { localStorage.setItem(key, JSON.stringify(payload)); } catch (_) {}
+  }
+  function loadRecentManualTags() {
+    const stored = readStoredJson(MANUAL_RECENT_KEY, []);
+    state.recentManualTags = (Array.isArray(stored) ? stored : []).map(normalizeTag).filter(Boolean).slice(0, 80);
+  }
+  function rememberRecentManualTags(rawTags) {
+    const incoming = (rawTags || []).map(normalizeTag).filter(Boolean);
+    if (!incoming.length) return;
+    state.recentManualTags = Array.from(new Set([...incoming.reverse(), ...state.recentManualTags])).slice(0, 80);
+    writeStoredJson(MANUAL_RECENT_KEY, state.recentManualTags);
+  }
+  function manualResumeId() {
+    return `${root()}|${state.area}|${step()?.id || ''}`;
+  }
+  function getManualResumeRel() {
+    return manualTagging() ? String(readStoredJson(MANUAL_RESUME_KEY, {})[manualResumeId()] || '') : '';
+  }
+  function rememberManualResume() {
+    if (!manualTagging() || !item()?.rel || !root()) return;
+    const stored = readStoredJson(MANUAL_RESUME_KEY, {});
+    stored[manualResumeId()] = item().rel;
+    writeStoredJson(MANUAL_RESUME_KEY, stored);
+  }
+  function manualDraftDirty() {
+    return !!(manualTagging() && item() && (!sameTags(state.manualTags, state.initialManualTags) || tagsFrom(manualInput()?.value || '').length));
+  }
+  function closeManualSuggest() {
+    const host = q('quiz-review-manual-suggest');
+    state.suggestRows = []; state.suggestIndex = -1;
+    if (host) { host.classList.remove('is-open'); host.innerHTML = ''; }
+  }
+  function discardManualDraft() {
+    state.manualTags = new Set(state.initialManualTags);
+    if (manualInput()) manualInput().value = '';
+    closeManualSuggest();
+  }
+  function confirmDiscardManualDraft(message='Discard unsaved manual tag changes?') {
+    if (!manualDraftDirty()) return true;
+    if (!confirm(message)) return false;
+    discardManualDraft();
+    return true;
+  }
+  const setStatus = (text, kind='') => {
+    const el = q('quiz-review-status'); if (!el) return;
+    el.textContent = text || ''; el.className = `quiz-review-status mb-2${kind ? ` is-${kind}` : ''}`;
+  };
+  async function api(url, payload) {
+    const response = await fetch(url, payload === undefined ? {} : {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || 'Request failed.');
+    return data;
+  }
+  function syncFullscreenButton() {
+    const button = q('quiz-review-fullscreen'); if (!button) return;
+    const active = isStageFullscreen();
+    button.innerHTML = active
+      ? '<i class="bi bi-fullscreen-exit me-1"></i><span>Exit fullscreen</span>'
+      : '<i class="bi bi-arrows-fullscreen me-1"></i><span>Fullscreen</span>';
+    button.title = active ? 'Exit fullscreen image stage (F or Esc)' : 'Fullscreen image stage (F)';
+  }
+  async function toggleStageFullscreen() {
+    const stage = q('quiz-review-stage'); if (!stage) return;
+    try {
+      if (isStageFullscreen()) {
+        const exit = document.exitFullscreen || document.webkitExitFullscreen;
+        if (exit) await exit.call(document);
+        return;
+      }
+      const request = stage.requestFullscreen || stage.webkitRequestFullscreen;
+      if (!request) {
+        setStatus('Fullscreen is not supported by this browser.', 'error');
+        return;
+      }
+      await request.call(stage);
+    } catch (error) {
+      setStatus(`Fullscreen failed: ${error.message || error}`, 'error');
+    }
+  }
+  function renderSelectors() {
+    const select = q('quiz-review-step'); if (!select) return;
+    select.innerHTML = '';
+    state.steps.forEach(entry => {
+      const option = document.createElement('option'); option.value = entry.id; option.textContent = entry.label; select.appendChild(option);
+    });
+    select.value = state.currentStepId;
+    q('quiz-review-queue').value = state.queue;
+    q('quiz-review-area').value = state.area;
+  }
+  function renderTags() {
+    const host = q('quiz-review-current-tags'); if (!host) return;
+    host.innerHTML = '';
+    (item()?.tags || []).forEach(tag => {
+      const chip = document.createElement('span'); chip.className = 'quiz-review-tag'; chip.textContent = tag; host.appendChild(chip);
+    });
+    if (!host.children.length) host.innerHTML = '<span class="small text-muted">No caption tags.</span>';
+    q('quiz-review-current-wrap')?.classList.toggle('d-none', !state.config?.quiz_review?.show_current_tags);
+  }
+  function glossaryCategories() {
+    return Object.keys(state.glossary?.categories || {}).sort((a, b) => {
+      if (a === 'Unsorted') return -1;
+      if (b === 'Unsorted') return 1;
+      return a.localeCompare(b);
+    });
+  }
+  function manualSuggestTokenRange() {
+    const input = manualInput(); const value = input?.value || '';
+    const cursor = Number.isFinite(input?.selectionStart) ? input.selectionStart : value.length;
+    const before = value.slice(0, cursor);
+    let start = Math.max(before.lastIndexOf(','), before.lastIndexOf(';'), before.lastIndexOf('\n')) + 1;
+    let end = cursor;
+    while (end < value.length && !/[;,\n]/.test(value[end])) end += 1;
+    while (start < end && /\s/.test(value[start])) start += 1;
+    while (end > start && /\s/.test(value[end - 1])) end -= 1;
+    return { start, end, query:normalizeTag(value.slice(start, cursor)) };
+  }
+  function manualSuggestionRows(query) {
+    const cleanQuery = normalizeTag(query);
+    const rows = []; const seen = new Set();
+    function add(tag, source, recent=false, priority=0) {
+      const cleanTag = normalizeTag(tag);
+      if (!cleanTag || seen.has(cleanTag) || (cleanQuery && !cleanTag.includes(cleanQuery))) return;
+      seen.add(cleanTag); rows.push({ tag:cleanTag, source, recent, priority, is_prefix:!cleanQuery || cleanTag.startsWith(cleanQuery) });
+    }
+    state.recentManualTags.forEach(tag => add(tag, 'recent', true, 30));
+    const currentStep = step();
+    (currentStep?.tags || []).forEach(tag => add(tag, currentStep.label || currentStep.id || 'step tags', false, 20));
+    (state.steps || []).forEach(entry => {
+      if (!entry || entry.id === currentStep?.id) return;
+      (entry.tags || []).forEach(tag => add(tag, entry.label || entry.id || 'step tags', false, 10));
+    });
+    glossaryCategories().forEach(category => (state.glossary.categories[category] || []).forEach(tag => add(tag, category)));
+    return rows.sort((a, b) => Number(b.recent) - Number(a.recent) || Number(b.is_prefix) - Number(a.is_prefix) || (b.priority || 0) - (a.priority || 0) || a.tag.localeCompare(b.tag)).slice(0, 10);
+  }
+  function renderManualSuggest() {
+    const input = manualInput(); const host = q('quiz-review-manual-suggest');
+    if (!input || !host || !manualTagging()) return;
+    state.suggestRows = manualSuggestionRows(manualSuggestTokenRange().query);
+    state.suggestIndex = Math.min(Math.max(state.suggestIndex, 0), Math.max(0, state.suggestRows.length - 1));
+    host.innerHTML = '';
+    state.suggestRows.forEach((row, index) => {
+      const button = document.createElement('button'); button.type = 'button';
+      button.className = `quiz-review-manual-suggest-item${index === state.suggestIndex ? ' is-active' : ''}`;
+      const tag = document.createElement('span'); tag.textContent = row.tag; button.appendChild(tag);
+      const source = document.createElement('span'); source.className = 'quiz-review-manual-suggest-source'; source.textContent = row.source; button.appendChild(source);
+      button.addEventListener('mousedown', event => event.preventDefault());
+      button.addEventListener('click', () => selectManualSuggestion(index));
+      host.appendChild(button);
+    });
+    host.classList.toggle('is-open', !!state.suggestRows.length);
+  }
+  function selectManualSuggestion(index) {
+    const input = manualInput(); const row = state.suggestRows[index]; if (!input || !row) return false;
+    const range = manualSuggestTokenRange();
+    input.value = `${input.value.slice(0, range.start)}${row.tag}${input.value.slice(range.end)}`;
+    const cursor = range.start + row.tag.length;
+    input.setSelectionRange(cursor, cursor); input.focus(); closeManualSuggest();
+    return true;
+  }
+  function renderGlossaryQuickPick() {
+    const filter = q('quiz-review-glossary-filter'); const list = q('quiz-review-glossary-list');
+    if (!filter || !list) return;
+    const names = glossaryCategories(); const wanted = state.glossaryFilter || '__all__';
+    filter.innerHTML = '<option value="__all__">All categories</option>';
+    names.forEach(name => {
+      const option = document.createElement('option'); option.value = name; option.textContent = name; filter.appendChild(option);
+    });
+    filter.value = names.includes(wanted) ? wanted : '__all__'; state.glossaryFilter = filter.value;
+    list.innerHTML = ''; let count = 0;
+    names.forEach(name => {
+      if (state.glossaryFilter !== '__all__' && name !== state.glossaryFilter) return;
+      (state.glossary.categories[name] || []).forEach(rawTag => {
+        const tag = normalizeTag(rawTag);
+        if (!tag || (state.glossarySearch && !tag.includes(state.glossarySearch))) return;
+        const button = document.createElement('button'); button.type = 'button'; button.className = 'quiz-review-glossary-chip';
+        button.textContent = tag; button.title = `${name}: ${tag}`;
+        button.addEventListener('click', () => prepareManualTag(tag));
+        list.appendChild(button); count += 1;
+      });
+    });
+    if (!count) list.innerHTML = `<span class="small text-muted">${state.glossarySearch ? 'No glossary tags match this search.' : 'No glossary tags available yet.'}</span>`;
+  }
+  function renderManualTagger() {
+    q('quiz-review-fixed-card')?.classList.toggle('d-none', manualTagging());
+    q('quiz-review-manual-card')?.classList.toggle('d-none', !manualTagging());
+    if (!manualTagging()) { broadcastManualCheatsheetState(); return; }
+    const host = q('quiz-review-manual-tags'); if (!host) return;
+    host.innerHTML = '';
+    state.manualTags.forEach(tag => {
+      const chip = document.createElement('span'); chip.className = 'quiz-review-manual-tag';
+      const label = document.createElement('span'); label.textContent = tag; chip.appendChild(label);
+      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'quiz-review-manual-remove';
+      remove.textContent = 'x'; remove.title = `Remove ${tag}`;
+      remove.addEventListener('click', () => { state.manualTags.delete(tag); renderManualTagger(); });
+      chip.appendChild(remove); host.appendChild(chip);
+    });
+    if (!host.children.length) host.innerHTML = '<span class="small text-muted">No caption tags prepared.</span>';
+    renderGlossaryQuickPick();
+    broadcastManualCheatsheetState();
+  }
+  function broadcastManualCheatsheetState() {
+    document.dispatchEvent(new CustomEvent('bb:quiz-manual-state', {
+      detail:{
+        active:isOpen() && manualTagging(),
+        tags:Array.from(state.manualTags),
+        rel:item()?.rel || '',
+        image_url:item()?.image_url || ''
+      }
+    }));
+  }
+  function prepareManualTag(rawTag) {
+    const tag = normalizeTag(rawTag); const input = manualInput();
+    if (!tag || !input) return;
+    const tags = tagsFrom(input.value);
+    if (!tags.includes(tag)) tags.push(tag);
+    input.value = tags.join(', '); input.focus(); closeManualSuggest();
+    q('quiz-review-manual-status').textContent = `Prepared "${tag}" for insert.`;
+  }
+  function addManualTags() {
+    const input = manualInput(); if (!input) return;
+    const tags = tagsFrom(input.value);
+    tags.forEach(tag => state.manualTags.add(tag));
+    rememberRecentManualTags(tags);
+    input.value = ''; closeManualSuggest(); renderManualTagger(); input.focus();
+    q('quiz-review-manual-status').textContent = tags.length ? `Added ${tags.length} tag(s). Save to write the caption.` : 'Enter one or more tags first.';
+  }
+  async function loadGlossary() {
+    try {
+      const data = await api('/api/tags/glossary');
+      state.glossary = data.glossary || { categories:{ Unsorted:[] } }; renderGlossaryQuickPick();
+    } catch (error) {
+      const list = q('quiz-review-glossary-list'); if (!list) return;
+      list.innerHTML = ''; const message = document.createElement('span'); message.className = 'small text-muted';
+      message.textContent = error.message || 'Glossary load failed.'; list.appendChild(message);
+    }
+  }
+  function renderOptions() {
+    const host = q('quiz-review-options'); if (!host) return;
+    host.innerHTML = '';
+    const currentStep = step();
+    (currentStep?.tags || []).forEach((tag, index) => {
+      const button = document.createElement('button'); button.type = 'button';
+      button.className = `quiz-review-option${state.selected.has(tag) ? ' is-selected' : ''}`;
+      button.dataset.tag = tag;
+      const key = index < 9 ? `<span class="quiz-review-key">${index + 1}</span>` : '<span></span>';
+      button.innerHTML = `${key}<span></span>`;
+      button.querySelector('span:last-child').textContent = tag;
+      host.appendChild(button);
+    });
+    if (!currentStep?.tags?.length) host.innerHTML = '<div class="small text-muted">This step has no tags. Open Settings to configure it.</div>';
+  }
+  function renderImage() {
+    const host = q('quiz-review-image-wrap'); if (!host) return;
+    host.innerHTML = '';
+    const current = item();
+    if (!current) {
+      host.innerHTML = '<div class="quiz-review-image-empty">Queue is empty.</div>';
+      q('quiz-review-filename').textContent = 'No image loaded'; q('quiz-review-index').textContent = '0 / 0';
+      return;
+    }
+    const image = document.createElement('img'); image.className = 'quiz-review-image';
+    if (state.config?.quiz_review?.image_fit === 'cover') image.classList.add('is-cover');
+    image.alt = current.name || current.rel; image.title = 'Double-click for fullscreen'; image.src = current.image_url; host.appendChild(image);
+    q('quiz-review-filename').textContent = current.rel;
+    q('quiz-review-index').textContent = `${state.index + 1} / ${state.items.length}`;
+    preload();
+  }
+  function render() {
+    const currentStep = step(); const current = item();
+    q('quiz-review-title').textContent = currentStep?.label || 'Choose a step';
+    q('quiz-review-badges').innerHTML = currentStep ? `
+      <span class="quiz-review-badge">${manualTagging() ? 'Manual tagging' : (currentStep.mode === 'single' ? 'Single choice' : 'Multi choice')}</span>
+      ${currentStep.required ? '<span class="quiz-review-badge">Required</span>' : ''}
+      ${currentStep.auto_advance ? '<span class="quiz-review-badge">Auto advance</span>' : ''}` : '';
+    q('quiz-review-progress').textContent = state.config?.quiz_review?.show_progress
+      ? `${state.summary.queue_count ?? state.items.length} queued / ${state.summary.total ?? 0} total` : '';
+    q('quiz-review-warning').textContent = current?.conflict ? `Conflict: ${(current.selected_step_tags || []).join(' + ')}` : (!current?.has_txt && current ? (manualTagging() ? 'Missing .txt: add at least one manual tag to create the caption.' : 'Missing .txt: save is disabled for this image.') : '');
+    q('quiz-review-na').classList.toggle('d-none', !currentStep?.allow_not_applicable);
+    q('quiz-review-save').classList.toggle('d-none', currentStep?.mode === 'single' && state.config?.quiz_review?.auto_save !== false);
+    renderImage(); renderOptions(); renderTags(); renderManualTagger();
+  }
+  function applyItemSelection() {
+    state.selected = new Set(item()?.selected_step_tags || []);
+    state.manualTags = new Set(item()?.tags || []);
+    state.initialManualTags = new Set(state.manualTags);
+    if (manualInput()) manualInput().value = '';
+    if (q('quiz-review-manual-status')) q('quiz-review-manual-status').textContent = '';
+    closeManualSuggest(); rememberManualResume();
+  }
+  function preload() {
+    const count = Math.max(0, Math.min(6, Number(state.config?.quiz_review?.thumbnail_preload_count ?? 3)));
+    for (let offset = 1; offset <= count; offset += 1) {
+      const next = state.items[state.index + offset]; if (!next?.image_url) break;
+      const image = new Image(); image.src = next.image_url;
+    }
+  }
+  async function loadQueue() {
+    if (!root()) { setStatus('Choose a Project Root in Dataset Tag Editor first.', 'error'); return; }
+    if (!step()) { setStatus('No quiz steps configured. Open Settings to add steps.', 'error'); state.items = []; render(); return; }
+    state.busy = true; setStatus('Loading queue...');
+    try {
+      const resumeRel = getManualResumeRel();
+      const data = await api('/api/tags/quiz/list', {folder:root(), area:state.area, step_id:state.currentStepId, queue:state.queue, exts:q('exts')?.value || ''});
+      state.items = data.items || []; state.summary = data.summary || {};
+      const resumeIndex = resumeRel ? state.items.findIndex(entry => entry.rel === resumeRel) : -1;
+      state.index = resumeIndex >= 0 ? resumeIndex : 0; applyItemSelection(); render();
+      setStatus(`${state.items.length} image(s) in ${state.queue.replace(/_/g, ' ')} queue.${resumeIndex >= 0 ? ` Resumed at ${resumeRel}.` : ''}`);
+    } catch (error) { state.items = []; state.summary = {}; render(); setStatus(error.message, 'error'); }
+    finally { state.busy = false; }
+  }
+  function reloadQueueWithDiscard() {
+    if (!confirmDiscardManualDraft('Discard unsaved manual tags and reload this queue?')) return;
+    void loadQueue();
+  }
+  function changeIndex(nextIndex) {
+    if (!state.items.length) return;
+    if (!confirmDiscardManualDraft('Discard unsaved manual tags and move to another image?')) return;
+    state.index = Math.max(0, Math.min(state.items.length - 1, nextIndex)); applyItemSelection(); render();
+  }
+  function advance() { changeIndex(state.index + 1 >= state.items.length ? 0 : state.index + 1); }
+  function removeCompletedCurrent() {
+    if (state.queue === 'all') return false;
+    const current = item();
+    const completed = (state.queue === 'missing_only' && !current?.missing)
+      || (state.queue === 'conflict_only' && !current?.conflict)
+      || (state.queue === 'not_reviewed' && !!current?.reviewed);
+    if (!completed) return false;
+    state.items.splice(state.index, 1);
+    state.summary.queue_count = Math.max(0, Number(state.summary.queue_count || 0) - 1);
+    if (state.index >= state.items.length) state.index = Math.max(0, state.items.length - 1);
+    applyItemSelection(); render(); return true;
+  }
+  async function saveCurrent(notApplicable=false, advanceAfter=true) {
+    const current = item(); const currentStep = step();
+    if (!current || !currentStep || state.busy) return;
+    if (manualTagging() && tagsFrom(manualInput()?.value || '').length) addManualTags();
+    if (!current.has_txt && (!manualTagging() || !state.manualTags.size)) {
+      setStatus(manualTagging() ? 'Add at least one manual tag before saving a missing caption.' : 'Missing .txt. Quiz Review will not create caption files.', 'error');
+      return;
+    }
+    state.busy = true; setStatus('Saving...');
+    try {
+      const data = await api('/api/tags/quiz/save', {
+        folder:root(), area:state.area, rel:current.rel, step_id:currentStep.id,
+        selected_tags:Array.from(state.selected), ...(manualTagging() ? {manual_tags:Array.from(state.manualTags)} : {}),
+        not_applicable:notApplicable, mark_reviewed:true, backup:true
+      });
+      state.undoStack.push({rel:current.rel, tags:data.previous_tags || [], metadata:data.previous_metadata || {}, had_txt:data.previous_has_txt !== false});
+      state.previousStepSelection[currentStep.id] = notApplicable ? [] : Array.from(state.selected);
+      current.tags = data.tags || []; current.selected_step_tags = notApplicable ? [] : (data.selected_step_tags || Array.from(state.selected));
+      current.not_applicable = !!data.not_applicable; current.reviewed = true;
+      current.missing = manualTagging() ? false : (!current.selected_step_tags.length && !current.not_applicable);
+      current.conflict = !manualTagging() && current.selected_step_tags.length > 1;
+      state.initialManualTags = new Set(current.tags);
+      const changes = [...(data.added || []).map(tag => `added ${tag}`), ...(data.removed || []).map(tag => `removed ${tag}`)];
+      setStatus(`Saved${changes.length ? `: ${changes.join(', ')}` : '.'}`, 'success');
+      if (!removeCompletedCurrent()) { render(); if (advanceAfter) advance(); }
+    } catch (error) { setStatus(error.message, 'error'); }
+    finally { state.busy = false; }
+  }
+  async function undo() {
+    const previous = state.undoStack.pop(); if (!previous || state.busy) { setStatus('Nothing to undo.'); return; }
+    if (!confirmDiscardManualDraft('Discard unsaved manual tags and undo the last save?')) {
+      state.undoStack.push(previous); return;
+    }
+    state.busy = true;
+    try {
+      await api('/api/tags/quiz/restore', {folder:root(), area:state.area, rel:previous.rel, tags:previous.tags, metadata:previous.metadata, had_txt:previous.had_txt});
+      setStatus(`Restored ${previous.rel}.`, 'success'); await loadQueue();
+    } catch (error) { setStatus(error.message, 'error'); }
+    finally { state.busy = false; }
+  }
+  function toggleTag(tag) {
+    const currentStep = step(); if (!currentStep || !tag) return;
+    if (manualTagging()) return;
+    if (currentStep.mode === 'single') {
+      state.selected = new Set([tag]); renderOptions();
+      if (state.config?.quiz_review?.auto_save !== false) {
+        void saveCurrent(false, !!currentStep.auto_advance);
+      } else {
+        setStatus(`Selected ${tag}. Press Enter or Save & Next to apply.`);
+      }
+    } else {
+      state.selected.has(tag) ? state.selected.delete(tag) : state.selected.add(tag); renderOptions();
+    }
+  }
+  async function openQuiz() {
+    const modal = bootstrap.Modal.getOrCreateInstance(q('quiz-review-modal')); modal.show();
+    try {
+      const data = await api('/api/settings/review-quiz');
+      state.config = data.config; state.steps = data.config?.quiz_review?.steps || [];
+      state.area = data.config?.quiz_review?.default_area || 'temp';
+      state.currentStepId = state.steps[0]?.id || '';
+      state.queue = state.steps[0]?.queue_mode || 'missing_only'; renderSelectors();
+      if (!data.config?.quiz_review?.enabled) { setStatus('Quiz Review is disabled. Enable it in Settings first.', 'error'); render(); return; }
+      if (!state.steps.length) { setStatus('No quiz steps configured. Open Settings to add steps.', 'error'); render(); return; }
+      loadRecentManualTags();
+      await loadGlossary();
+      await loadQueue();
+    } catch (error) { setStatus(error.message, 'error'); }
+  }
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('[data-quiz-review-open="1"]').forEach(button => button.addEventListener('click', openQuiz));
+    q('quiz-review-reload')?.addEventListener('click', reloadQueueWithDiscard);
+    q('quiz-review-prev')?.addEventListener('click', () => changeIndex(state.index - 1));
+    q('quiz-review-next')?.addEventListener('click', advance);
+    q('quiz-review-fullscreen')?.addEventListener('click', toggleStageFullscreen);
+    q('quiz-review-image-wrap')?.addEventListener('dblclick', toggleStageFullscreen);
+    document.addEventListener('fullscreenchange', syncFullscreenButton);
+    document.addEventListener('webkitfullscreenchange', syncFullscreenButton);
+    q('quiz-review-save')?.addEventListener('click', () => saveCurrent(false));
+    q('quiz-review-skip')?.addEventListener('click', advance);
+    q('quiz-review-na')?.addEventListener('click', () => saveCurrent(true));
+    q('quiz-review-repeat')?.addEventListener('click', () => {
+      state.selected = new Set(state.previousStepSelection[state.currentStepId] || []); renderOptions();
+      if (step()?.mode === 'single' && state.selected.size && state.config?.quiz_review?.auto_save !== false) {
+        void saveCurrent(false, !!step()?.auto_advance);
+      } else if (step()?.mode === 'single' && state.selected.size) {
+        setStatus('Previous selection loaded. Press Enter or Save & Next to apply.');
+      }
+    });
+    q('quiz-review-undo')?.addEventListener('click', undo);
+    q('quiz-review-manual-save')?.addEventListener('click', () => saveCurrent(false));
+    q('quiz-review-manual-skip')?.addEventListener('click', advance);
+    q('quiz-review-manual-undo')?.addEventListener('click', undo);
+    q('quiz-review-manual-add')?.addEventListener('click', addManualTags);
+    q('quiz-review-manual-input')?.addEventListener('input', renderManualSuggest);
+    q('quiz-review-manual-input')?.addEventListener('focus', renderManualSuggest);
+    q('quiz-review-manual-input')?.addEventListener('blur', () => setTimeout(closeManualSuggest, 120));
+    q('quiz-review-manual-input')?.addEventListener('keydown', event => {
+      if (event.key === 'ArrowDown' && state.suggestRows.length) {
+        event.preventDefault(); state.suggestIndex = (state.suggestIndex + 1) % state.suggestRows.length; renderManualSuggest();
+      } else if (event.key === 'ArrowUp' && state.suggestRows.length) {
+        event.preventDefault(); state.suggestIndex = (state.suggestIndex - 1 + state.suggestRows.length) % state.suggestRows.length; renderManualSuggest();
+      } else if ((event.key === 'Enter' || event.key === 'Tab') && state.suggestRows.length && q('quiz-review-manual-suggest')?.classList.contains('is-open')) {
+        event.preventDefault(); selectManualSuggestion(state.suggestIndex);
+      } else if (event.key === 'Enter') {
+        event.preventDefault(); addManualTags();
+      } else if (event.key === 'Escape') {
+        closeManualSuggest();
+      }
+    });
+    q('quiz-review-glossary-search')?.addEventListener('input', event => {
+      state.glossarySearch = normalizeTag(event.target.value); renderGlossaryQuickPick();
+    });
+    q('quiz-review-glossary-filter')?.addEventListener('change', event => {
+      state.glossaryFilter = event.target.value || '__all__'; renderGlossaryQuickPick();
+    });
+    q('quiz-review-glossary-clear')?.addEventListener('click', () => {
+      state.glossarySearch = ''; state.glossaryFilter = '__all__';
+      if (q('quiz-review-glossary-search')) q('quiz-review-glossary-search').value = '';
+      renderGlossaryQuickPick();
+    });
+    document.addEventListener('bb:glossary-updated', event => {
+      if (!event.detail?.glossary) return;
+      state.glossary = event.detail.glossary; renderGlossaryQuickPick();
+    });
+    document.addEventListener('bb:quiz-cheatsheet-tag', event => {
+      if (!isOpen() || !manualTagging()) return;
+      const tag = normalizeTag(event.detail?.tag);
+      if (!tag) return;
+      const added = !state.manualTags.has(tag);
+      state.manualTags.add(tag); rememberRecentManualTags([tag]); renderManualTagger();
+      q('quiz-review-manual-status').textContent = added
+        ? `Added "${tag}" from cheat sheet. Save to write the caption.`
+        : `"${tag}" is already in the caption.`;
+      event.preventDefault();
+    });
+    q('quiz-review-modal')?.addEventListener('hide.bs.modal', event => {
+      if (!confirmDiscardManualDraft('Close Quiz Review and discard unsaved manual tag changes?')) event.preventDefault();
+    });
+    q('quiz-review-modal')?.addEventListener('hidden.bs.modal', broadcastManualCheatsheetState);
+    q('quiz-review-options')?.addEventListener('click', event => toggleTag(event.target.closest('[data-tag]')?.dataset.tag));
+    q('quiz-review-step')?.addEventListener('change', event => {
+      if (!confirmDiscardManualDraft('Discard unsaved manual tags and change quiz step?')) { renderSelectors(); return; }
+      state.currentStepId = event.target.value; state.queue = step()?.queue_mode || (step()?.required ? 'missing_only' : 'all');
+      renderSelectors(); void loadQueue();
+    });
+    q('quiz-review-queue')?.addEventListener('change', event => {
+      if (!confirmDiscardManualDraft('Discard unsaved manual tags and change queue?')) { renderSelectors(); return; }
+      state.queue = event.target.value; void loadQueue();
+    });
+    q('quiz-review-area')?.addEventListener('change', event => {
+      if (!confirmDiscardManualDraft('Discard unsaved manual tags and change target area?')) { renderSelectors(); return; }
+      state.area = event.target.value; void loadQueue();
+    });
+    q('quiz-review-next-step')?.addEventListener('click', () => {
+      if (!state.steps.length) return;
+      if (!confirmDiscardManualDraft('Discard unsaved manual tags and change quiz step?')) return;
+      const index = state.steps.findIndex(entry => entry.id === state.currentStepId);
+      state.currentStepId = state.steps[(index + 1) % state.steps.length].id;
+      state.queue = step()?.queue_mode || 'all'; renderSelectors(); void loadQueue();
+    });
+    document.addEventListener('keydown', event => {
+      if (!isOpen() || editable(event.target) || !state.config?.quiz_review?.keyboard_enabled) return;
+      const key = String(event.key || '').toLowerCase();
+      if (/^[1-9]$/.test(key)) { event.preventDefault(); toggleTag(step()?.tags?.[Number(key) - 1]); }
+      else if (key === 'enter') { event.preventDefault(); void saveCurrent(false); }
+      else if (key === 'arrowright') { event.preventDefault(); advance(); }
+      else if (key === 'arrowleft') { event.preventDefault(); changeIndex(state.index - 1); }
+      else if (key === 'z') { event.preventDefault(); void undo(); }
+      else if (key === 's') { event.preventDefault(); advance(); }
+      else if (key === 'n' && step()?.allow_not_applicable) { event.preventDefault(); void saveCurrent(true); }
+      else if (key === 'r') { event.preventDefault(); q('quiz-review-repeat')?.click(); }
+      else if (key === 'f') { event.preventDefault(); void toggleStageFullscreen(); }
+    });
+    window.addEventListener('beforeunload', event => {
+      if (!manualDraftDirty()) return;
+      event.preventDefault(); event.returnValue = '';
+    });
+  });
+})();
+</script>

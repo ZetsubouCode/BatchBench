@@ -1,0 +1,781 @@
+<style>
+  .gw-shell { display:flex; flex-direction:column; gap:1rem; }
+  .gw-hero { border:1px solid var(--bb-border); border-radius:.7rem; padding:1rem; background:linear-gradient(135deg, rgba(15,39,61,.95), rgba(15,23,42,.96)); }
+  .gw-hero h3 { margin:0; }
+  .gw-hero p { margin:.35rem 0 0; color:var(--bb-muted); font-size:.88rem; }
+  .gw-manager { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto; gap:.65rem; align-items:end; }
+  .gw-manager-block { min-width:0; }
+  .gw-manager-label { display:block; color:var(--bb-muted); font-size:.72rem; letter-spacing:.08em; text-transform:uppercase; margin-bottom:.3rem; }
+  .gw-manager-row { display:flex; gap:.4rem; }
+  .gw-manager-row .form-control { min-width:0; }
+  .gw-manager-row .form-select { max-width:180px; }
+  .gw-sync { color:var(--bb-muted); font-size:.76rem; text-align:right; }
+  .gw-layout { display:grid; grid-template-columns:minmax(270px, 340px) minmax(0,1fr); gap:1rem; align-items:start; }
+  .gw-sidebar, .gw-article { border:1px solid var(--bb-border); border-radius:.7rem; background:rgba(15,23,42,.92); }
+  .gw-sidebar { position:sticky; top:1rem; max-height:calc(100vh - 2rem); overflow:auto; padding:.75rem; }
+  .gw-sidebar-tools { display:flex; flex-direction:column; gap:.45rem; margin-bottom:.7rem; }
+  .gw-stats { color:#9cd9ea; font-size:.76rem; }
+  .gw-category { border:1px solid var(--bb-border); border-radius:.5rem; background:rgba(8,15,28,.72); margin-bottom:.55rem; overflow:hidden; }
+  .gw-category-head { display:flex; align-items:center; justify-content:space-between; gap:.35rem; padding:.45rem .5rem; border-bottom:1px solid var(--bb-border); }
+  .gw-category-title { min-width:0; color:#9cd9ea; font-size:.72rem; letter-spacing:.08em; text-transform:uppercase; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .gw-category-actions { display:flex; gap:.25rem; }
+  .gw-mini-btn { border:1px solid var(--bb-border); border-radius:.3rem; padding:.08rem .28rem; color:var(--bb-muted); background:var(--bb-card); font-size:.66rem; cursor:pointer; }
+  .gw-mini-btn:hover { color:var(--bb-link); border-color:var(--bb-link); }
+  .gw-mini-btn.is-danger:hover { color:#ffb0ba; border-color:#ffb0ba; }
+  .gw-tag-list { display:flex; flex-wrap:wrap; gap:.3rem; padding:.5rem; }
+  .gw-tag-btn, .gw-chip { border:1px solid var(--bb-border); border-radius:999px; padding:.18rem .48rem; color:var(--bb-text); background:var(--bb-card); font-size:.75rem; cursor:pointer; }
+  .gw-tag-btn:hover, .gw-chip:hover { color:var(--bb-link); border-color:var(--bb-link); }
+  .gw-tag-btn.is-active { color:#eaf3ff; border-color:#7aa2ff; background:#1b2b4a; }
+  .gw-empty { color:var(--bb-muted); font-size:.8rem; padding:.7rem; }
+  .gw-article { min-width:0; overflow:hidden; }
+  .gw-article-head { display:flex; align-items:flex-start; justify-content:space-between; gap:.75rem; padding:1rem; border-bottom:1px solid var(--bb-border); }
+  .gw-title { margin:0; word-break:break-word; }
+  .gw-meta { display:flex; flex-wrap:wrap; gap:.35rem; margin-top:.45rem; }
+  .gw-badge { border:1px solid var(--bb-border); border-radius:999px; padding:.15rem .48rem; color:var(--bb-muted); background:var(--bb-code-bg); font-size:.72rem; }
+  .gw-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:.4rem; }
+  .gw-article-body { display:flex; flex-direction:column; gap:1rem; padding:1rem; }
+  .gw-status { color:var(--bb-muted); font-size:.82rem; min-height:1rem; }
+  .gw-status.is-error { color:#ffc6ce; }
+  .gw-section { border:1px solid var(--bb-border); border-radius:.55rem; padding:.75rem; background:rgba(8,15,28,.64); }
+  .gw-section-title { color:#9cd9ea; font-size:.72rem; letter-spacing:.08em; text-transform:uppercase; margin-bottom:.5rem; }
+  .gw-preview-grid { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:.55rem; }
+  .gw-preview-btn { border:1px solid var(--bb-border); border-radius:.45rem; padding:0; background:#0b1220; overflow:hidden; cursor:zoom-in; }
+  .gw-preview-btn img { display:block; width:100%; height:150px; object-fit:cover; }
+  .gw-preview-btn:hover { border-color:var(--bb-link); }
+  .gw-guidance-grid { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:.65rem; }
+  .gw-guidance { border:1px solid var(--bb-border); border-radius:.45rem; padding:.6rem; background:rgba(255,255,255,.025); }
+  .gw-guidance.is-avoid { border-color:#6f531f; background:rgba(43,34,15,.52); }
+  .gw-guidance h6 { font-size:.8rem; margin-bottom:.4rem; }
+  .gw-guidance ul { margin:0; padding-left:1.1rem; }
+  .gw-guidance li { color:var(--bb-muted); font-size:.8rem; margin-bottom:.25rem; }
+  .gw-wiki-body { white-space:pre-wrap; color:var(--bb-text); font-size:.85rem; line-height:1.5; max-height:430px; overflow:auto; }
+  .gw-chip-wrap { display:flex; flex-wrap:wrap; gap:.35rem; }
+  .gw-chip { display:inline-flex; gap:.32rem; align-items:center; }
+  .gw-chip small { color:var(--bb-muted); }
+  .gw-rel-grid { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:.65rem; }
+  .gw-modal-img { display:block; max-width:100%; max-height:76vh; margin:auto; object-fit:contain; }
+  @media (max-width:1199.98px) {
+    .gw-preview-grid { grid-template-columns:repeat(3, minmax(0,1fr)); }
+  }
+  @media (max-width:991.98px) {
+    .gw-manager { grid-template-columns:1fr; }
+    .gw-sync { text-align:left; }
+    .gw-layout { grid-template-columns:1fr; }
+    .gw-sidebar { position:static; max-height:none; }
+  }
+  @media (max-width:575.98px) {
+    .gw-manager-row { flex-direction:column; }
+    .gw-manager-row .form-select { max-width:none; }
+    .gw-preview-grid, .gw-guidance-grid, .gw-rel-grid { grid-template-columns:1fr; }
+    .gw-preview-btn img { height:210px; }
+    .gw-article-head { flex-direction:column; }
+    .gw-actions { justify-content:flex-start; }
+  }
+</style>
+
+<div class="gw-shell">
+  <section class="gw-hero">
+    <h3>Tag Glossary Wiki</h3>
+    <p>Browse your reusable tag collection as a local reference wiki. Articles are loaded from Danbooru only when selected and kept inside BatchBench.</p>
+  </section>
+
+  <section class="gw-manager">
+    <div class="gw-manager-block">
+      <label class="gw-manager-label" for="gw-add-tags">Add tags to collection</label>
+      <div class="gw-manager-row">
+        <input class="form-control form-control-sm" id="gw-add-tags" placeholder="tag one, tag two">
+        <select class="form-select form-select-sm" id="gw-add-tag-category"></select>
+        <button type="button" class="btn btn-sm btn-outline-info" id="gw-add-tags-btn">Add</button>
+      </div>
+    </div>
+    <div class="gw-manager-block">
+      <label class="gw-manager-label" for="gw-add-category">Create category</label>
+      <div class="gw-manager-row">
+        <input class="form-control form-control-sm" id="gw-add-category" placeholder="Category name">
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="gw-add-category-btn">Create</button>
+      </div>
+    </div>
+    <div class="gw-sync" id="gw-sync">Loading collection...</div>
+  </section>
+
+  <div class="gw-layout">
+    <aside class="gw-sidebar">
+      <div class="gw-sidebar-tools">
+        <input class="form-control form-control-sm" id="gw-search" placeholder="Search collection tags">
+        <select class="form-select form-select-sm" id="gw-category-filter"></select>
+        <div class="gw-stats" id="gw-stats"></div>
+      </div>
+      <div id="gw-collection"></div>
+    </aside>
+
+    <article class="gw-article">
+      <header class="gw-article-head">
+        <div>
+          <h4 class="gw-title" id="gw-title">Choose a glossary tag</h4>
+          <div class="gw-meta" id="gw-meta"></div>
+        </div>
+        <div class="gw-actions">
+          <select class="form-select form-select-sm d-none" id="gw-active-category" aria-label="Move tag to category"></select>
+          <button type="button" class="btn btn-sm btn-outline-info d-none" id="gw-add-active">Add to collection</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary d-none" id="gw-rename-active">Rename</button>
+          <button type="button" class="btn btn-sm btn-outline-danger d-none" id="gw-delete-active">Delete</button>
+        </div>
+      </header>
+      <div class="gw-article-body">
+        <div class="gw-status" id="gw-status">Select a tag from your collection to load its wiki article.</div>
+
+        <section class="gw-section d-none" id="gw-previews-section">
+          <div class="gw-section-title">Reference Images</div>
+          <div class="gw-preview-grid" id="gw-previews"></div>
+        </section>
+
+        <section class="gw-section d-none" id="gw-guidance-section">
+          <div class="gw-section-title">Tagging Guidance</div>
+          <div class="gw-guidance-grid">
+            <div class="gw-guidance">
+              <h6>Use when</h6>
+              <ul id="gw-use-when"></ul>
+            </div>
+            <div class="gw-guidance is-avoid">
+              <h6>Avoid or check alternatives when</h6>
+              <ul id="gw-avoid-when"></ul>
+            </div>
+          </div>
+          <div class="small text-muted mt-2">Quick guidance is extracted from the Danbooru wiki text. Read the full explanation for edge cases.</div>
+        </section>
+
+        <section class="gw-section d-none" id="gw-wiki-section">
+          <div class="gw-section-title">Explanation</div>
+          <div class="gw-wiki-body" id="gw-wiki-body"></div>
+        </section>
+
+        <div class="gw-rel-grid">
+          <section class="gw-section d-none" id="gw-relationships-section">
+            <div class="gw-section-title">Tag Relationships</div>
+            <div id="gw-relationships"></div>
+          </section>
+          <section class="gw-section d-none" id="gw-groups-section">
+            <div class="gw-section-title">Related Tag Groups</div>
+            <div class="gw-chip-wrap" id="gw-groups"></div>
+          </section>
+        </div>
+
+        <section class="gw-section d-none" id="gw-wiki-linked-section">
+          <div class="gw-section-title">Wiki-Linked Tags</div>
+          <div class="gw-chip-wrap" id="gw-wiki-linked"></div>
+        </section>
+
+        <section class="gw-section d-none" id="gw-related-section">
+          <div class="gw-section-title">Common Related Tags</div>
+          <div class="gw-chip-wrap" id="gw-related"></div>
+        </section>
+      </div>
+    </article>
+  </div>
+</div>
+
+<div class="modal fade" id="gwPreviewModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content" style="background:var(--bb-card);color:var(--bb-text);border:1px solid var(--bb-border);">
+      <div class="modal-header">
+        <h5 class="modal-title" id="gw-preview-title">Reference image</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <img class="gw-modal-img" id="gw-preview-img" alt="Tag reference">
+      </div>
+      <div class="modal-footer justify-content-between">
+        <button type="button" class="btn btn-sm btn-outline-light" id="gw-preview-prev">Previous</button>
+        <span class="small text-muted" id="gw-preview-index"></span>
+        <button type="button" class="btn btn-sm btn-outline-light" id="gw-preview-next">Next</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const get = id => document.getElementById(id);
+  const state = {
+    glossary: { version: 2, categories: { Unsorted: [] }, tag_meta: {}, updated_at: 0 },
+    search: '',
+    filter: '__all__',
+    activeTag: '',
+    activeData: null,
+    reqSeq: 0,
+    previews: [],
+    previewIndex: 0
+  };
+
+  function normalizeTag(raw){
+    return String(raw || '').trim().toLowerCase().replace(/\s+/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+  }
+
+  function normalizeCategory(raw){
+    const clean = String(raw || '').trim().replace(/\s+/g, ' ');
+    return (clean || 'Unsorted').slice(0, 40);
+  }
+
+  function normalizeGlossary(payload){
+    const src = payload && typeof payload === 'object' ? payload : {};
+    const output = { version: 2, categories: {}, tag_meta: {}, updated_at: Math.max(0, Number.parseInt(src.updated_at, 10) || 0) };
+    const seen = new Set();
+    Object.entries(src.categories && typeof src.categories === 'object' ? src.categories : {}).forEach(([rawCategory, rawTags])=>{
+      const category = normalizeCategory(rawCategory);
+      if (!output.categories[category]) output.categories[category] = [];
+      (Array.isArray(rawTags) ? rawTags : []).forEach(rawTag=>{
+        const tag = normalizeTag(rawTag);
+        if (!tag || seen.has(tag)) return;
+        seen.add(tag);
+        output.categories[category].push(tag);
+      });
+    });
+    if (!output.categories.Unsorted) output.categories.Unsorted = [];
+    const rawTagMeta = src.tag_meta && typeof src.tag_meta === 'object' ? src.tag_meta : {};
+    seen.forEach(tag=>{
+      const raw = rawTagMeta[tag];
+      if (!raw || typeof raw !== 'object') return;
+      const parsedPostCount = Number.parseInt(raw.post_count, 10);
+      const parsedCategory = Number.parseInt(raw.category, 10);
+      const parsedFetchedAt = Number.parseInt(raw.fetched_at, 10);
+      output.tag_meta[tag] = {
+        found: raw.found !== false,
+        post_count: Number.isFinite(parsedPostCount) ? Math.max(0, parsedPostCount) : null,
+        category: Number.isFinite(parsedCategory) ? parsedCategory : null,
+        category_name: String(raw.category_name || 'unknown').slice(0, 40),
+        fetched_at: Number.isFinite(parsedFetchedAt) ? Math.max(0, parsedFetchedAt) : 0
+      };
+    });
+    return output;
+  }
+
+  function categories(){
+    return Object.keys(state.glossary.categories || {}).sort((a,b)=>{
+      if (a === 'Unsorted') return -1;
+      if (b === 'Unsorted') return 1;
+      return a.localeCompare(b);
+    });
+  }
+
+  function categoryFor(tag){
+    return categories().find(category => (state.glossary.categories[category] || []).includes(tag)) || '';
+  }
+
+  function countTags(){
+    return Object.values(state.glossary.categories || {}).reduce((total, tags)=> total + tags.length, 0);
+  }
+
+  function isWikiVisible(){
+    return get('tab-tag-wiki')?.classList.contains('active');
+  }
+
+  function setSync(message, isError=false){
+    const el = get('gw-sync');
+    if (!el) return;
+    el.textContent = message || '';
+    el.style.color = isError ? '#ffc6ce' : '';
+  }
+
+  function setStatus(message, isError=false){
+    const el = get('gw-status');
+    if (!el) return;
+    el.textContent = message || '';
+    el.classList.toggle('is-error', !!isError);
+  }
+
+  function broadcastGlossary(){
+    document.dispatchEvent(new CustomEvent('bb:glossary-updated', {
+      detail: { source: 'glossary-wiki', glossary: normalizeGlossary(state.glossary) }
+    }));
+  }
+
+  async function loadGlossary(){
+    try{
+      const res = await fetch('/api/tags/glossary');
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      state.glossary = normalizeGlossary(data.glossary);
+      renderCollection();
+      broadcastGlossary();
+      setSync('Collection synced.');
+      const firstTag = categories().flatMap(category => state.glossary.categories[category] || [])[0];
+      if (!state.activeTag && firstTag){
+        state.activeTag = firstTag;
+        renderCollection();
+        if (isWikiVisible()) selectTag(firstTag);
+      }
+    }catch(err){
+      setSync(`Collection load failed: ${err.message || err}`, true);
+    }
+  }
+
+  async function saveGlossary(){
+    state.glossary.updated_at = Date.now();
+    state.glossary = normalizeGlossary(state.glossary);
+    renderCollection();
+    broadcastGlossary();
+    setSync('Saving collection...');
+    try{
+      const res = await fetch('/api/tags/glossary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ glossary: state.glossary })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      state.glossary = normalizeGlossary(data.glossary);
+      renderCollection();
+      broadcastGlossary();
+      setSync('Collection saved.');
+    }catch(err){
+      setSync(`Collection save failed: ${err.message || err}`, true);
+    }
+  }
+
+  function saveTagMetaFromInfo(rawTag, info){
+    const tag = normalizeTag(rawTag);
+    if (!tag || !categoryFor(tag) || !info || typeof info !== 'object') return;
+    const parsedPostCount = Number.parseInt(info.post_count, 10);
+    const parsedCategory = Number.parseInt(info.category, 10);
+    const next = {
+      found: true,
+      post_count: Number.isFinite(parsedPostCount) ? Math.max(0, parsedPostCount) : null,
+      category: Number.isFinite(parsedCategory) ? parsedCategory : null,
+      category_name: String(info.category_name || 'unknown').slice(0, 40),
+      fetched_at: Date.now()
+    };
+    const current = state.glossary.tag_meta?.[tag] || {};
+    if (
+      current.found === next.found &&
+      current.post_count === next.post_count &&
+      current.category === next.category &&
+      current.category_name === next.category_name
+    ) return;
+    if (!state.glossary.tag_meta || typeof state.glossary.tag_meta !== 'object') state.glossary.tag_meta = {};
+    state.glossary.tag_meta[tag] = next;
+    void saveGlossary();
+  }
+
+  function removeFromBuckets(tag){
+    categories().forEach(category=>{
+      state.glossary.categories[category] = (state.glossary.categories[category] || []).filter(item => item !== tag);
+    });
+  }
+
+  function addTags(raw, category){
+    const target = normalizeCategory(category);
+    if (!state.glossary.categories[target]) state.glossary.categories[target] = [];
+    const tags = String(raw || '').split(/[,;\n]+/).map(normalizeTag).filter(Boolean);
+    tags.forEach(tag=>{
+      removeFromBuckets(tag);
+      state.glossary.categories[target].push(tag);
+    });
+    state.glossary.categories[target] = Array.from(new Set(state.glossary.categories[target])).sort((a,b)=> a.localeCompare(b));
+    if (tags.length) void saveGlossary();
+    return tags;
+  }
+
+  function moveTag(tag, category){
+    const cleanTag = normalizeTag(tag);
+    if (!cleanTag) return;
+    addTags(cleanTag, category);
+  }
+
+  function deleteTag(tag){
+    const cleanTag = normalizeTag(tag);
+    if (!cleanTag) return;
+    removeFromBuckets(cleanTag);
+    void saveGlossary();
+  }
+
+  function renameTag(tag){
+    const cleanTag = normalizeTag(tag);
+    const currentCategory = categoryFor(cleanTag) || 'Unsorted';
+    const raw = prompt('Rename glossary tag', cleanTag);
+    const nextTag = normalizeTag(raw);
+    if (!raw || !nextTag || nextTag === cleanTag) return;
+    removeFromBuckets(cleanTag);
+    removeFromBuckets(nextTag);
+    state.glossary.categories[currentCategory].push(nextTag);
+    state.glossary.categories[currentCategory] = Array.from(new Set(state.glossary.categories[currentCategory])).sort((a,b)=> a.localeCompare(b));
+    state.activeTag = nextTag;
+    void saveGlossary();
+    selectTag(nextTag);
+  }
+
+  function createCategory(){
+    const input = get('gw-add-category');
+    const category = normalizeCategory(input?.value || '');
+    if (!input?.value.trim()){
+      input?.focus();
+      return;
+    }
+    if (!state.glossary.categories[category]){
+      state.glossary.categories[category] = [];
+      void saveGlossary();
+    }
+    input.value = '';
+    renderCollection();
+    get('gw-add-tag-category').value = category;
+  }
+
+  function renameCategory(category){
+    if (category === 'Unsorted') return;
+    const raw = prompt('Rename glossary category', category);
+    const nextCategory = normalizeCategory(raw);
+    if (!raw || !nextCategory || nextCategory === category) return;
+    state.glossary.categories[nextCategory] = Array.from(new Set([
+      ...(state.glossary.categories[nextCategory] || []),
+      ...(state.glossary.categories[category] || [])
+    ])).sort((a,b)=> a.localeCompare(b));
+    delete state.glossary.categories[category];
+    void saveGlossary();
+  }
+
+  function deleteCategory(category){
+    if (category === 'Unsorted') return;
+    const tags = state.glossary.categories[category] || [];
+    if (!confirm(`Delete "${category}" and move its ${tags.length} tag(s) to Unsorted?`)) return;
+    state.glossary.categories.Unsorted = Array.from(new Set([
+      ...(state.glossary.categories.Unsorted || []),
+      ...tags
+    ])).sort((a,b)=> a.localeCompare(b));
+    delete state.glossary.categories[category];
+    void saveGlossary();
+  }
+
+  function fillSelect(select, includeAll=false){
+    if (!select) return;
+    const previous = select.value;
+    select.innerHTML = '';
+    if (includeAll){
+      const opt = document.createElement('option');
+      opt.value = '__all__';
+      opt.textContent = 'All categories';
+      select.appendChild(opt);
+    }
+    categories().forEach(category=>{
+      const opt = document.createElement('option');
+      opt.value = category;
+      opt.textContent = category;
+      select.appendChild(opt);
+    });
+    select.value = Array.from(select.options).some(opt => opt.value === previous) ? previous : (includeAll ? '__all__' : 'Unsorted');
+  }
+
+  function renderCollection(){
+    fillSelect(get('gw-add-tag-category'));
+    fillSelect(get('gw-category-filter'), true);
+    const filter = get('gw-category-filter');
+    if (filter) filter.value = categories().includes(state.filter) ? state.filter : '__all__';
+    const stats = get('gw-stats');
+    if (stats) stats.textContent = `${countTags()} tags in ${categories().length} categories`;
+    const wrap = get('gw-collection');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    let renderedTags = 0;
+    categories().forEach(category=>{
+      if (state.filter !== '__all__' && category !== state.filter) return;
+      const tags = (state.glossary.categories[category] || []).filter(tag => !state.search || tag.includes(state.search));
+      if (!tags.length && state.search) return;
+      const section = document.createElement('section');
+      section.className = 'gw-category';
+      const head = document.createElement('div');
+      head.className = 'gw-category-head';
+      const title = document.createElement('div');
+      title.className = 'gw-category-title';
+      title.textContent = `${category} (${(state.glossary.categories[category] || []).length})`;
+      head.appendChild(title);
+      if (category !== 'Unsorted'){
+        const actions = document.createElement('div');
+        actions.className = 'gw-category-actions';
+        const rename = document.createElement('button');
+        rename.type = 'button';
+        rename.className = 'gw-mini-btn';
+        rename.textContent = 'Rename';
+        rename.addEventListener('click', ()=> renameCategory(category));
+        actions.appendChild(rename);
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'gw-mini-btn is-danger';
+        del.textContent = 'Delete';
+        del.addEventListener('click', ()=> deleteCategory(category));
+        actions.appendChild(del);
+        head.appendChild(actions);
+      }
+      section.appendChild(head);
+      const list = document.createElement('div');
+      list.className = 'gw-tag-list';
+      if (!tags.length){
+        const empty = document.createElement('span');
+        empty.className = 'gw-empty';
+        empty.textContent = 'No tags yet.';
+        list.appendChild(empty);
+      }
+      tags.forEach(tag=>{
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `gw-tag-btn${tag === state.activeTag ? ' is-active' : ''}`;
+        btn.textContent = tag;
+        btn.addEventListener('click', ()=> selectTag(tag));
+        list.appendChild(btn);
+        renderedTags += 1;
+      });
+      section.appendChild(list);
+      wrap.appendChild(section);
+    });
+    if (!wrap.children.length){
+      const empty = document.createElement('div');
+      empty.className = 'gw-empty';
+      empty.textContent = renderedTags ? '' : 'No collection tags match this search.';
+      wrap.appendChild(empty);
+    }
+    updateActiveActions();
+  }
+
+  function badge(text){
+    const el = document.createElement('span');
+    el.className = 'gw-badge';
+    el.textContent = text;
+    return el;
+  }
+
+  function makeChip(tag, detail=''){
+    const cleanTag = normalizeTag(tag);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'gw-chip';
+    const label = document.createElement('span');
+    label.textContent = cleanTag || tag;
+    btn.appendChild(label);
+    if (detail){
+      const small = document.createElement('small');
+      small.textContent = detail;
+      btn.appendChild(small);
+    }
+    if (cleanTag) btn.addEventListener('click', ()=> selectTag(cleanTag));
+    return btn;
+  }
+
+  function renderChips(id, items, detailFn){
+    const wrap = get(id);
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    (items || []).forEach(item=>{
+      const tag = typeof item === 'string' ? item : item.name;
+      if (!tag) return;
+      wrap.appendChild(makeChip(tag, detailFn ? detailFn(item) : ''));
+    });
+  }
+
+  function renderGuidanceList(id, items, fallback){
+    const list = get(id);
+    if (!list) return;
+    list.innerHTML = '';
+    const values = (items || []).filter(Boolean);
+    (values.length ? values : [fallback]).forEach(text=>{
+      const li = document.createElement('li');
+      li.textContent = text;
+      list.appendChild(li);
+    });
+  }
+
+  function renderRelationships(relationships){
+    const wrap = get('gw-relationships');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    const sections = [
+      ['Automatically includes', relationships?.implies],
+      ['More specific tags', relationships?.implied_by],
+      ['Aliases to', relationships?.aliases_to],
+      ['Known aliases', relationships?.aliases_from]
+    ];
+    let rendered = 0;
+    sections.forEach(([title, tags])=>{
+      if (!tags?.length) return;
+      const label = document.createElement('div');
+      label.className = 'small text-muted mb-1 mt-2';
+      label.textContent = title;
+      wrap.appendChild(label);
+      const chips = document.createElement('div');
+      chips.className = 'gw-chip-wrap';
+      tags.forEach(tag => chips.appendChild(makeChip(tag)));
+      wrap.appendChild(chips);
+      rendered += 1;
+    });
+    get('gw-relationships-section').classList.toggle('d-none', !rendered);
+  }
+
+  function renderPreviews(items){
+    state.previews = Array.isArray(items) ? items : [];
+    const wrap = get('gw-previews');
+    wrap.innerHTML = '';
+    state.previews.forEach((item, index)=>{
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'gw-preview-btn';
+      btn.title = `Reference image ${index + 1}`;
+      const img = document.createElement('img');
+      img.loading = 'lazy';
+      img.src = item.preview_url || item.display_url;
+      img.alt = `${state.activeTag} reference ${index + 1}`;
+      btn.appendChild(img);
+      btn.addEventListener('click', ()=> openPreview(index));
+      wrap.appendChild(btn);
+    });
+    get('gw-previews-section').classList.toggle('d-none', !state.previews.length);
+  }
+
+  function updateActiveActions(){
+    const category = categoryFor(state.activeTag);
+    const categorySelect = get('gw-active-category');
+    const addBtn = get('gw-add-active');
+    const renameBtn = get('gw-rename-active');
+    const deleteBtn = get('gw-delete-active');
+    fillSelect(categorySelect);
+    if (categorySelect){
+      categorySelect.value = category || 'Unsorted';
+      categorySelect.classList.toggle('d-none', !category);
+    }
+    addBtn?.classList.toggle('d-none', !state.activeTag || !!category);
+    renameBtn?.classList.toggle('d-none', !category);
+    deleteBtn?.classList.toggle('d-none', !category);
+  }
+
+  function renderArticle(data){
+    state.activeData = data;
+    const info = data.info || {};
+    const wiki = data.wiki || {};
+    if (data.info) saveTagMetaFromInfo(data.tag || state.activeTag, info);
+    get('gw-title').textContent = data.tag || state.activeTag;
+    const meta = get('gw-meta');
+    meta.innerHTML = '';
+    if (info.category_name) meta.appendChild(badge(info.category_name));
+    if (Number.isFinite(info.post_count)) meta.appendChild(badge(`${info.post_count.toLocaleString()} posts`));
+    const collectionCategory = categoryFor(state.activeTag);
+    if (collectionCategory) meta.appendChild(badge(`collection: ${collectionCategory}`));
+    if (wiki.updated_at) meta.appendChild(badge(`wiki updated ${String(wiki.updated_at).slice(0, 10)}`));
+    if (!data.found){
+      setStatus('Danbooru has no article or reference images for this tag.');
+    } else if (data.warnings?.length){
+      setStatus(`Article loaded with partial relationship data: ${data.warnings[0]}`);
+    } else {
+      setStatus(data.cached ? 'Article loaded from local cache.' : 'Article loaded from Danbooru.');
+    }
+    renderPreviews(data.previews);
+    const guidance = data.guidance || {};
+    renderGuidanceList('gw-use-when', guidance.use_when, 'No concise usage rule was extracted. Read the explanation below.');
+    renderGuidanceList('gw-avoid-when', guidance.avoid_when, 'No explicit exclusion rule was extracted. Check related tags for more specific alternatives.');
+    get('gw-guidance-section').classList.toggle('d-none', !wiki.body);
+    get('gw-wiki-body').textContent = data.wiki_plain || wiki.body || 'No Danbooru wiki explanation is available for this tag.';
+    get('gw-wiki-section').classList.toggle('d-none', !wiki.body);
+    renderRelationships(data.relationships || {});
+    const groups = get('gw-groups');
+    groups.innerHTML = '';
+    (data.tag_groups || []).forEach(group => groups.appendChild(badge(`Tag Group: ${group}`)));
+    get('gw-groups-section').classList.toggle('d-none', !(data.tag_groups || []).length);
+    renderChips('gw-wiki-linked', data.wiki_linked_tags || [], item => item.post_count ? item.post_count.toLocaleString() : '');
+    get('gw-wiki-linked-section').classList.toggle('d-none', !(data.wiki_linked_tags || []).length);
+    renderChips('gw-related', data.related_details || [], item => Number.isFinite(item.frequency) ? `${Math.round(item.frequency * 100)}%` : '');
+    get('gw-related-section').classList.toggle('d-none', !(data.related_details || []).length);
+    updateActiveActions();
+  }
+
+  async function selectTag(rawTag){
+    const tag = normalizeTag(rawTag);
+    if (!tag) return;
+    state.activeTag = tag;
+    state.activeData = null;
+    renderCollection();
+    get('gw-title').textContent = tag;
+    get('gw-meta').innerHTML = '';
+    setStatus(`Loading "${tag}"...`);
+    const seq = ++state.reqSeq;
+    try{
+      const res = await fetch('/api/danbooru/tag-wiki', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tag, preview_limit: 12 })
+      });
+      const data = await res.json();
+      if (seq !== state.reqSeq) return;
+      if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      renderArticle(data);
+    }catch(err){
+      if (seq !== state.reqSeq) return;
+      setStatus(`Failed to load "${tag}": ${err.message || err}`, true);
+      updateActiveActions();
+    }
+  }
+
+  function openPreview(index){
+    if (!state.previews.length) return;
+    state.previewIndex = Math.max(0, Math.min(state.previews.length - 1, index));
+    renderPreviewModal();
+    bootstrap.Modal.getOrCreateInstance(get('gwPreviewModal')).show();
+  }
+
+  function renderPreviewModal(){
+    const item = state.previews[state.previewIndex];
+    if (!item) return;
+    get('gw-preview-title').textContent = `${state.activeTag} reference`;
+    get('gw-preview-img').src = item.display_url || item.preview_url;
+    get('gw-preview-index').textContent = `${state.previewIndex + 1} / ${state.previews.length}`;
+  }
+
+  function stepPreview(step){
+    if (!state.previews.length) return;
+    state.previewIndex = (state.previewIndex + step + state.previews.length) % state.previews.length;
+    renderPreviewModal();
+  }
+
+  function ensureActiveArticle(){
+    if (state.activeData) return;
+    const firstTag = state.activeTag || categories().flatMap(category => state.glossary.categories[category] || [])[0];
+    if (firstTag) selectTag(firstTag);
+  }
+
+  document.addEventListener('DOMContentLoaded', ()=>{
+    void loadGlossary();
+    document.querySelector('[data-bs-target="#tab-tag-wiki"]')?.addEventListener('shown.bs.tab', ensureActiveArticle);
+    get('gw-search')?.addEventListener('input', e=>{
+      state.search = normalizeTag(e.target.value);
+      renderCollection();
+    });
+    get('gw-category-filter')?.addEventListener('change', e=>{
+      state.filter = e.target.value || '__all__';
+      renderCollection();
+    });
+    get('gw-add-tags-btn')?.addEventListener('click', ()=>{
+      const input = get('gw-add-tags');
+      const added = addTags(input?.value || '', get('gw-add-tag-category')?.value || 'Unsorted');
+      if (added.length && input) input.value = '';
+    });
+    get('gw-add-tags')?.addEventListener('keydown', e=>{
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      get('gw-add-tags-btn')?.click();
+    });
+    get('gw-add-category-btn')?.addEventListener('click', createCategory);
+    get('gw-add-category')?.addEventListener('keydown', e=>{
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      createCategory();
+    });
+    get('gw-active-category')?.addEventListener('change', e=> moveTag(state.activeTag, e.target.value));
+    get('gw-add-active')?.addEventListener('click', ()=> addTags(state.activeTag, get('gw-add-tag-category')?.value || 'Unsorted'));
+    get('gw-rename-active')?.addEventListener('click', ()=> renameTag(state.activeTag));
+    get('gw-delete-active')?.addEventListener('click', ()=>{
+      if (!state.activeTag || !confirm(`Delete "${state.activeTag}" from your glossary?`)) return;
+      deleteTag(state.activeTag);
+    });
+    get('gw-preview-prev')?.addEventListener('click', ()=> stepPreview(-1));
+    get('gw-preview-next')?.addEventListener('click', ()=> stepPreview(1));
+    document.addEventListener('bb:glossary-updated', e=>{
+      if (e.detail?.source === 'glossary-wiki' || !e.detail?.glossary) return;
+      state.glossary = normalizeGlossary(e.detail.glossary);
+      renderCollection();
+    });
+  });
+})();
+</script>

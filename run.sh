@@ -28,4 +28,4 @@ elif command -v open >/dev/null 2>&1; then
   (sleep 2; open "${APP_URL}" >/dev/null 2>&1 || true) &
 fi
 
-"$VENV_PY" -m flask run --host 127.0.0.1 --port "${FLASK_RUN_PORT}"
+"$VENV_PY" -m flask run --debug --no-debugger --host 127.0.0.1 --port "${FLASK_RUN_PORT}"
