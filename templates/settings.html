@@ -26,23 +26,23 @@
 <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap mb-3">
   <div>
     <h4 class="mb-1">Settings</h4>
-    <div class="text-muted">Start with the defaults: save the flow, stage images in dataset/_temp, then open Quiz Review from Dataset Tag Editor.</div>
+    <div class="text-muted">Configure the steps used by Guided Tagging Flow.</div>
   </div>
   <div class="quiz-settings-actions">
-    <button type="button" class="btn btn-primary" id="quiz-settings-save" data-bs-toggle="tooltip" data-bs-title="Persist the current Quiz Review flow for future app sessions.">Save config</button>
+    <button type="button" class="btn btn-primary" id="quiz-settings-save" data-bs-toggle="tooltip" data-bs-title="Persist the current Guided Tagging Flow for future app sessions.">Save config</button>
     <button type="button" class="btn btn-outline-warning" id="quiz-settings-reset" data-bs-toggle="tooltip" data-bs-title="Restore the built-in starter flow. You will be asked to confirm first.">Reset to default</button>
     <button type="button" class="btn btn-outline-light" id="quiz-settings-export" data-bs-toggle="tooltip" data-bs-title="Download this configuration as JSON for backup or reuse.">Export JSON</button>
     <button type="button" class="btn btn-outline-light" id="quiz-settings-import" data-bs-toggle="tooltip" data-bs-title="Load an exported JSON configuration for review before saving.">Import JSON</button>
     <input type="file" id="quiz-settings-import-file" accept=".json,application/json" class="d-none">
   </div>
 </div>
-<div class="quiz-settings-note mb-3" id="quiz-settings-status">Loading Quiz Review settings...</div>
+<div class="quiz-settings-note mb-3" id="quiz-settings-status">Loading Guided Tagging Flow settings...</div>
 
 <div class="quiz-settings-grid">
   <section class="quiz-settings-card">
     <div class="d-flex align-items-start justify-content-between gap-2 flex-wrap">
       <div>
-        <h5 class="mb-1">Quiz Review Flow</h5>
+        <h5 class="mb-1">Guided Tagging Flow</h5>
         <div class="quiz-settings-note">Each card is one review question. Order controls the workflow.</div>
       </div>
       <button type="button" class="btn btn-sm btn-outline-info" id="quiz-step-add" aria-label="Add step" data-bs-toggle="tooltip" data-bs-title="Add a new review question, then configure its answer tags in Step Editor."><i class="bi bi-plus-lg" aria-hidden="true"></i><span class="visually-hidden">Add step</span></button>
@@ -50,7 +50,7 @@
     <div class="quiz-step-list" id="quiz-step-list"></div>
     <hr>
     <h6>Create steps from current cheat sheet</h6>
-    <div class="quiz-settings-note mb-2">Reads prompt.txt sections into editable quiz steps. Your saved config is not overwritten until you save.</div>
+    <div class="quiz-settings-note mb-2">Reads prompt.txt sections into editable tagging steps. Your saved config is not overwritten until you save.</div>
     <div class="input-group input-group-sm mb-2">
       <input type="text" class="form-control" id="quiz-cheatsheet-root" data-root-sync="1" placeholder="Project root"
              data-bs-toggle="tooltip" data-bs-title="Optional helper: choose the BatchBench project containing prompt.txt.">
@@ -59,7 +59,7 @@
     <div class="input-group input-group-sm">
       <span class="input-group-text">TXT</span>
       <input type="text" class="form-control" id="quiz-cheatsheet-file" value="prompt.txt"
-             data-bs-toggle="tooltip" data-bs-title="Cheat-sheet text file to read. Sections become editable quiz steps.">
+             data-bs-toggle="tooltip" data-bs-title="Cheat-sheet text file to read. Sections become editable tagging steps.">
       <button type="button" class="btn btn-outline-info" id="quiz-cheatsheet-import" data-bs-toggle="tooltip" data-bs-title="Build an editable draft flow from cheat-sheet sections. Nothing is saved until Save config.">Create steps</button>
     </div>
   </section>
@@ -71,7 +71,7 @@
       <div id="quiz-step-editor" class="d-none">
         <div class="row g-3">
           <div class="col-md-7">
-            <label class="form-label">Label <i class="bi bi-info-circle quiz-settings-tip" data-bs-toggle="tooltip" data-bs-title="Question title shown during Quiz Review, such as Camera Angle."></i></label>
+            <label class="form-label">Label <i class="bi bi-info-circle quiz-settings-tip" data-bs-toggle="tooltip" data-bs-title="Step title shown during Guided Tagging Flow, such as Camera Angle."></i></label>
             <input type="text" class="form-control" id="quiz-step-label">
           </div>
           <div class="col-md-5">
@@ -98,7 +98,7 @@
           <div class="col-12 d-flex flex-wrap gap-3">
             <label class="form-check" data-bs-toggle="tooltip" data-bs-title="Treat this category as expected. Missing queue will find images without an answer unless marked Not Applicable."><input class="form-check-input" type="checkbox" id="quiz-step-required"> <span class="form-check-label">Required</span> <i class="bi bi-info-circle quiz-settings-tip"></i></label>
             <label class="form-check" data-bs-toggle="tooltip" data-bs-title="After a saved single-choice answer, move to the next image. Multi-choice answers still use Enter or Save & Next."><input class="form-check-input" type="checkbox" id="quiz-step-auto"> <span class="form-check-label">Auto advance</span> <i class="bi bi-info-circle quiz-settings-tip"></i></label>
-            <label class="form-check" data-bs-toggle="tooltip" data-bs-title="Limit quiz manual tag suggestions for this step to mapped cheat-sheet tags and this step's configured answer tags."><input class="form-check-input" type="checkbox" id="quiz-step-autosuggest-segment-only"> <span class="form-check-label">Segment-only autosuggest</span> <i class="bi bi-info-circle quiz-settings-tip"></i></label>
+            <label class="form-check" data-bs-toggle="tooltip" data-bs-title="Limit manual tag suggestions for this step to mapped cheat-sheet tags and this step's configured answer tags."><input class="form-check-input" type="checkbox" id="quiz-step-autosuggest-segment-only"> <span class="form-check-label">Segment-only autosuggest</span> <i class="bi bi-info-circle quiz-settings-tip"></i></label>
             <label class="form-check" data-bs-toggle="tooltip" data-bs-title="Add an N shortcut and button for cases where the category does not apply. This is stored as review metadata, never as a caption tag."><input class="form-check-input" type="checkbox" id="quiz-step-na"> <span class="form-check-label">Allow Not Applicable</span> <i class="bi bi-info-circle quiz-settings-tip"></i></label>
           </div>
           <div class="col-12">
@@ -120,7 +120,7 @@
       <h5>Global Behavior</h5>
       <div class="row g-3">
         <div class="col-md-6">
-          <label class="form-label">Default target area <i class="bi bi-info-circle quiz-settings-tip" data-bs-toggle="tooltip" data-bs-title="Where Quiz Review opens by default. Use dataset/_temp for staged edits. Direct dataset editing must be selected explicitly."></i></label>
+          <label class="form-label">Default target area <i class="bi bi-info-circle quiz-settings-tip" data-bs-toggle="tooltip" data-bs-title="Where Guided Tagging Flow opens by default. Use dataset/_temp for staged edits. Direct dataset editing must be selected explicitly."></i></label>
           <select class="form-select" id="quiz-global-area">
             <option value="temp">dataset/_temp</option>
             <option value="dataset">dataset/ directly</option>
@@ -138,8 +138,8 @@
           <input class="form-control" type="number" id="quiz-global-preload" min="0" max="6" value="3">
         </div>
         <div class="col-12 d-flex flex-wrap gap-3">
-          <label class="form-check" data-bs-toggle="tooltip" data-bs-title="Allow Quiz Review to open from Dataset Tag Editor. Disable this to pause use without deleting your flow."><input class="form-check-input" type="checkbox" id="quiz-global-enabled"> <span class="form-check-label">Quiz Review enabled</span> <i class="bi bi-info-circle quiz-settings-tip"></i></label>
-          <label class="form-check" data-bs-toggle="tooltip" data-bs-title="Enable quiz keys such as 1-9, Enter, arrows, N, S, Z, R, and F while the review window is open."><input class="form-check-input" type="checkbox" id="quiz-global-keyboard"> <span class="form-check-label">Keyboard shortcuts enabled</span> <i class="bi bi-info-circle quiz-settings-tip"></i></label>
+          <label class="form-check" data-bs-toggle="tooltip" data-bs-title="Allow Guided Tagging Flow to open from Dataset Tag Editor. Disable this to pause use without deleting your flow."><input class="form-check-input" type="checkbox" id="quiz-global-enabled"> <span class="form-check-label">Guided Tagging Flow enabled</span> <i class="bi bi-info-circle quiz-settings-tip"></i></label>
+          <label class="form-check" data-bs-toggle="tooltip" data-bs-title="Enable tagging flow keys such as 1-9, Enter, arrows, N, S, Z, R, and F while the review window is open."><input class="form-check-input" type="checkbox" id="quiz-global-keyboard"> <span class="form-check-label">Keyboard shortcuts enabled</span> <i class="bi bi-info-circle quiz-settings-tip"></i></label>
           <label class="form-check" data-bs-toggle="tooltip" data-bs-title="Save single-choice answers immediately when clicked. Multi-choice answers still use Enter or Save & Next."><input class="form-check-input" type="checkbox" id="quiz-global-autosave"> <span class="form-check-label">Auto-save enabled</span> <i class="bi bi-info-circle quiz-settings-tip"></i></label>
           <label class="form-check" data-bs-toggle="tooltip" data-bs-title="Show the current caption tags in a collapsible panel during review."><input class="form-check-input" type="checkbox" id="quiz-global-tags"> <span class="form-check-label">Show current tags</span> <i class="bi bi-info-circle quiz-settings-tip"></i></label>
           <label class="form-check" data-bs-toggle="tooltip" data-bs-title="Show queued and total image counts while reviewing."><input class="form-check-input" type="checkbox" id="quiz-global-progress"> <span class="form-check-label">Show step progress</span> <i class="bi bi-info-circle quiz-settings-tip"></i></label>
@@ -343,7 +343,7 @@
       state.config = data.config;
       state.selected = quiz().steps.length ? 0 : -1;
       render();
-      setStatus('Quiz Review settings loaded.');
+      setStatus('Guided Tagging Flow settings loaded.');
     } catch (error) { setStatus(error.message, true); }
   }
 
@@ -354,7 +354,7 @@
         method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({config:state.config})
       });
       state.config = data.config; render();
-      setStatus('Quiz Review settings saved.');
+      setStatus('Guided Tagging Flow settings saved.');
     } catch (error) { setStatus(error.message, true); }
   }
 
@@ -365,7 +365,7 @@
       state.selected = quiz().steps.length - 1; state.idDirty = false; render();
     });
     q('quiz-step-delete')?.addEventListener('click', () => {
-      if (!step() || !confirm('Delete this quiz step?')) return;
+      if (!step() || !confirm('Delete this tagging step?')) return;
       quiz().steps.splice(state.selected, 1);
       state.selected = Math.min(state.selected, quiz().steps.length - 1); render();
     });
@@ -384,16 +384,16 @@
       .forEach(id => q(id)?.addEventListener('change', commitGlobals));
     q('quiz-settings-save')?.addEventListener('click', saveConfig);
     q('quiz-settings-reset')?.addEventListener('click', async () => {
-      if (!confirm('Reset Quiz Review configuration to defaults?')) return;
+      if (!confirm('Reset Guided Tagging Flow configuration to defaults?')) return;
       try {
         const data = await api('/api/settings/review-quiz/reset', {method:'POST'});
-        state.config = data.config; state.selected = 0; render(); setStatus('Default Quiz Review settings restored.');
+        state.config = data.config; state.selected = 0; render(); setStatus('Default Guided Tagging Flow settings restored.');
       } catch (error) { setStatus(error.message, true); }
     });
     q('quiz-settings-export')?.addEventListener('click', () => {
       commitEditor(); commitGlobals();
       const blob = new Blob([JSON.stringify(state.config, null, 2)], {type:'application/json'});
-      const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'review_quiz.json'; link.click();
+      const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'guided_tagging_flow.json'; link.click();
       URL.revokeObjectURL(link.href);
     });
     q('quiz-settings-import')?.addEventListener('click', () => q('quiz-settings-import-file')?.click());

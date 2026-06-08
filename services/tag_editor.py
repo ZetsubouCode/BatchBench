@@ -1220,7 +1220,7 @@ def start_tagging_session(
     return {
         "ok": True,
         "session": session,
-        "logs": [f"Started quiz: {len(images)} images, {len(segments)} segments"],
+        "logs": [f"Started tagging flow: {len(images)} images, {len(segments)} segments"],
         **_make_serializable_path_info(paths),
     }
 

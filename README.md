@@ -8,7 +8,7 @@ A tiny Flask site you can run on your own PC (**localhost**) with simple menus t
 - **Tag Tools**: Dataset Tag Editor, Dataset Normalization, Offline Tagger (WD v3), CLIP Token Check
 - **Pipeline (beta)** with reorderable step cards
 - **Tag Glossary Wiki**
-- **Settings** for Quiz Review flow configuration
+- **Settings** for Guided Tagging Flow configuration
 
 *Runs on Windows, Linux, and macOS.*
 
@@ -216,26 +216,25 @@ Perhatian:
 #### Dataset Tag Editor
 Cara pakai (disarankan):
 - Isi **Project Root** (folder induk yang berisi `database/`, `dataset/`, `dataset/_temp`, `prompt.txt`).
-- Cek **Project Setup** lalu jalankan **Initialize Project** jika belum siap.
-- Stage file ke `dataset/_temp` dari Database/Dataset Browser, pilih mode, isi tags/mapping, lalu Run.
-- Untuk review kategori yang berulang, buka **Quiz Review**, pilih step dan queue, lalu jawab memakai tombol opsi atau shortcut keyboard.
+- Jika Project Setup muncul, jalankan **Initialize Project** dulu.
+- Gunakan **Guided Tagging Flow** sebagai workflow utama untuk menandai gambar satu per satu.
+- Gunakan **Bulk Tag CRUD** hanya untuk edit langsung seperti add/remove/rename/clean duplicate tags.
 Parameter:
 - Project Root: root proyek dataset. Tool otomatis resolve `database/`, `dataset/`, `dataset/_temp`.
 - Image extensions: ekstensi gambar yang di-scan (gunakan format `.png,.jpg`).
-- Tags / mapping: daftar tag untuk insert/delete atau mapping replace (`old->new; old2->new2`).
-- Create .bak backups: membuat `.bak` untuk mode edit (insert/delete/replace/dedup).
-Mode:
-- insert: tambah tag jika belum ada.
-- delete: hapus tag.
-- replace: ganti tag, format `old->new; old2->new2`.
-- dedup: hapus duplikat tag.
+- Tags / mapping: dipakai di Bulk Tag CRUD untuk add/remove atau rename mapping (`old->new; old2->new2`).
+- Create .bak backups: membuat `.bak` untuk mode edit bulk.
+Bulk Tag CRUD:
+- Add Tags: tambah tag jika belum ada.
+- Remove Tags: hapus tag.
+- Rename Tags: ganti tag, format `old->new; old2->new2`.
+- Clean Duplicates: hapus duplikat tag.
 Perhatian:
-- Semua mode edit berjalan di `dataset/_temp`.
+- Bulk Tag CRUD berjalan di `dataset/_temp`.
 - **Undo** ada sebagai tombol terpisah untuk restore file dari `_temp` ke `dataset/`.
 - Tersedia tombol **Dataset zip** (zip `dataset/` tanpa `_temp`) dan **Move all from _temp** (pindahkan isi `_temp` ke folder timestamp baru).
-- Insert bisa membuat `.txt` baru untuk gambar tanpa caption (dengan konfirmasi di UI).
-- Quiz Review menyimpan status review terpisah di `.bb_review.json`; metadata seperti Not Applicable tidak ditulis ke caption `.txt`.
-- Quiz Review default memakai `dataset/_temp`. Pilih area `dataset/` secara eksplisit hanya jika memang ingin mengedit langsung.
+- Add Tags bisa membuat `.txt` baru untuk gambar tanpa caption (dengan konfirmasi di UI).
+- Guided Tagging Flow menyimpan sesi di `dataset/_temp/tagging_session.json` dan output akhir tetap caption `.txt` biasa.
 - Tag editor tidak memahami blok `#optional:` atau `#warning:`; gunakan Dataset Normalization jika file Anda memakai format itu.
 
 #### Dataset Normalization
@@ -389,18 +388,18 @@ Perhatian:
 - Glossary tersinkron dengan quick picker di Dataset Tag Editor pada sesi browser yang sama.
 
 ### Settings
-Settings dipakai untuk mengatur flow **Quiz Review** tanpa edit JSON manual.
+Settings dipakai untuk mengatur **Guided Tagging Flow** tanpa edit JSON manual.
 Cara pakai:
 - Tambah atau edit step card. Satu step adalah satu pertanyaan review, misalnya Body Composition atau Camera Angle.
 - Pilih `Single choice` jika satu jawaban harus mengganti tag lain dalam step yang sama. Pilih `Multi choice` jika beberapa tag boleh hidup bersama. Pilih `Manual tagging` untuk step yang membutuhkan editor caption dan glossary quick picker.
 - Atur default queue, Required, Auto advance, Allow Not Applicable, dan daftar tag.
-- Flow boleh mencampur step quiz dan step `Manual tagging`. Gunakan queue `Not reviewed` atau `Missing only` untuk satu pass manual per gambar.
-- Saat Quiz Review terbuka, tekan `Ctrl+Alt+C` untuk menampilkan cheat sheet di atas quiz. Pada step `Manual tagging`, overlay menampilkan gambar quiz aktif di sisi kanan; klik tag cheat sheet untuk menambahkannya langsung ke caption pending.
-- Input `Manual tagging` mengingat tag yang pernah dipakai dan menampilkan autosuggest dari riwayat serta glossary. Posisi gambar terakhir disimpan per project, area, dan manual step agar review dapat dilanjutkan. Quiz meminta konfirmasi sebelum membuang perubahan manual yang belum disimpan.
+- Flow boleh mencampur step pilihan dan step `Manual tagging`. Gunakan queue `Not reviewed` atau `Missing only` untuk satu pass manual per gambar.
+- Saat Guided Tagging Flow terbuka, tekan `Ctrl+Alt+C` untuk menampilkan cheat sheet di atas alur tagging. Pada step `Manual tagging`, overlay menampilkan gambar tagging aktif di sisi kanan; klik tag cheat sheet untuk menambahkannya langsung ke caption pending.
+- Input `Manual tagging` mengingat tag yang pernah dipakai dan menampilkan autosuggest dari riwayat serta glossary. Posisi gambar terakhir disimpan per project, area, dan manual step agar review dapat dilanjutkan. Flow meminta konfirmasi sebelum membuang perubahan manual yang belum disimpan.
 - Review Global Behavior, pertahankan default target `dataset/_temp`, lalu klik Save config.
 - Opsional: klik Create steps untuk membuat draft editable dari section `prompt.txt`.
 Perhatian:
-- Cheat sheet adalah vocabulary/reference; Quiz Review adalah workflow. Import dari cheat sheet tidak tersimpan sampai Save config diklik.
+- Cheat sheet adalah vocabulary/reference; Guided Tagging Flow adalah workflow. Import dari cheat sheet tidak tersimpan sampai Save config diklik.
 - Ubah step ID dengan hati-hati setelah review berjalan karena ID dipakai oleh metadata review.
 - Export JSON sebelum perubahan besar jika ingin menyimpan backup konfigurasi.
 

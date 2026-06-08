@@ -30,9 +30,9 @@
   .path-flag.is-active { color:#e6f0ff; border-color:#2d4f86; background:#1b2b4a; }
   .tag-editor-layout { position:relative; --bb-left-drawer-left:4.85rem; --bb-left-drawer-max:calc(100vw - 6rem); }
   .tag-editor-shell { position:relative; }
-  .tag-editor-content { display:grid; grid-template-columns:minmax(0,1fr) minmax(420px, 540px); gap:1.1rem; align-items:start; }
+  .tag-editor-content { display:grid; grid-template-columns:minmax(0,1fr) minmax(460px, 620px); gap:1.1rem; align-items:start; }
   .tag-editor-main { min-width:0; display:flex; flex-direction:column; gap:1rem; padding-bottom:1rem; }
-  .tag-editor-right { position:sticky; top:1rem; align-self:start; display:flex; flex-direction:column; gap:1rem; max-height:calc(100vh - 1.5rem); overflow:auto; padding-right:.25rem; }
+  .tag-editor-right { position:static; align-self:start; display:flex; flex-direction:column; gap:1rem; max-height:none; overflow:visible; padding-right:0; }
   .tag-editor-right .tag-explorer { background:rgba(10,16,28,.86); }
   .tag-editor-left-rail { position:sticky; top:.65rem; z-index:25; display:flex; flex-wrap:wrap; gap:.55rem; margin:0 0 .35rem 0; padding:.45rem; border:1px solid var(--bb-border); border-radius:.7rem; background:rgba(10,18,34,.72); }
   .left-rail-btn { border:1px solid var(--bb-border); color:var(--bb-text); border-radius:.65rem; padding:.5rem .8rem; font-size:.82rem; font-weight:600; line-height:1.2; min-width:152px; text-align:left; box-shadow:0 8px 18px rgba(0,0,0,.22); transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease; }
@@ -83,6 +83,7 @@
   .left-drawer-backdrop.is-quiz-overlay { z-index:1060; }
   .left-drawer { position:fixed; left:var(--bb-left-drawer-left); top:1rem; bottom:1rem; width:min(620px, var(--bb-left-drawer-max)); border:1px solid var(--bb-border); border-radius:.9rem; background:rgba(8,15,28,.98); box-shadow:0 16px 42px rgba(0,0,0,.42); transform:translateX(calc(-100% - 1.25rem)); opacity:0; pointer-events:none; transition:transform .2s ease, opacity .2s ease; z-index:93; display:flex; flex-direction:column; overflow:hidden; }
   .left-drawer.is-open { transform:translateX(0); opacity:1; pointer-events:auto; }
+  .left-drawer.left-drawer-project-setup { width:min(900px, var(--bb-left-drawer-max)); }
   .left-drawer.is-quiz-overlay { z-index:1070; }
   .left-drawer.is-quiz-overlay.has-quiz-preview { width:min(1180px, var(--bb-left-drawer-max)); }
   .left-drawer.is-quiz-overlay.has-quiz-preview .left-drawer-body { display:grid; grid-template-columns:minmax(340px, .88fr) minmax(420px, 1.12fr); align-items:start; }
@@ -94,7 +95,7 @@
   .left-drawer-quiz-preview-head { display:flex; align-items:flex-start; justify-content:space-between; gap:.65rem; margin-bottom:.65rem; }
   .left-drawer-quiz-preview-title { font-size:.76rem; letter-spacing:.08em; text-transform:uppercase; color:#9cd9ea; }
   .left-drawer-quiz-preview-name { color:var(--bb-muted); font-size:.75rem; overflow-wrap:anywhere; }
-  .left-drawer-quiz-preview-stage { display:flex; align-items:center; justify-content:center; min-height:52vh; max-height:68vh; border:1px solid var(--bb-border); border-radius:.55rem; background:#030712; overflow:hidden; }
+  .left-drawer-quiz-preview-stage { display:flex; align-items:center; justify-content:center; min-height:52vh; max-height:68vh; border:0; border-radius:0; background:transparent; overflow:hidden; }
   .left-drawer-quiz-preview-img { display:block; width:100%; height:100%; max-height:68vh; object-fit:contain; }
   .left-drawer-quiz-preview-empty { color:var(--bb-muted); font-size:.82rem; }
   .left-drawer-quiz-preview-tags { display:flex; flex-wrap:wrap; gap:.3rem; max-height:128px; overflow:auto; margin-top:.65rem; }
@@ -123,14 +124,15 @@
   .project-hub-card .row { margin-left:0; margin-right:0; }
   .project-hub-card .row > * { padding-left:0; padding-right:0; }
   .project-setup-card { border:0; background:transparent; }
-  .project-setup-card summary { list-style:none; cursor:pointer; padding:1rem 1.1rem; border-bottom:1px solid var(--bb-border); }
-  .project-setup-card summary::-webkit-details-marker { display:none; }
+  .project-setup-card > .project-setup-summary { padding:1rem 1.1rem; border-bottom:1px solid var(--bb-border); }
   .project-setup-summary { display:flex; align-items:flex-start; justify-content:space-between; gap:.85rem; flex-wrap:wrap; }
   .project-setup-title { font-size:.78rem; letter-spacing:.08em; text-transform:uppercase; color:var(--bb-muted); margin-bottom:.2rem; }
   .project-setup-compact { font-size:1rem; font-weight:600; color:var(--bb-text); }
   .project-setup-compact-note { font-size:.78rem; color:var(--bb-muted); margin-top:.15rem; }
   .project-setup-body { padding:1rem 1.1rem 1.15rem; display:flex; flex-direction:column; gap:1rem; }
   .project-setup-body > [class*="col-"] { width:auto; padding:0; }
+  .project-setup-body .row > * { min-width:0; }
+  .project-path-chip { display:inline-block; max-width:100%; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; vertical-align:bottom; }
   .project-inline-host { border:1px solid var(--bb-border); border-radius:.55rem; background:rgba(10,16,28,.8); padding:.35rem; }
   .project-inline-host .project-setup-card { background:transparent; }
   .workspace-lock-banner { border:1px solid #b56a1f; border-radius:.55rem; background:#2a1a0a; color:#ffe0b2; padding:.65rem .8rem; font-size:.84rem; }
@@ -251,10 +253,31 @@
   .left-drawer .gallery-cheatsheet-sections { max-height:360px; }
   .left-drawer .gallery-cheatsheet-tags { max-height:220px; }
   .left-drawer .gallery-cheatsheet-content { font-size:.9rem; line-height:1.5; max-height:280px; padding:.7rem .75rem; }
-  .tagging-quiz-panel { border:1px solid #315f7a; background:rgba(7,19,31,.88); border-radius:.55rem; padding:.9rem; }
-  .tagging-quiz-actions { display:flex; flex-wrap:wrap; gap:.45rem; }
-  .tagging-quiz-status { min-height:1.2rem; color:var(--bb-muted); font-size:.82rem; }
+  .tagging-quiz-panel { border:1px solid #4f8fb1; background:linear-gradient(135deg, rgba(9,30,45,.95), rgba(18,30,52,.92)); border-radius:.75rem; padding:1rem; box-shadow:0 14px 34px rgba(0,0,0,.22); }
+  .tagging-quiz-panel h5 { font-size:1.15rem; }
+  .tagging-quiz-actions { display:flex; flex-wrap:wrap; gap:.45rem; justify-content:flex-end; }
+  .tagging-quiz-actions .btn-info { font-weight:700; min-width:150px; }
+  .tagging-quiz-status { min-height:1.2rem; color:#c5d4e0; font-size:.84rem; }
   .tagging-quiz-resume { border:1px solid #8a6b22; background:#241c08; color:#ffe8a8; border-radius:.5rem; padding:.65rem .75rem; }
+  .dataset-export-panel { border:1px solid var(--bb-border); border-radius:.65rem; background:rgba(10,16,28,.82); padding:.85rem .95rem; display:flex; flex-direction:column; gap:.65rem; }
+  .dataset-export-head { display:flex; align-items:flex-start; justify-content:space-between; gap:.75rem; }
+  .dataset-export-title { font-weight:700; color:var(--bb-text); }
+  .dataset-export-note { color:var(--bb-muted); font-size:.78rem; margin-top:.1rem; }
+  .dataset-export-panel .btn { width:100%; }
+  .advanced-tool-panel { border:1px solid var(--bb-border); border-radius:.65rem; background:rgba(10,16,28,.82); overflow:visible; }
+  .advanced-tool-panel summary { list-style:none; cursor:pointer; padding:.85rem .95rem; display:flex; align-items:center; justify-content:space-between; gap:.75rem; }
+  .advanced-tool-panel summary::-webkit-details-marker { display:none; }
+  .advanced-tool-panel[open] summary { border-bottom:1px solid var(--bb-border); }
+  .advanced-tool-title { font-weight:700; color:var(--bb-text); }
+  .advanced-tool-note { color:var(--bb-muted); font-size:.78rem; margin-top:.1rem; }
+  .advanced-tool-chevron { color:var(--bb-muted); font-size:.8rem; }
+  .advanced-tool-body { padding:.85rem; display:flex; flex-direction:column; gap:.85rem; }
+  .bulk-crud-section { display:flex; flex-direction:column; gap:.55rem; min-width:0; }
+  .bulk-crud-section-title { font-size:.76rem; letter-spacing:.08em; text-transform:uppercase; color:var(--bb-muted); }
+  .advanced-tool-panel .editor-panel,
+  .advanced-tool-panel .tag-explorer { width:100%; }
+  .advanced-tool-panel .tag-composer-stick { position:static; bottom:auto; background:rgba(10,16,28,.86); }
+  .advanced-tool-panel .mode-panel { position:static; }
   .quiz-map-board { display:flex; flex-direction:column; gap:.55rem; max-height:50vh; overflow:auto; padding-right:.25rem; }
   .quiz-map-head { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto; gap:.65rem; color:var(--bb-muted); font-size:.75rem; letter-spacing:.06em; text-transform:uppercase; margin-bottom:.35rem; padding:0 .55rem; }
   .quiz-map-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto; gap:.65rem; align-items:stretch; border:1px solid var(--bb-border); border-radius:.5rem; background:rgba(255,255,255,.03); padding:.55rem; }
@@ -266,6 +289,14 @@
   .quiz-card { display:inline-flex; align-items:center; gap:.35rem; border:1px solid #3f6d88; border-radius:.35rem; padding:.28rem .48rem; background:#102638; color:#dff4ff; font-size:.8rem; cursor:grab; user-select:none; }
   .quiz-card.segment { border-color:#6c5ca5; background:#211c3c; color:#eee8ff; }
   .quiz-card.ghost { border-style:dashed; border-color:#586473; color:#9eacbd; background:rgba(255,255,255,.03); cursor:default; }
+  .quiz-section-source { position:relative; }
+  .quiz-section-source .quiz-card { max-width:100%; }
+  .quiz-section-preview { margin:.5rem 0 0; border:1px solid #426b8b; border-radius:.45rem; background:#071624; color:#dceeff; padding:.55rem; box-shadow:0 10px 24px rgba(0,0,0,.28); }
+  .quiz-section-preview-title { font-size:.72rem; letter-spacing:.07em; text-transform:uppercase; color:#9cd9ea; margin-bottom:.32rem; }
+  .quiz-section-preview-tags { display:flex; flex-wrap:wrap; gap:.24rem; max-height:150px; overflow:auto; }
+  .quiz-section-preview-tag { border:1px solid #315f7a; border-radius:999px; background:#102638; color:#eaf7ff; font-size:.72rem; line-height:1.15; padding:.12rem .42rem; }
+  .quiz-section-preview-empty { color:var(--bb-muted); font-size:.78rem; }
+  .quiz-section-preview-more { color:#abc2d6; font-size:.75rem; margin-top:.35rem; }
   .quiz-row-tools { display:flex; flex-direction:column; gap:.25rem; }
   .quiz-reco-preview, .quiz-defaults-box { border:1px solid var(--bb-border); border-radius:.5rem; background:rgba(0,0,0,.14); padding:.65rem; min-height:86px; max-height:220px; overflow:auto; }
   .quiz-chip { display:inline-flex; align-items:center; gap:.25rem; border:1px solid #375f78; border-radius:999px; background:#102536; color:#d9efff; padding:.18rem .5rem; margin:.12rem; font-size:.8rem; cursor:pointer; }
@@ -279,7 +310,7 @@
   .quiz-fullscreen-dialog .modal-header { position:relative; padding-right:3.25rem; }
   .quiz-fullscreen-dialog .modal-body { overflow:auto; }
   .quiz-workspace-grid { display:grid; grid-template-columns:minmax(360px,.82fr) minmax(560px,1.18fr); gap:1rem; align-items:start; }
-  .quiz-image-stage { min-height:58vh; border:1px solid var(--bb-border); border-radius:.55rem; background:#030712; display:flex; align-items:center; justify-content:center; overflow:hidden; position:relative; }
+  .quiz-image-stage { min-height:58vh; border:0; border-radius:0; background:transparent; display:flex; align-items:center; justify-content:center; overflow:hidden; position:relative; }
   .quiz-image-stage img { max-width:100%; max-height:72vh; object-fit:contain; cursor:zoom-in; }
   .quiz-image-stage:fullscreen { width:100vw; height:100vh; border:0; border-radius:0; background:#020611; }
   .quiz-image-stage:fullscreen img { max-width:100vw; max-height:100vh; }
@@ -319,10 +350,24 @@
   .danbooru-offcanvas.is-quiz-overlay { z-index:1095; box-shadow:-18px 0 42px rgba(0,0,0,.5); }
   .quiz-overview-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:.6rem; }
   .quiz-overview-stat { border:1px solid var(--bb-border); border-radius:.45rem; padding:.55rem; background:rgba(0,0,0,.14); }
+  .tagging-quiz-hotkeys { position:relative; margin-left:auto; }
+  .tagging-quiz-hotkeys summary { list-style:none; cursor:pointer; border:1px solid #3b4b6b; border-radius:.4rem; color:var(--bb-text); background:#101b30; padding:.34rem .62rem; font-size:.8rem; white-space:nowrap; }
+  .tagging-quiz-hotkeys summary::-webkit-details-marker { display:none; }
+  .tagging-quiz-hotkeys[open] summary { border-color:var(--bb-link); color:var(--bb-link-hover); }
+  .tagging-quiz-hotkeys-panel { position:absolute; z-index:6; top:calc(100% + .45rem); right:0; width:min(460px, 90vw); border:1px solid #47679a; border-radius:.65rem; background:linear-gradient(145deg, #0f1b34 0%, #111326 100%); box-shadow:0 12px 28px rgba(0,0,0,.35); padding:.7rem .8rem; }
+  .tagging-quiz-hotkeys-title { font-size:.78rem; letter-spacing:.08em; text-transform:uppercase; color:#9fc8ff; margin-bottom:.45rem; }
+  .tagging-quiz-hotkeys-list { display:flex; flex-direction:column; gap:.3rem; }
+  .tagging-quiz-hotkey-row { display:grid; grid-template-columns:minmax(96px, auto) 1fr; gap:.55rem; align-items:center; }
+  .tagging-quiz-hotkey-action { color:#dbe8ff; font-size:.8rem; line-height:1.2; }
+  .tagging-quiz-key { display:inline-flex; align-items:center; justify-content:center; min-width:1.7rem; height:1.45rem; border:1px solid #6f8fcb; border-radius:.35rem; background:#18294a; color:#f6f9ff; font-size:.72rem; font-weight:700; padding:0 .34rem; }
+  .tagging-quiz-key-combo { display:inline-flex; flex-wrap:wrap; align-items:center; gap:.2rem; }
+  .tagging-quiz-key-plus { color:#a9bfeb; font-size:.74rem; }
   @media (max-width: 991.98px) {
     .quiz-workspace-grid { grid-template-columns:1fr; }
     .quiz-glossary-controls { grid-template-columns:1fr; }
     .quiz-overview-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .tagging-quiz-hotkeys { margin-left:0; }
+    .tagging-quiz-hotkeys-panel { position:static; width:100%; margin-top:.45rem; }
   }
   .gallery-modal-img {
     max-width:100%;
@@ -515,25 +560,6 @@
   <div class="tag-editor-form">
   <div class="tag-editor-main">
     <div class="card p-4">
-    <!-- Duplicate mode selector moved to sidebar.
-    <div class="mode-panel" id="mode-panel">
-      <div class="mode-title">Mode</div>
-      <div class="mode-buttons" id="mode-buttons">
-        <button type="button" class="mode-btn" data-mode="insert" data-bs-toggle="tooltip" data-bs-title="Insert: add missing tags into .txt in _temp.">
-          <span class="mode-icon">+</span><span>Insert</span>
-        </button>
-        <button type="button" class="mode-btn" data-mode="delete" data-bs-toggle="tooltip" data-bs-title="Delete: remove tags from .txt in _temp.">
-          <span class="mode-icon">-</span><span>Delete</span>
-        </button>
-        <button type="button" class="mode-btn" data-mode="replace" data-bs-toggle="tooltip" data-bs-title="Replace: mapping old->new in _temp.">
-          <span class="mode-icon">⇄</span><span>Replace</span>
-        </button>
-        <button type="button" class="mode-btn" data-mode="dedup" data-bs-toggle="tooltip" data-bs-title="Dedup: remove duplicate tags in _temp.">
-          <span class="mode-icon">≡</span><span>Dedup</span>
-        </button>
-      </div>
-    </div>
-    -->
   <form id="tags-form" method="post" data-no-busy="true" data-no-persist="true" data-tool-label="Dataset Tag Editor">
     <input type="hidden" name="tool" value="tags">
     <input type="hidden" name="active_tab" value="tags">
@@ -570,13 +596,13 @@
         <div class="tagging-quiz-panel">
           <div class="d-flex align-items-start justify-content-between flex-wrap gap-2">
             <div>
-              <h5 class="mb-1">Guided Tagging Quiz</h5>
-              <div class="small text-muted">Tag each dataset image step by step using prompt.txt sections as manual recommendations.</div>
+              <h5 class="mb-1">Guided Tagging Flow</h5>
+              <div class="small text-muted">Main workflow: review one image at a time, then save normal caption .txt files.</div>
             </div>
             <div class="tagging-quiz-actions">
-              <button type="button" class="btn btn-sm btn-info" id="tagging-quiz-start">Start Guided Quiz</button>
-              <button type="button" class="btn btn-sm btn-outline-warning d-none" id="tagging-quiz-continue">Continue where I left off</button>
-              <button type="button" class="btn btn-sm btn-outline-light" id="tagging-quiz-setup">Redo Mapping</button>
+              <button type="button" class="btn btn-sm btn-info" id="tagging-quiz-start">Start Tagging</button>
+              <button type="button" class="btn btn-sm btn-outline-warning d-none" id="tagging-quiz-continue">Continue</button>
+              <button type="button" class="btn btn-sm btn-outline-light" id="tagging-quiz-setup">Tagging Setup</button>
               <button type="button" class="btn btn-sm btn-outline-light" id="tagging-quiz-overview">Session Overview</button>
             </div>
           </div>
@@ -627,7 +653,7 @@
                   <i class="bi bi-info-circle"></i>
                 </button>
               </div>
-              <div class="small text-muted d-none" id="tagviz-hint">Select tags -> choose mode -> Run. Edits run on dataset/_temp only; send items there from the Dataset Browser first.</div>
+              <div class="small text-muted d-none" id="tagviz-hint">Use this with Bulk Tag CRUD for direct edits in dataset/_temp.</div>
               <div class="tag-sync-status d-none" id="tagviz-sync-status">Auto-sync ON</div>
               <div class="small text-muted d-none" id="tagviz-glow-note">Glow = tags present in _temp.</div>
             </div>
@@ -669,14 +695,9 @@
           <div class="d-flex align-items-start justify-content-between gap-2 flex-wrap mb-3">
             <div>
               <h5 class="mb-1">Dataset Browser</h5>
-              <div class="small text-muted">Browse source files from <span class="code-chip">dataset/</span> (excluding <span class="code-chip">dataset/_temp</span>) in the main flow, preview, then stage selected files via the right-side Dataset Workspace.</div>
+              <div class="small text-muted">Secondary view for inspecting images, selecting files, and staging items.</div>
             </div>
             <div class="d-flex gap-1">
-              <button type="button" class="btn btn-sm btn-outline-info" id="tagging-quiz-open-browser"
-                      data-tagging-quiz-open="1" data-bs-toggle="tooltip"
-                      data-bs-title="Open Guided Tagging Quiz. Use Redo Mapping to change segment-to-cheatsheet mapping.">
-                Guided Quiz
-              </button>
               <button type="button" class="btn btn-sm btn-outline-light" id="gallery-refresh">Refresh</button>
             </div>
           </div>
@@ -754,17 +775,17 @@
           <div class="mode-panel" id="mode-panel">
             <div class="mode-title">Mode</div>
             <div class="mode-buttons" id="mode-buttons">
-              <button type="button" class="mode-btn" data-mode="insert" data-bs-toggle="tooltip" data-bs-title="Insert: add missing tags into .txt in _temp.">
-                <span class="mode-icon">+</span><span>Insert</span>
+              <button type="button" class="mode-btn" data-mode="insert" data-bs-toggle="tooltip" data-bs-title="Add tags into .txt files in _temp.">
+                <span class="mode-icon">+</span><span>Add Tags</span>
               </button>
-              <button type="button" class="mode-btn" data-mode="delete" data-bs-toggle="tooltip" data-bs-title="Delete: remove tags from .txt in _temp.">
-                <span class="mode-icon">-</span><span>Delete</span>
+              <button type="button" class="mode-btn" data-mode="delete" data-bs-toggle="tooltip" data-bs-title="Remove tags from .txt files in _temp.">
+                <span class="mode-icon">-</span><span>Remove Tags</span>
               </button>
-              <button type="button" class="mode-btn" data-mode="replace" data-bs-toggle="tooltip" data-bs-title="Replace: mapping old->new in _temp.">
-                <span class="mode-icon">&lt;&gt;</span><span>Replace</span>
+              <button type="button" class="mode-btn" data-mode="replace" data-bs-toggle="tooltip" data-bs-title="Rename tags with old->new mappings in _temp.">
+                <span class="mode-icon">&lt;&gt;</span><span>Rename Tags</span>
               </button>
-              <button type="button" class="mode-btn" data-mode="dedup" data-bs-toggle="tooltip" data-bs-title="Dedup: remove duplicate tags in _temp.">
-                <span class="mode-icon">=</span><span>Dedup</span>
+              <button type="button" class="mode-btn" data-mode="dedup" data-bs-toggle="tooltip" data-bs-title="Remove duplicate tags in _temp.">
+                <span class="mode-icon">=</span><span>Clean Duplicates</span>
               </button>
             </div>
           </div>
@@ -775,9 +796,9 @@
             </div>
             <label class="form-label">Tags / mapping</label>
             <input class="form-control" id="tags" name="tags" form="tags-form"
-                   placeholder="insert/delete: tag1, tag2   •   replace: old->new; old2->new2"
+                   placeholder="add/remove: tag1, tag2   |   rename: old->new; old2->new2"
                    data-bs-toggle="tooltip"
-                   data-bs-title="insert/delete use a comma list. replace uses mappings like old->new; old2->new2">
+                   data-bs-title="Add/remove use a comma list. Rename uses mappings like old->new; old2->new2">
             <div class="form-check mt-2" data-bs-toggle="tooltip" data-bs-title="Create .bak backup of original .txt during edit operations">
               <input class="form-check-input" type="checkbox" id="backup" name="backup" form="tags-form">
               <label class="form-check-label" for="backup">Create .bak backups</label>
@@ -810,11 +831,6 @@
         </div>
         <div class="sidebar-runbar">
           <button class="btn btn-primary" id="btn-run" type="submit" form="tags-form">Run</button>
-          <button type="button" class="btn btn-outline-info" id="tagging-quiz-open-sidebar"
-                  data-tagging-quiz-open="1"
-                  data-bs-toggle="tooltip" data-bs-title="Open Guided Tagging Quiz. Use Redo Mapping to change segment-to-cheatsheet mapping.">
-            Guided Quiz
-          </button>
           <button type="button" class="btn btn-outline-info" id="btn-dataset-zip"
                   data-bs-toggle="tooltip" data-bs-title="Zip dataset/ to project root (exclude dataset/_temp)">
             Zip Dataset
@@ -1080,8 +1096,8 @@
     <div class="modal-content bg-dark text-light">
       <div class="modal-header">
         <div>
-          <h5 class="modal-title">Quiz Starter Setup</h5>
-          <div class="small text-muted">Connect cheatsheet sections to quiz segment steps.</div>
+          <h5 class="modal-title">Tagging Flow Setup</h5>
+          <div class="small text-muted">Connect cheatsheet sections to tagging segment steps.</div>
         </div>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
@@ -1096,12 +1112,13 @@
             </div>
             <div class="tagging-quiz-status mt-2" id="tagging-quiz-setup-status"></div>
             <div class="quiz-reco-preview mt-2" id="tagging-quiz-cheatsheet-list"></div>
+            <div id="tagging-quiz-cheatsheet-detail"></div>
           </div>
           <div class="col-lg-8">
             <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
               <div>
                 <div class="small text-muted">Mapping Board</div>
-                <div class="small">Left cells accept multiple cheatsheet sections. Right cells accept one quiz segment.</div>
+                <div class="small">Left cells accept multiple cheatsheet sections. Right cells accept one tagging segment.</div>
               </div>
               <div class="d-flex gap-1 flex-wrap">
                 <button type="button" class="btn btn-sm btn-outline-light" id="tagging-quiz-add-row">Add Row</button>
@@ -1111,7 +1128,7 @@
             </div>
             <div class="quiz-map-head">
               <div>Cheatsheet Sections</div>
-              <div>Quiz Segment Steps</div>
+              <div>Tagging Segment Steps</div>
               <div>Rows</div>
             </div>
             <div class="quiz-map-board" id="tagging-quiz-map-board"></div>
@@ -1131,7 +1148,7 @@
       <div class="modal-footer">
         <button type="button" class="btn btn-outline-light" id="tagging-quiz-save-mapping">Save Mapping</button>
         <button type="button" class="btn btn-outline-info" id="tagging-quiz-build-recs">Build Recommendations</button>
-        <button type="button" class="btn btn-info" id="tagging-quiz-start-from-setup">Start Quiz</button>
+        <button type="button" class="btn btn-info" id="tagging-quiz-start-from-setup">Start Tagging</button>
       </div>
     </div>
   </div>
@@ -1142,9 +1159,45 @@
     <div class="modal-content bg-dark text-light">
       <div class="modal-header">
         <div>
-          <h5 class="modal-title">Guided Tagging Quiz</h5>
+          <h5 class="modal-title">Guided Tagging Flow</h5>
           <div class="quiz-progress-line" id="tagging-quiz-progress"></div>
         </div>
+        <details class="tagging-quiz-hotkeys" id="tagging-quiz-hotkeys">
+          <summary><i class="bi bi-keyboard me-1"></i>Hotkeys</summary>
+          <div class="tagging-quiz-hotkeys-panel">
+            <div class="tagging-quiz-hotkeys-title">Guided Tagging Hotkeys</div>
+            <div class="tagging-quiz-hotkeys-list">
+              <div class="tagging-quiz-hotkey-row">
+                <span class="tagging-quiz-key">Right</span>
+                <span class="tagging-quiz-hotkey-action">Save image and continue, or move to the next available image after completion</span>
+              </div>
+              <div class="tagging-quiz-hotkey-row">
+                <span class="tagging-quiz-key">Left</span>
+                <span class="tagging-quiz-hotkey-action">Move to the previous available image</span>
+              </div>
+              <div class="tagging-quiz-hotkey-row">
+                <span class="tagging-quiz-key-combo"><span class="tagging-quiz-key">Ctrl</span><span class="tagging-quiz-key-plus">+</span><span class="tagging-quiz-key">Left</span><span class="tagging-quiz-key-plus">/</span><span class="tagging-quiz-key">Right</span></span>
+                <span class="tagging-quiz-hotkey-action">Previous or next segment</span>
+              </div>
+              <div class="tagging-quiz-hotkey-row">
+                <span class="tagging-quiz-key">Enter</span>
+                <span class="tagging-quiz-hotkey-action">Apply manual tags or confirm apply-all while the manual field is active</span>
+              </div>
+              <div class="tagging-quiz-hotkey-row">
+                <span class="tagging-quiz-key-combo"><span class="tagging-quiz-key">Up</span><span class="tagging-quiz-key-plus">/</span><span class="tagging-quiz-key">Down</span></span>
+                <span class="tagging-quiz-hotkey-action">Move through tag suggestions while typing</span>
+              </div>
+              <div class="tagging-quiz-hotkey-row">
+                <span class="tagging-quiz-key-combo"><span class="tagging-quiz-key">Tab</span><span class="tagging-quiz-key-plus">/</span><span class="tagging-quiz-key">Enter</span></span>
+                <span class="tagging-quiz-hotkey-action">Use the highlighted tag suggestion</span>
+              </div>
+              <div class="tagging-quiz-hotkey-row">
+                <span class="tagging-quiz-key">Esc</span>
+                <span class="tagging-quiz-hotkey-action">Close suggestions, exit fullscreen, or close the tagging dialog</span>
+              </div>
+            </div>
+          </div>
+        </details>
         <button type="button" class="btn-close btn-close-white quiz-close-btn" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
@@ -1178,18 +1231,18 @@
                 </div>
                 <div class="quiz-recommended-list" id="tagging-quiz-recommended"></div>
               </div>
-              <div class="quiz-manual-box">
+              <div class="quiz-manual-box" id="tagging-quiz-manual-box">
                 <div class="quiz-tag-panel-head">
                   <div class="quiz-tag-panel-title">Manual Tags</div>
                   <div class="small text-muted" id="tagging-quiz-manual-help">Comma separated. Suggestions use your glossary.</div>
                 </div>
                 <textarea class="form-control" id="tagging-quiz-manual" rows="4" placeholder="tag1, tag2"></textarea>
-                <label class="quiz-manual-apply-all" title="Adds these manual tags to the current segment for every image in this quiz session. You can still remove them per image later." data-bs-toggle="tooltip" data-bs-title="Adds these manual tags to the current segment for every image in this quiz session. You can still remove them per image later.">
+                <label class="quiz-manual-apply-all" title="Adds these manual tags to the current segment for every image in this tagging session. You can still remove them per image later." data-bs-toggle="tooltip" data-bs-title="Adds these manual tags to the current segment for every image in this tagging session. You can still remove them per image later.">
                   <input class="form-check-input" type="checkbox" id="tagging-quiz-manual-apply-all">
-                  <span>Apply to all quiz images</span>
+                  <span>Apply to all session images</span>
                 </label>
                 <div class="quiz-manual-confirm d-none" id="tagging-quiz-manual-confirm">
-                  <div class="fw-semibold">Apply these tags to all quiz images?</div>
+                  <div class="fw-semibold">Apply these tags to all session images?</div>
                   <div class="small text-warning-emphasis mt-2">Tags:</div>
                   <div class="quiz-manual-confirm-tags small monospace" id="tagging-quiz-manual-confirm-tags"></div>
                   <div class="small text-warning-emphasis mt-2">Affected images: <span id="tagging-quiz-manual-confirm-count">0</span></div>
@@ -1205,7 +1258,7 @@
                 </div>
                 <div class="quiz-manual-status mt-2" id="tagging-quiz-manual-status"></div>
               </div>
-              <div class="quiz-tag-panel">
+              <div class="quiz-tag-panel" id="tagging-quiz-glossary-panel">
                 <div class="quiz-tag-panel-head">
                   <div class="quiz-tag-panel-title" id="tagging-quiz-glossary-title">Glossarium Tags</div>
                   <button type="button" class="btn btn-sm btn-outline-light" id="tagging-quiz-glossary-open">Open Glossary</button>
@@ -1514,11 +1567,13 @@
     resume: 'tagging-quiz-resume-banner',
     setupModal: 'tagging-quiz-setup-modal',
     quizModal: 'tagging-quiz-modal',
+    hotkeys: 'tagging-quiz-hotkeys',
     overviewModal: 'tagging-quiz-overview-modal',
     promptFile: 'tagging-quiz-prompt-file',
     parse: 'tagging-quiz-parse',
     setupStatus: 'tagging-quiz-setup-status',
     cheatList: 'tagging-quiz-cheatsheet-list',
+    cheatDetail: 'tagging-quiz-cheatsheet-detail',
     board: 'tagging-quiz-map-board',
     addRow: 'tagging-quiz-add-row',
     autoArrange: 'tagging-quiz-auto-arrange',
@@ -1541,6 +1596,7 @@
     search: 'tagging-quiz-search',
     manual: 'tagging-quiz-manual',
     manualApply: 'tagging-quiz-manual-apply',
+    manualBox: 'tagging-quiz-manual-box',
     manualApplyAll: 'tagging-quiz-manual-apply-all',
     manualConfirm: 'tagging-quiz-manual-confirm',
     manualConfirmTags: 'tagging-quiz-manual-confirm-tags',
@@ -1554,6 +1610,7 @@
     glossarySearch: 'tagging-quiz-glossary-search',
     glossaryFilter: 'tagging-quiz-glossary-filter',
     glossaryList: 'tagging-quiz-glossary-list',
+    glossaryPanel: 'tagging-quiz-glossary-panel',
     glossaryTitle: 'tagging-quiz-glossary-title',
     glossaryClear: 'tagging-quiz-glossary-clear',
     glossaryOpen: 'tagging-quiz-glossary-open',
@@ -1634,13 +1691,13 @@
   let leftBackdropHome = null;
   let quizManualCheatsheetTags = null;
   let quizManualCheatsheetState = null;
-  const TAGS_PLACEHOLDER_DEFAULT = 'insert/delete: tag1, tag2   |   replace: old->new; old2->new2';
+  const TAGS_PLACEHOLDER_DEFAULT = 'add/remove: tag1, tag2   |   rename: old->new; old2->new2';
 
   const MODE_HELP = {
-    insert:"Insert: add missing tags to each .txt in dataset/_temp (comma-separated).",
-    delete:"Delete: remove specific tags from .txt in dataset/_temp.",
-    replace:"Replace: map old->new inside dataset/_temp.",
-    dedup:"Dedup: remove duplicate tags in dataset/_temp, keep the first occurrence."
+    insert:"Add Tags: append missing tags to each .txt in dataset/_temp.",
+    delete:"Remove Tags: delete specific tags from .txt files in dataset/_temp.",
+    replace:"Rename Tags: apply old->new mappings inside dataset/_temp.",
+    dedup:"Clean Duplicates: keep the first copy of each tag in dataset/_temp."
   };
   const MODE_CYCLE_ORDER = ['insert', 'delete', 'replace', 'dedup'];
   const MODE_CLASS = {
@@ -1784,7 +1841,7 @@
       return data;
     }catch(err){
       quizState.sections = [];
-      qSetStatus(`Cheatsheet warning: ${err.message}. Quiz can continue without recommendations.`, QUIZ.setupStatus);
+      qSetStatus(`Cheatsheet warning: ${err.message}. Tagging flow can continue without recommendations.`, QUIZ.setupStatus);
       qRenderCheatsheetList();
       return null;
     }
@@ -1794,6 +1851,7 @@
     const card = document.createElement('span');
     card.className = `quiz-card ${type === 'segment' ? 'segment' : ''}`;
     card.draggable = true;
+    card.tabIndex = 0;
     card.dataset.quizType = type;
     card.dataset.quizValue = value;
     card.innerHTML = `<span class="monospace">::</span><span>${escapeHtml(label)}</span>`;
@@ -1805,6 +1863,87 @@
       e.dataTransfer.setData('text/plain', `${type}:${value}`);
     });
     return card;
+  }
+
+  function qSectionTagGroups(section){
+    const seen = new Set();
+    const cleanTags = tags => qTags(tags || []).filter(tag => {
+      if (!tag || seen.has(tag)) return false;
+      seen.add(tag);
+      return true;
+    });
+    const base = cleanTags(section?.tags || []);
+    const conditional = [];
+    (section?.conditionals || []).forEach(group => conditional.push(...cleanTags(group || [])));
+    return {base, conditional, all: [...base, ...conditional]};
+  }
+
+  function qSectionPreview(section){
+    const preview = document.createElement('div');
+    preview.className = 'quiz-section-preview';
+    const groups = qSectionTagGroups(section);
+    const title = document.createElement('div');
+    title.className = 'quiz-section-preview-title';
+    const name = section?.name || section?.category || 'Section';
+    title.textContent = `${name} | ${groups.all.length} tag${groups.all.length === 1 ? '' : 's'}`;
+    preview.appendChild(title);
+    if (!groups.all.length){
+      const empty = document.createElement('div');
+      empty.className = 'quiz-section-preview-empty';
+      empty.textContent = 'No tags found in this section.';
+      preview.appendChild(empty);
+      return preview;
+    }
+    const list = document.createElement('div');
+    list.className = 'quiz-section-preview-tags';
+    groups.all.slice(0, 80).forEach(tag => {
+      const chip = document.createElement('span');
+      chip.className = 'quiz-section-preview-tag';
+      chip.textContent = tag;
+      list.appendChild(chip);
+    });
+    preview.appendChild(list);
+    if (groups.all.length > 80){
+      const more = document.createElement('div');
+      more.className = 'quiz-section-preview-more';
+      more.textContent = `+${groups.all.length - 80} more tags`;
+      preview.appendChild(more);
+    }
+    return preview;
+  }
+
+  function qShowSectionTagDetail(section){
+    const host = get(QUIZ.cheatDetail);
+    if (!host) return;
+    host.innerHTML = '';
+    if (!section){
+      const preview = document.createElement('div');
+      preview.className = 'quiz-section-preview';
+      const title = document.createElement('div');
+      title.className = 'quiz-section-preview-title';
+      title.textContent = 'Section tags';
+      const empty = document.createElement('div');
+      empty.className = 'quiz-section-preview-empty';
+      empty.textContent = 'Hover a parsed cheatsheet section to inspect its tags before mapping.';
+      preview.append(title, empty);
+      host.appendChild(preview);
+      return;
+    }
+    host.appendChild(qSectionPreview(section));
+  }
+
+  function qSectionSourceCard(section){
+    const name = section?.name || section?.category || '';
+    const groups = qSectionTagGroups(section);
+    const wrap = document.createElement('div');
+    wrap.className = 'quiz-section-source mb-1';
+    const card = qCard(`${name} (${groups.all.length})`, 'section', name);
+    card.title = groups.all.length ? groups.all.join(', ') : 'No tags found in this section.';
+    card.addEventListener('mouseenter', () => qShowSectionTagDetail(section));
+    card.addEventListener('focus', () => qShowSectionTagDetail(section));
+    card.addEventListener('click', () => qShowSectionTagDetail(section));
+    wrap.appendChild(card);
+    return wrap;
   }
 
   function qGhost(label){
@@ -1822,16 +1961,13 @@
     trigger.className = 'small text-muted mb-2';
     trigger.textContent = quizState.trigger ? `Trigger: ${quizState.trigger}` : 'Trigger not detected.';
     host.appendChild(trigger);
+    qShowSectionTagDetail(null);
     if (!quizState.sections.length){
       host.appendChild(qGhost('No sections loaded'));
       return;
     }
     quizState.sections.forEach(section => {
-      const name = section.name || section.category || '';
-      const wrap = document.createElement('div');
-      wrap.className = 'mb-1';
-      wrap.appendChild(qCard(`${name} (${(section.tags || []).length})`, 'section', name));
-      host.appendChild(wrap);
+      host.appendChild(qSectionSourceCard(section));
     });
   }
 
@@ -2092,7 +2228,7 @@
     });
     quizState.session = data.session;
     qUpdateResumeBanner();
-    qSetStatus((data.logs || ['Started quiz']).join(' | '));
+    qSetStatus((data.logs || ['Started tagging flow']).join(' | '));
     quizState.setupUsesCurrentSettings = false;
     quizState.setupModal?.hide();
     qOpenQuiz();
@@ -2125,8 +2261,8 @@
     const startBtn = get(QUIZ.start);
     const session = quizState.session;
     btn?.classList.toggle('d-none', !session || session.status !== 'active');
-    if (setupBtn) setupBtn.textContent = session && (session.mapping_rows || []).length ? 'Redo Mapping' : 'Quiz Starter Setup';
-    if (startBtn) startBtn.textContent = session && (session.mapping_rows || []).length ? 'Open Guided Quiz' : 'Start Guided Quiz';
+    if (setupBtn) setupBtn.textContent = session && (session.mapping_rows || []).length ? 'Edit Tagging Setup' : 'Tagging Setup';
+    if (startBtn) startBtn.textContent = session && (session.mapping_rows || []).length ? 'Open Tagging Flow' : 'Start Tagging';
     if (!banner) return;
     if (!session){
       banner.classList.add('d-none');
@@ -2140,7 +2276,7 @@
     const seg = qSegments().find(s => s.id === current.segment_id);
     const currentStep = current.free_tagging ? 'Free Tagging' : ((seg && seg.label) || current.segment_id || '-');
     banner.classList.remove('d-none');
-    banner.textContent = `Continue previous tagging session? Current: ${current.image_rel || '-'} / ${currentStep} | Completed ${completed}/${total} | Updated ${session.updated_at || '-'}${warnings.length ? ' | ' + warnings.join(' | ') : ''}`;
+    banner.textContent = `Resume: ${current.image_rel || '-'} / ${currentStep} | ${completed}/${total} done${warnings.length ? ' | ' + warnings.join(' | ') : ''}`;
   }
 
   function qCurrentImageRel(){
@@ -2240,6 +2376,7 @@
     const seg = qCurrentSegment();
     const state = qCurrentSegmentState();
     const freeMode = qIsFreeTaggingMode();
+    const singleChoiceMode = !freeMode && qIsSingleChoiceSegment(seg);
     const imageKeys = Object.keys(session.images || {});
     const storedIndex = Number(session.current?.image_index);
     const imageIndex = Math.max(0, Number.isFinite(storedIndex) ? storedIndex : imageKeys.indexOf(rel));
@@ -2259,13 +2396,17 @@
     }
     const manualInput = get(QUIZ.manual);
     if (manualInput){
+      if (singleChoiceMode && state) state.manual = [];
       manualInput.value = (state?.manual || []).join(', ');
-      manualInput.placeholder = (!freeMode && qIsSingleChoiceSegment(seg))
+      manualInput.placeholder = singleChoiceMode
         ? 'Choose one tag from this segment list'
         : 'tag1, tag2';
     }
     const manualHelp = get(QUIZ.manualHelp);
     if (manualHelp) manualHelp.textContent = qManualHelpText(seg);
+    get(QUIZ.manualBox)?.classList.toggle('d-none', singleChoiceMode);
+    get(QUIZ.glossaryPanel)?.classList.toggle('d-none', singleChoiceMode);
+    if (singleChoiceMode) qCancelManualConfirm(false);
     get(QUIZ.prev)?.toggleAttribute('disabled', freeMode);
     get(QUIZ.next)?.toggleAttribute('disabled', freeMode);
     get(QUIZ.skip)?.toggleAttribute('disabled', freeMode);
@@ -2287,7 +2428,7 @@
     if (applyBtn){
       applyBtn.textContent = freeMode
         ? 'Add to Caption'
-        : (qIsSingleChoiceSegment(seg) ? 'Use Option' : 'Add to Selected');
+        : (singleChoiceMode ? 'Use Option' : 'Add to Selected');
     }
     const stage = get(QUIZ.imageStage);
     if (stage) {
@@ -2665,7 +2806,7 @@
     const applyBtn = get(QUIZ.manualConfirmApply);
     if (!wrap || !tagsEl || !countEl || !cancelBtn || !applyBtn){
       const message = [
-        'Apply these tags to all quiz images?',
+        'Apply these tags to all session images?',
         '',
         'Tags:',
         tags.join(', '),
@@ -2778,7 +2919,7 @@
     qRenderManualUndo();
     qRenderQuiz();
     await qSaveSessionNow();
-    qSetManualStatus(`Applied ${actuallyAddedTags.length || 0} new tag(s) to ${Object.keys(addedByRel).length} quiz image(s).`);
+    qSetManualStatus(`Applied ${actuallyAddedTags.length || 0} new tag(s) to ${Object.keys(addedByRel).length} session image(s).`);
   }
 
   async function qApplyManualTagsToSelected(){
@@ -2820,7 +2961,7 @@
     qRenderManualUndo();
     qRenderQuiz();
     await qSaveSessionNow();
-    qSetManualStatus(`Undid apply-all for ${tagCount} tags on ${imageCount} quiz images.`);
+    qSetManualStatus(`Undid apply-all for ${tagCount} tags on ${imageCount} session image(s).`);
   }
 
   function qPrepareManualTag(rawTag){
@@ -3055,7 +3196,7 @@
       nextIndex += delta;
     }
     if (nextIndex < 0 || nextIndex >= images.length){
-      qSetStatus(delta < 0 ? 'No previous completed quiz image available.' : 'No next completed quiz image available.');
+      qSetStatus(delta < 0 ? 'No previous completed session image available.' : 'No next completed session image available.');
       return;
     }
     const [nextRel] = images[nextIndex];
@@ -3066,7 +3207,7 @@
       segment_id: '__free__',
       free_tagging: true,
     };
-    qSetStatus(`${delta < 0 ? 'Previous' : 'Next'} image opened in free tagging mode. Manual tags are not tied to a quiz segment.`);
+    qSetStatus(`${delta < 0 ? 'Previous' : 'Next'} image opened in free tagging mode. Manual tags are not tied to a tagging segment.`);
     qRenderQuiz();
     await qSaveSessionNow();
   }
@@ -3084,7 +3225,7 @@
       nextIndex += 1;
     }
     if (nextIndex >= images.length){
-      qSetStatus('No next quiz image available.');
+      qSetStatus('No next session image available.');
       return;
     }
     const [nextRel, nextEntry] = images[nextIndex];
@@ -3100,7 +3241,7 @@
       segment_id: (segments[0] || {}).id || '',
       free_tagging: false,
     };
-    qSetStatus('Next image opened in quiz mode.');
+    qSetStatus('Next image opened in guided tagging mode.');
     qRenderQuiz();
     await qSaveSessionNow();
   }
@@ -3272,7 +3413,10 @@
     get(QUIZ.deleteSession)?.addEventListener('click', qDeleteSession);
     get(QUIZ.archiveSession)?.addEventListener('click', qArchiveSession);
     get(QUIZ.setupModal)?.addEventListener('hidden.bs.modal', () => { quizState.setupUsesCurrentSettings = false; });
-    get(QUIZ.quizModal)?.addEventListener('hide.bs.modal', () => qScheduleSessionSave(true));
+    get(QUIZ.quizModal)?.addEventListener('hide.bs.modal', () => {
+      get(QUIZ.hotkeys)?.removeAttribute('open');
+      qScheduleSessionSave(true);
+    });
   }
 
   function getModeValue(){
@@ -3431,7 +3575,7 @@
     const mode = getModeValue();
     let msg = '';
     if (!mode){
-      msg = 'Select a mode -> choose tags -> Run.';
+      msg = 'Open Bulk Tag CRUD when you need direct tag edits.';
       if (tagVizState.selected.size){
         msg += tagsSyncEnabled
           ? ' Selection auto-syncs to Tags / mapping.'
@@ -3443,14 +3587,14 @@
       return;
     }
     if (mode === 'replace') {
-      msg = 'Replace mode: selection formats as "tag->" entries.';
+      msg = 'Rename Tags formats selections as "tag->" entries.';
     } else if (mode === 'dedup') {
-      msg = 'Dedup mode removes duplicates; Tags input is ignored.';
+      msg = 'Clean Duplicates ignores the Tags field.';
     } else {
-      msg = 'Select tags -> choose mode -> Run.';
+      msg = 'Choose tags, pick an action, then Run.';
     }
     if (mode === 'insert' || mode === 'delete' || mode === 'replace' || mode === 'dedup'){
-      msg += ' Edits run on dataset/_temp only; send items there from the Dataset Browser first.';
+      msg += ' Runs on dataset/_temp only.';
     }
     if (tagVizState.selected.size){
       msg += tagsSyncEnabled
@@ -3477,7 +3621,7 @@
     const dedupMode = getModeValue() === 'dedup';
     input.readOnly = dedupMode;
     input.placeholder = dedupMode
-      ? 'Dedup mode: Tags / mapping is ignored.'
+      ? 'Clean Duplicates ignores this field.'
       : TAGS_PLACEHOLDER_DEFAULT;
   }
 
@@ -3579,6 +3723,7 @@
   function setProjectChip(id, value){
     const el = get(id);
     if (!el) return;
+    el.classList.add('project-path-chip');
     el.textContent = value || '...';
     el.title = value || '';
   }
@@ -3608,7 +3753,7 @@
     const wrap = get(PROJECT.infoList);
     if (!wrap) return;
     wrap.innerHTML = '';
-    (messages || []).forEach(message=>{
+    (messages || []).filter(Boolean).slice(0, 2).forEach(message=>{
       if (!message) return;
       const row = document.createElement('div');
       row.textContent = message;
@@ -3653,18 +3798,18 @@
     const active = !!quizManualCheatsheetState?.active;
     preview?.classList.toggle('d-none', !active);
     if (!active || !preview || !stage || !tags) return;
-    if (name) name.textContent = quizManualCheatsheetState.rel || 'Current quiz image';
+    if (name) name.textContent = quizManualCheatsheetState.rel || 'Current tagging image';
     stage.innerHTML = '';
     if (quizManualCheatsheetState.image_url){
       const image = document.createElement('img');
       image.className = 'left-drawer-quiz-preview-img';
       image.src = quizManualCheatsheetState.image_url;
-      image.alt = quizManualCheatsheetState.rel || 'Current quiz image';
+      image.alt = quizManualCheatsheetState.rel || 'Current tagging image';
       stage.appendChild(image);
     } else {
       const empty = document.createElement('div');
       empty.className = 'left-drawer-quiz-preview-empty';
-      empty.textContent = 'No quiz image loaded.';
+      empty.textContent = 'No tagging image loaded.';
       stage.appendChild(empty);
     }
     tags.innerHTML = '';
@@ -3777,7 +3922,6 @@
     if (shouldInline){
       if (!inlineHost.contains(panel)) inlineHost.appendChild(panel);
       inlineHost.classList.remove('d-none');
-      panel.open = true;
       if (projectBtn){
         projectBtn.classList.add('d-none');
         projectBtn.disabled = true;
@@ -3801,7 +3945,7 @@
     if (banner){
       banner.classList.toggle('d-none', !locked);
       banner.textContent = locked
-        ? 'Workspace is locked until project setup is complete. Finish Project Setup first.'
+        ? 'Set up the project first. After that, the tagging flow and dataset tools unlock.'
         : '';
     }
     layout.querySelectorAll('.workspace-lock-target').forEach(el=>{
@@ -3831,13 +3975,14 @@
     const folderCol = get(IDS.folder)?.closest('.col-md-4');
     const extsCol = get(IDS.exts)?.closest('.col-md-4');
     const editCol = get(IDS.fixedWorkdir)?.closest('.col-md-4');
+    const quizCol = get(QUIZ.start)?.closest('.col-md-12');
     const projectStatusCol = get(PROJECT.summary)?.closest('.col-md-12');
     const tagExplorerCol = get(TAGVIZ.cloud)?.closest('.col-md-12');
     const gallerySection = row?.querySelector('.gallery-section');
     const galleryCol = gallerySection?.closest('.col-md-12');
     const cheatsheet = gallerySection?.querySelector('.gallery-cheatsheet');
 
-    if (!layout || !form || !row || !gallerySection || !sidebar || !editorPanel || !workdirPanel || !folderCol || !extsCol || !editCol || !projectStatusCol || !tagExplorerCol || layout.dataset.workflowReady === '1'){
+    if (!layout || !form || !row || !gallerySection || !sidebar || !editorPanel || !workdirPanel || !folderCol || !extsCol || !editCol || !quizCol || !projectStatusCol || !tagExplorerCol || layout.dataset.workflowReady === '1'){
       return;
     }
     layout.dataset.workflowReady = '1';
@@ -3911,7 +4056,7 @@
     quizPreview.innerHTML = `
       <div class="left-drawer-quiz-preview-head">
         <div>
-          <div class="left-drawer-quiz-preview-title">Manual Quiz Image</div>
+          <div class="left-drawer-quiz-preview-title">Manual Tagging Image</div>
           <div class="left-drawer-quiz-preview-name" id="${LEFT.cheatQuizPreviewName}"></div>
         </div>
         <span class="badge text-bg-info">Live preview</span>
@@ -3923,38 +4068,35 @@
     cheatDrawer.querySelector('.left-drawer-body')?.appendChild(quizPreview);
 
     const projectDrawer = document.createElement('aside');
-    projectDrawer.className = 'left-drawer';
+    projectDrawer.className = 'left-drawer left-drawer-project-setup';
     projectDrawer.id = LEFT.projectPanel;
     projectDrawer.setAttribute('aria-hidden', 'true');
     projectDrawer.innerHTML = `
       <div class="left-drawer-head">
         <div>
           <div class="left-drawer-title">Project Setup</div>
-          <div class="left-drawer-subtitle">Project readiness, root input, and initialization controls.</div>
+          <div class="left-drawer-subtitle">Choose a root and prepare folders.</div>
         </div>
         <button type="button" class="btn btn-sm btn-outline-light" id="${LEFT.projectClose}">Close</button>
       </div>
       <div class="left-drawer-body"></div>
     `;
 
-    const setupPanel = document.createElement('details');
+    const setupPanel = document.createElement('section');
     setupPanel.id = PROJECT.panel;
     setupPanel.className = 'project-setup-card';
-    setupPanel.open = true;
     setupPanel.innerHTML = `
-      <summary>
-        <div class="project-setup-summary">
-          <div>
-            <div class="project-setup-title">Project Setup</div>
-            <div class="project-setup-compact" id="${PROJECT.compactSummary}">Project root not checked yet.</div>
-            <div class="project-setup-compact-note" id="${PROJECT.compactNote}"></div>
-          </div>
-          <div class="project-status-ribbon">
-            <span class="project-status-pill" id="${PROJECT.compactStatusPill}">Unchecked</span>
-            <span class="project-status-pill" id="${PROJECT.compactTriggerPill}">Trigger not detected</span>
-          </div>
+      <div class="project-setup-summary">
+        <div>
+          <div class="project-setup-title">Project Setup</div>
+          <div class="project-setup-compact" id="${PROJECT.compactSummary}">Project root not checked yet.</div>
+          <div class="project-setup-compact-note" id="${PROJECT.compactNote}"></div>
         </div>
-      </summary>
+        <div class="project-status-ribbon">
+          <span class="project-status-pill" id="${PROJECT.compactStatusPill}">Unchecked</span>
+          <span class="project-status-pill" id="${PROJECT.compactTriggerPill}">Trigger not detected</span>
+        </div>
+      </div>
     `;
     const setupBody = document.createElement('div');
     setupBody.className = 'project-setup-body';
@@ -3973,7 +4115,6 @@
 
     const rightCol = sidebar;
     rightCol.className = 'tag-editor-right';
-    rightCol.classList.add('workspace-lock-target');
     const tagExplorerPanel = tagExplorerCol.querySelector('.tag-explorer');
     rightCol.innerHTML = '';
     if (workdirRefresh){
@@ -3993,7 +4134,61 @@
         workdirPanel.appendChild(workspaceSend);
       }
     }
-    if (tagExplorerPanel) rightCol.appendChild(tagExplorerPanel);
+    const zipBtn = editorPanel.querySelector('#btn-dataset-zip') || get('btn-dataset-zip');
+    if (zipBtn){
+      zipBtn.classList.add('w-100');
+      const exportPanel = document.createElement('section');
+      exportPanel.className = 'dataset-export-panel workspace-lock-target';
+      exportPanel.innerHTML = `
+        <div class="dataset-export-head">
+          <div>
+            <div class="dataset-export-title">Dataset Export</div>
+            <div class="dataset-export-note">Create a zip from dataset/ without opening Bulk Tag CRUD.</div>
+          </div>
+        </div>
+      `;
+      exportPanel.appendChild(zipBtn);
+      rightCol.appendChild(exportPanel);
+    }
+    const bulkPanel = document.createElement('details');
+    bulkPanel.className = 'advanced-tool-panel';
+    bulkPanel.innerHTML = `
+      <summary>
+        <span>
+          <span class="advanced-tool-title">Bulk Tag CRUD</span>
+          <span class="advanced-tool-note d-block">Optional tools for direct add, remove, rename, and cleanup actions.</span>
+        </span>
+        <span class="advanced-tool-chevron">Advanced</span>
+      </summary>
+      <div class="advanced-tool-body"></div>
+    `;
+    const bulkBody = bulkPanel.querySelector('.advanced-tool-body');
+    if (bulkBody){
+      const explorerSection = document.createElement('div');
+      explorerSection.className = 'bulk-crud-section';
+      explorerSection.innerHTML = '<div class="bulk-crud-section-title">Find Tags</div>';
+      if (tagExplorerPanel) {
+        explorerSection.appendChild(tagExplorerPanel);
+      } else {
+        const missingExplorer = document.createElement('div');
+        missingExplorer.className = 'small text-warning';
+        missingExplorer.textContent = 'Tag Explorer is unavailable. Refresh the page and scan tags again.';
+        explorerSection.appendChild(missingExplorer);
+      }
+      const composerSection = document.createElement('div');
+      composerSection.className = 'bulk-crud-section';
+      composerSection.innerHTML = '<div class="bulk-crud-section-title">Edit Tags</div>';
+      composerSection.appendChild(editorPanel);
+      bulkBody.append(explorerSection, composerSection);
+    }
+    bulkPanel.addEventListener('toggle', ()=>{
+      if (!bulkPanel.open) return;
+      requestAnimationFrame(()=>{
+        bulkPanel.scrollIntoView({ block:'nearest', behavior:'smooth' });
+      });
+    });
+    rightCol.appendChild(bulkPanel);
+    workdirPanel.classList.add('workspace-lock-target');
     rightCol.appendChild(workdirPanel);
 
     workdirPanel.querySelectorAll('.workdir-head .small.text-muted, .workdir-quick-drop .small.text-muted').forEach(el=>{
@@ -4014,7 +4209,6 @@
     });
 
     editorPanel.classList.add('tag-composer-stick');
-    editorPanel.classList.add('workspace-lock-target');
     const logWrap = editorPanel.querySelector(`#${IDS.logWrap}`) || get(IDS.logWrap);
     if (logWrap){
       logWrap.classList.remove('mt-2');
@@ -4045,40 +4239,6 @@
     const previewLabel = Array.from(editorPanel.querySelectorAll('.form-label'))
       .find(el => /effective paths preview/i.test(el.textContent || ''));
     previewLabel?.closest('div')?.remove();
-    editorPanel.querySelector('#btn-undo')?.remove();
-    const runBar = editorPanel.querySelector('.sidebar-runbar');
-    const runBtn = editorPanel.querySelector('#btn-run');
-    const quizBtn = editorPanel.querySelector('#quiz-review-open');
-    const zipBtn = editorPanel.querySelector('#btn-dataset-zip');
-    const clearBtn = editorPanel.querySelector('#btn-clear');
-    const backupWrap = editorPanel.querySelector('#backup')?.closest('.form-check');
-    if (runBtn && clearBtn && backupWrap){
-      let inlineTools = editorPanel.querySelector('.composer-inline-tools');
-      if (!inlineTools){
-        inlineTools = document.createElement('div');
-        inlineTools.className = 'composer-inline-tools';
-      }
-      let inlineActions = inlineTools.querySelector('.composer-inline-actions');
-      if (!inlineActions){
-        inlineActions = document.createElement('div');
-        inlineActions.className = 'composer-inline-actions';
-        inlineTools.appendChild(inlineActions);
-      }
-      inlineActions.append(runBtn);
-      if (quizBtn) inlineActions.append(quizBtn);
-      if (zipBtn) inlineActions.append(zipBtn);
-      inlineActions.append(clearBtn);
-      backupWrap.classList.remove('mt-2');
-      backupWrap.classList.add('composer-inline-backup');
-      inlineTools.appendChild(backupWrap);
-      const tagsInput = editorPanel.querySelector('#tags');
-      if (tagsInput){
-        tagsInput.insertAdjacentElement('afterend', inlineTools);
-      } else if (!inlineTools.parentElement){
-        editorPanel.insertBefore(inlineTools, runBar || editorPanel.firstChild);
-      }
-      runBar?.remove();
-    }
 
     const lockBanner = document.createElement('div');
     lockBanner.id = LAYOUT.lockBanner;
@@ -4089,13 +4249,11 @@
     inlineProjectHost.className = 'project-inline-host d-none';
 
     gallerySection.classList.add('workspace-lock-target');
+    quizCol.classList.add('workspace-lock-target');
 
     const mainCol = document.createElement('div');
     mainCol.className = 'tag-editor-main';
-    mainCol.append(lockBanner, inlineProjectHost, gallerySection, editorPanel);
-    if (logWrap){
-      mainCol.appendChild(logWrap);
-    }
+    mainCol.append(lockBanner, inlineProjectHost, quizCol, gallerySection);
 
     const content = document.createElement('div');
     content.className = 'tag-editor-content';
@@ -4143,7 +4301,6 @@
     setProjectChip(PROJECT.datasetChip, getDatasetRoot());
     setProjectChip(PROJECT.tempChip, getTempRoot());
     setProjectChip(PROJECT.promptChip, projectState.promptPath || '');
-    const projectPanel = get(PROJECT.panel);
     const summary = get(PROJECT.summary);
     const note = get(PROJECT.note);
     const compactSummary = get(PROJECT.compactSummary);
@@ -4155,21 +4312,17 @@
     const preview = projectState.initPreview || null;
     const warnings = Array.isArray(projectState.warnings) ? projectState.warnings : [];
     const info = Array.isArray(projectState.info) ? projectState.info : [];
-    let summaryText = 'Checking project state...';
-    let compactText = 'Project root not checked yet.';
+    let summaryText = 'Checking project...';
+    let compactText = 'Choose a project root.';
     if (!getProjectRootInput()){
-      summaryText = 'Project root not set.';
-      compactText = 'Paste the source image folder path to begin.';
+      summaryText = 'Choose a folder to begin.';
+      compactText = 'Choose a folder to begin.';
     } else if (projectState.ready){
-      summaryText = 'Ready: required folders/files, mirrored images, and dataset .txt pairs are complete.';
-      compactText = 'Workspace ready. Open this panel only when you need to change paths or re-check structure.';
+      summaryText = 'Ready for tagging.';
+      compactText = 'Ready for tagging.';
     } else if (projectState.needsInit){
-      summaryText = missingItems.length
-        ? `Needs initialization. Missing: ${missingItems.join(', ')}.`
-        : 'Needs initialization or structure is incomplete.';
-      compactText = missingItems.length
-        ? `Needs init: ${missingItems.join(', ')}`
-        : 'Needs initialization.';
+      summaryText = 'Project setup needed.';
+      compactText = 'Project setup needed.';
     }
     if (summary) summary.textContent = summaryText;
     if (compactSummary) compactSummary.textContent = compactText;
@@ -4179,12 +4332,11 @@
     if (projectState.triggerWord) noteParts.push(`Trigger: ${projectState.triggerWord}`);
     if (!projectState.ready && preview){
       const previewParts = [];
-      if ((preview.create_dirs || []).length) previewParts.push(`create ${(preview.create_dirs || []).join(', ')}`);
-      if ((preview.copy_images || 0) > 0) previewParts.push(`move ${preview.copy_images} root image(s) to database`);
-      if ((preview.copy_dataset_images || 0) > 0) previewParts.push(`copy ${preview.copy_dataset_images} image(s) to dataset`);
-      if ((preview.generate_txt || 0) > 0) previewParts.push(`generate ${preview.generate_txt} txt file(s)`);
-      if ((preview.conflict_rename || 0) > 0) previewParts.push(`${preview.conflict_rename} rename conflict(s)`);
-      if (previewParts.length) noteParts.push(`Init will ${previewParts.join(', ')}.`);
+      if ((preview.create_dirs || []).length) previewParts.push('create folders');
+      if ((preview.copy_images || 0) > 0 || (preview.copy_dataset_images || 0) > 0) previewParts.push('copy images');
+      if ((preview.generate_txt || 0) > 0) previewParts.push('create captions');
+      if ((preview.conflict_rename || 0) > 0) previewParts.push('rename conflicts safely');
+      if (previewParts.length) noteParts.push(`Initialize will ${previewParts.join(', ')}.`);
     }
     const noteText = noteParts.join(' ');
     if (note) note.textContent = noteText;
@@ -4214,24 +4366,20 @@
 
     const cueItems = [];
     missingItems.forEach(item=> cueItems.push({ label: `Missing ${item}`, tone: 'is-missing' }));
-    (preview?.create_dirs || []).forEach(item=> cueItems.push({ label: `Will create ${item}`, tone: 'is-warning' }));
-    if ((preview?.copy_images || 0) > 0) cueItems.push({ label: `Move ${preview.copy_images} root image(s) to database`, tone: 'is-warning' });
-    if ((preview?.copy_dataset_images || 0) > 0) cueItems.push({ label: `Copy ${preview.copy_dataset_images} image(s) to dataset`, tone: 'is-warning' });
-    if ((preview?.generate_txt || 0) > 0) cueItems.push({ label: `Generate ${preview.generate_txt} txt`, tone: 'is-warning' });
-    if ((preview?.conflict_rename || 0) > 0) cueItems.push({ label: `${preview.conflict_rename} rename conflict(s)`, tone: 'is-warning' });
-    if (!getProjectRootInput() && !cueItems.length) cueItems.push({ label: 'Set project root first', tone: 'is-warning' });
-    if (projectState.ready && !cueItems.length) cueItems.push({ label: 'Project structure is complete', tone: 'is-ready' });
+    if ((preview?.create_dirs || []).length) cueItems.push({ label: 'Create folders', tone: 'is-warning' });
+    if ((preview?.copy_images || 0) > 0 || (preview?.copy_dataset_images || 0) > 0) cueItems.push({ label: `Copy images: ${(preview?.copy_images || 0) + (preview?.copy_dataset_images || 0)}`, tone: 'is-warning' });
+    if ((preview?.generate_txt || 0) > 0) cueItems.push({ label: `Create captions: ${preview.generate_txt}`, tone: 'is-warning' });
+    if ((preview?.conflict_rename || 0) > 0) cueItems.push({ label: `Rename conflicts: ${preview.conflict_rename}`, tone: 'is-warning' });
+    if (!getProjectRootInput() && !cueItems.length) cueItems.push({ label: 'Choose folder', tone: 'is-warning' });
+    if (projectState.ready && !cueItems.length) cueItems.push({ label: 'Ready', tone: 'is-ready' });
     renderProjectCueList(cueItems);
     renderProjectInfoList([...warnings, ...info]);
 
-    if (projectPanel){
-      projectPanel.open = !projectState.ready || projectState.needsInit || !getProjectRootInput();
-    }
     if (initBtn) initBtn.classList.toggle('d-none', !projectState.needsInit);
     if (planWrap && plan){
       if (preview && projectState.needsInit){
         planWrap.classList.remove('d-none');
-        plan.textContent = `Init preview: ${preview.root_images_found || 0} root image(s), ${preview.copy_dataset_images || 0} copy to dataset, ${preview.generate_txt || 0} txt, ${preview.copy_images || 0} move to database, ${preview.conflict_rename || 0} rename conflict(s), ${preview.skip_images || 0} skipped.`;
+        plan.textContent = 'Initialize creates missing folders, copies images, and creates captions. Existing files are kept.';
       } else {
         planWrap.classList.add('d-none');
         plan.textContent = '';
@@ -4332,8 +4480,9 @@
     }
     if (preview && preview.ready) return;
     const initPreview = preview?.init_preview || {};
+    const imageCount = (initPreview.copy_dataset_images || 0) + (initPreview.copy_images || 0);
     const confirmed = await showConfirm(
-      `Initialize project root? Create dirs: ${(initPreview.create_dirs || []).join(', ') || 'none'} | Copy to dataset: ${initPreview.copy_dataset_images || 0} | Generate txt: ${initPreview.generate_txt || 0} | Move root images to database: ${initPreview.copy_images || 0} | Rename conflicts: ${initPreview.conflict_rename || 0}`,
+      `Initialize this project? Missing folders will be created, ${imageCount} image(s) prepared, and ${initPreview.generate_txt || 0} caption file(s) created. Existing files stay untouched.`,
       'Initialize Project'
     );
     if (!confirmed) return;
@@ -8774,7 +8923,7 @@
     const tagsInput = get('tags');
 
     if(tagsInput){
-      tagsInput.placeholder = 'insert/delete: tag1, tag2   |   replace: old->new; old2->new2';
+      tagsInput.placeholder = TAGS_PLACEHOLDER_DEFAULT;
     }
     attachGlossarySuggest(tagsInput);
     attachGlossarySuggest(get(GALLERY.modalAddInput));

@@ -4,6 +4,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict, Any
 from flask import Flask, render_template, request, flash, jsonify, redirect, url_for, session, send_file
+from markupsafe import Markup, escape
 from dotenv import load_dotenv
 from PIL import Image
 
@@ -27,10 +28,26 @@ app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-dev-dev")
 app.config["APP_NAME"] = APP_NAME
 
+
+@app.template_filter("guide_inline")
+def guide_inline(value: Any) -> Markup:
+    text = str(value or "")
+    parts = re.split(r"(`[^`]+`|\*\*[^*]+\*\*)", text)
+    rendered: List[str] = []
+    for part in parts:
+        if part.startswith("`") and part.endswith("`") and len(part) >= 2:
+            rendered.append(f"<code>{escape(part[1:-1])}</code>")
+        elif part.startswith("**") and part.endswith("**") and len(part) >= 4:
+            rendered.append(f"<strong>{escape(part[2:-2])}</strong>")
+        else:
+            rendered.append(str(escape(part)))
+    return Markup("".join(rendered))
+
 # Work dir
 WORK_DIR = os.getenv("WORK_DIR", "").strip() or str(Path(__file__).parent.joinpath("_work"))
 Path(WORK_DIR).mkdir(parents=True, exist_ok=True)
 TAG_EDITOR_GLOSSARY_PATH = Path(__file__).parent / "tag_editor_glossary.json"
+README_PATH = Path(__file__).parent / "README.md"
 
 # Dataset normalization preset root
 NORMALIZE_PRESET_ROOT = Path(__file__).parent / "presets"
@@ -50,6 +67,140 @@ BATCH_ADJUST_PARAM_KEYS = [
     "sharpness",
     "vignette",
 ]
+
+WORKFLOW_GUIDE_META = [
+    {"readme_title": "Image -> PNG Converter", "id": "webp", "icon": "images", "title": "Image to PNG Converter"},
+    {"readme_title": "Photo Adjust (preset)", "id": "batch", "icon": "sliders2", "title": "Photo Adjust"},
+    {"readme_title": "Brush Blur", "id": "blur", "icon": "brush", "title": "Brush Blur"},
+    {"readme_title": "Webtoon Panel Splitter", "id": "webtoon", "icon": "scissors", "title": "Webtoon Panel Splitter"},
+    {"readme_title": "Stitch Groups", "id": "merge", "icon": "columns-gap", "title": "Stitch Groups"},
+    {"readme_title": "Flatten & Renumber", "id": "rename", "icon": "sort-numeric-down", "title": "Flatten & Renumber"},
+    {"readme_title": "Combine Dataset", "id": "combine", "icon": "collection", "title": "Combine Dataset"},
+    {"readme_title": "Dataset Tag Editor", "id": "tags", "icon": "tags", "title": "Dataset Tag Editor"},
+    {"readme_title": "Dataset Normalization", "id": "normalize", "icon": "funnel", "title": "Dataset Normalization"},
+    {"readme_title": "Offline Tagger (WD v3)", "id": "offline", "icon": "cpu", "title": "Offline Tagger (WD v3)"},
+    {"readme_title": "CLIP Token Check", "id": "clip-tokens", "icon": "body-text", "title": "CLIP Token Check"},
+    {"readme_title": "Pipeline (beta)", "id": "pipeline", "icon": "diagram-3", "title": "Pipeline (beta)"},
+    {"readme_title": "Tag Glossary Wiki", "id": "tag-wiki", "icon": "journal-richtext", "title": "Tag Glossary Wiki"},
+    {"readme_title": "Settings", "id": "settings", "icon": "gear", "title": "Settings"},
+]
+
+WORKFLOW_GUIDE_GROUP_HEADINGS = {"Image Tools", "Dataset Assembly", "Tag Tools"}
+WORKFLOW_GUIDE_USE_LABELS = {"Cara pakai", "Cara pakai (disarankan)"}
+WORKFLOW_GUIDE_WATCH_LABELS = {"Perhatian"}
+
+
+def _normalize_guide_label(raw: str) -> str:
+    return re.sub(r"\s+", " ", str(raw or "").strip().rstrip(":"))
+
+
+def _readme_heading_title(line: str, level: int) -> str:
+    prefix = "#" * level
+    if not line.startswith(prefix + " "):
+        return ""
+    return line[len(prefix):].strip()
+
+
+def _append_readme_item(items: List[Dict[str, Any]], current: Optional[Dict[str, Any]]) -> None:
+    if current and current.get("title"):
+        current["raw_lines"] = current.get("raw_lines") or []
+        items.append(current)
+
+
+def _extract_workflow_readme_items(readme_text: str) -> Dict[str, Dict[str, Any]]:
+    lines = readme_text.splitlines()
+    start = 0
+    for idx, line in enumerate(lines):
+        if line.startswith("## 5) "):
+            start = idx + 1
+            break
+
+    items: List[Dict[str, Any]] = []
+    current_group = ""
+    current: Optional[Dict[str, Any]] = None
+    for raw_line in lines[start:]:
+        if raw_line.startswith("## ") and not raw_line.startswith("### "):
+            break
+        h3 = _readme_heading_title(raw_line, 3)
+        h4 = _readme_heading_title(raw_line, 4)
+        if h3:
+            _append_readme_item(items, current)
+            current = None
+            if h3 in WORKFLOW_GUIDE_GROUP_HEADINGS:
+                current_group = h3
+            else:
+                current_group = ""
+                current = {"title": h3, "group": "", "raw_lines": []}
+            continue
+        if h4:
+            _append_readme_item(items, current)
+            current = {"title": h4, "group": current_group, "raw_lines": []}
+            continue
+        if current is not None:
+            current["raw_lines"].append(raw_line)
+
+    _append_readme_item(items, current)
+    return {str(item["title"]).lower(): item for item in items}
+
+
+def _parse_readme_item_sections(raw_lines: List[str]) -> Dict[str, List[str]]:
+    sections: Dict[str, List[str]] = {}
+    active_label = ""
+    for raw_line in raw_lines:
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.endswith(":") and not line.startswith("- "):
+            active_label = _normalize_guide_label(line)
+            sections.setdefault(active_label, [])
+            continue
+        if line.startswith("- "):
+            label = active_label or "Notes"
+            sections.setdefault(label, []).append(line[2:].strip())
+            continue
+        if active_label:
+            sections.setdefault(active_label, []).append(line)
+    return sections
+
+
+def _readme_workflow_guide_items() -> List[Dict[str, Any]]:
+    try:
+        readme_text = README_PATH.read_text(encoding="utf-8")
+    except Exception:
+        readme_text = ""
+    readme_items = _extract_workflow_readme_items(readme_text)
+
+    out: List[Dict[str, Any]] = []
+    for meta in WORKFLOW_GUIDE_META:
+        source = readme_items.get(str(meta["readme_title"]).lower(), {})
+        sections = _parse_readme_item_sections(source.get("raw_lines") or [])
+        steps: List[str] = []
+        watch: List[str] = []
+        details: List[Dict[str, Any]] = []
+        for label, values in sections.items():
+            clean_values = [value for value in values if value]
+            if not clean_values:
+                continue
+            if label in WORKFLOW_GUIDE_USE_LABELS:
+                steps.extend(clean_values)
+            elif label in WORKFLOW_GUIDE_WATCH_LABELS:
+                watch.extend(clean_values)
+            else:
+                details.append({"label": label, "items": clean_values})
+
+        summary = steps[0] if steps else (watch[0] if watch else "See README for this tool's usage notes.")
+        out.append({
+            "group": source.get("group", meta.get("group", "")),
+            "id": meta["id"],
+            "icon": meta["icon"],
+            "title": meta["title"],
+            "source_title": meta["readme_title"],
+            "summary": summary,
+            "steps": steps,
+            "details": details,
+            "watch": watch,
+        })
+    return out
 
 
 def _review_quiz_tagging_settings() -> Dict[str, Any]:
@@ -658,7 +809,7 @@ def api_settings_review_quiz_save():
     except ValueError as exc:
         return _json_error(str(exc), 400)
     except Exception as exc:
-        return _json_error(f"Could not save Quiz Review settings: {exc}", 500)
+        return _json_error(f"Could not save Guided Tagging Flow settings: {exc}", 500)
     return jsonify({"ok": True, "config": saved, "warnings": [], "info": []})
 
 
@@ -667,7 +818,7 @@ def api_settings_review_quiz_reset():
     try:
         saved = review_quiz.reset_review_quiz_config()
     except Exception as exc:
-        return _json_error(f"Could not reset Quiz Review settings: {exc}", 500)
+        return _json_error(f"Could not reset Guided Tagging Flow settings: {exc}", 500)
     return jsonify({"ok": True, "config": saved, "warnings": [], "info": []})
 
 
@@ -790,8 +941,8 @@ def api_tagging_quiz_settings_post():
     try:
         saved = tag_editor.save_tagging_quiz_settings(payload.get("settings") if "settings" in payload else payload)
     except Exception as exc:
-        return _json_error(f"Could not save tagging quiz settings: {exc}", 500)
-    return jsonify({"ok": True, "settings": saved, "warnings": [], "info": ["Tagging quiz settings saved"]})
+        return _json_error(f"Could not save Guided Tagging Flow settings: {exc}", 500)
+    return jsonify({"ok": True, "settings": saved, "warnings": [], "info": ["Guided Tagging Flow settings saved"]})
 
 
 @app.post("/api/tagging-quiz/cheatsheet/parse")
@@ -2213,7 +2364,8 @@ def index():
         active_tab=active_tab,
         log=log,
         presets=PRESET_FILES,
-        work_dir=str(WORK_DIR)
+        work_dir=str(WORK_DIR),
+        workflow_guide_items=_readme_workflow_guide_items(),
     )
 
 
