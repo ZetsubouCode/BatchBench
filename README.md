@@ -3,8 +3,8 @@
 A tiny Flask site you can run on your own PC (**localhost**) with simple menus that wrap common batch utilities:
 
 - **Workflow Guide**
-- **Image Tools**: Image -> PNG converter, Photo Adjust, Brush Blur
-- **Dataset Assembly**: Webtoon Panel Splitter, Stitch Groups, Flatten & Renumber, Combine Dataset
+- **Image Tools**: Image -> PNG converter, Photo Adjust, Brush Blur, Manga Palette Helper
+- **Dataset Assembly**: EPUB Image Extractor, Webtoon Panel Splitter, Stitch Groups, Flatten & Renumber, Combine Dataset
 - **Tag Tools**: Dataset Tag Editor, Dataset Normalization, Offline Tagger (WD v3), CLIP Token Check
 - **Pipeline (beta)** with reorderable step cards
 - **Tag Glossary Wiki**
@@ -146,7 +146,47 @@ Perhatian:
 - Gunakan Preview Result sebelum menyimpan.
 - Tool ini memproses satu gambar per kali dan cocok untuk touch-up area tertentu.
 
+#### Manga Palette Helper
+Cara pakai:
+- Pilih warna dasar dari color wheel, hex input, color picker, EyeDropper, atau warna hasil SVG sampler.
+- Gunakan hasil Triadic Scheme untuk memilih warna utama, aksen mata, dan detail kontras.
+- Load gambar manga hitam putih jika ingin membuat SVG pixel sampler, lalu klik warna dominan atau cell SVG untuk mengambil warna.
+Parameter:
+- Color/Gray wheel: Color menampilkan roda warna, Gray menampilkan value map grayscale dengan posisi hue yang sama.
+- Hex dan Picker: keduanya sinkron; input hex mengubah warna, color picker menghasilkan hex.
+- Sat dan Light: mengatur saturasi dan lightness untuk seluruh triadic palette.
+- SVG pixels: resolusi sampling raster sebelum dibuat menjadi SVG cell terpisah.
+- Cell dan Gap: ukuran visual cell SVG dan jarak antar cell.
+- Levels: jumlah level kuantisasi warna untuk menyederhanakan hasil sampling.
+- Ignore white paper: mengabaikan area putih/kertas saat mencari warna dominan.
+Perhatian:
+- Tool ini tidak menulis file kecuali tombol download SVG dipakai.
+- SVG sampler dibuat di browser; gambar sangat besar akan diturunkan resolusinya agar tetap responsif.
+
 ### Dataset Assembly
+
+#### EPUB Image Extractor
+Cara pakai:
+- Extract images from EPUB files into normal folders.
+- Pick one EPUB or a folder of EPUBs.
+- Pick an output folder.
+- Keep reading order on and dry-run first.
+- Run extract, then use PNG Converter / Group Renamer / Webtoon Splitter if needed.
+Best:
+- Best before renaming, converting, splitting, or tagging images from an ebook/comic source.
+Parameter:
+- EPUB file or folder: satu file `.epub`, atau folder berisi banyak EPUB.
+- Output folder: tiap EPUB dibuatkan subfolder `<output>/<epub_stem>/`.
+- Recursive: scan subfolder hanya jika opsi ini aktif.
+- Use reading order: memakai OPF spine untuk menjaga urutan halaman jika memungkinkan.
+- Extract cover image: menaruh cover di awal jika EPUB menandainya dengan jelas.
+- Extract SVG: off by default karena biasanya tidak berguna untuk persiapan dataset.
+- Rename mode: `sequential` menghasilkan `001.jpg`, `002.png`, dst.; `original` menjaga nama file internal.
+- Dry run / Overwrite / Create report JSON: preview tanpa menulis file, kontrol overwrite, dan laporan `extract_report.json`.
+Perhatian:
+- DRM-protected EPUB cannot be extracted normally.
+- Some EPUBs have messy internal order, so reading-order mode is best-effort.
+- SVG is off by default because it is usually not useful for dataset preparation.
 
 #### Webtoon Panel Splitter
 Cara pakai:

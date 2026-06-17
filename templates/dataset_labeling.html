@@ -342,6 +342,7 @@
   .quiz-manual-actions { display:flex; gap:.35rem; flex-wrap:wrap; justify-content:flex-end; margin-top:.45rem; }
   .quiz-manual-status { min-height:1.15rem; color:var(--bb-muted); font-size:.82rem; }
   .quiz-glossary-controls { display:grid; grid-template-columns:minmax(180px,1fr) minmax(150px,220px) auto; gap:.4rem; margin-bottom:.45rem; }
+  .quiz-glossary-actions { display:flex; flex-wrap:wrap; gap:.35rem; justify-content:flex-end; }
   .quiz-glossary-list { display:flex; flex-wrap:wrap; gap:.3rem; max-height:180px; overflow:auto; border:1px solid var(--bb-border); border-radius:.45rem; padding:.45rem; background:rgba(0,0,0,.12); }
   .quiz-glossary-chip { display:inline-flex; align-items:center; gap:.42rem; border:1px solid #1f6f8f; border-radius:999px; padding:.14rem .26rem .14rem .52rem; font-size:.74rem; background:#0d2630; color:#d6f6ff; }
   .quiz-glossary-chip:hover { border-color:#7fd7ff; color:#f1fbff; }
@@ -462,6 +463,21 @@
   .project-status-pill.is-ready { border-color:#1f6f4a; background:#0d2d1f; color:#d7ffe6; }
   .project-status-pill.is-partial { border-color:#b56a1f; background:#2a1a0a; color:#ffe0b2; }
   .project-status-pill.is-missing { border-color:#6f1f26; background:#2b1416; color:#ffe8ea; }
+  .trigger-safety-grid { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:.55rem; }
+  .trigger-safety-grid .trigger-safety-wide { grid-column:1 / -1; }
+  .trigger-safety-actions { display:flex; align-items:center; gap:.45rem; flex-wrap:wrap; }
+  .trigger-safety-result { display:flex; align-items:center; gap:.55rem; flex-wrap:wrap; }
+  .trigger-safety-badge { display:inline-flex; align-items:center; justify-content:center; min-width:78px; border:1px solid var(--bb-border); border-radius:999px; padding:.18rem .55rem; font-size:.72rem; font-weight:800; letter-spacing:.08em; text-transform:uppercase; background:var(--bb-code-bg); color:var(--bb-muted); }
+  .trigger-safety-badge.is-safe { border-color:#1f6f4a; background:#0d2d1f; color:#d7ffe6; }
+  .trigger-safety-badge.is-warning { border-color:#b56a1f; background:#2a1a0a; color:#ffe0b2; }
+  .trigger-safety-badge.is-block { border-color:#6f1f26; background:#2b1416; color:#ffe8ea; }
+  .trigger-safety-score { color:var(--bb-muted); font-size:.82rem; }
+  .trigger-safety-log { min-height:4.4rem; max-height:160px; overflow:auto; white-space:pre-wrap; border:1px solid var(--bb-border); border-radius:.45rem; background:rgba(0,0,0,.18); color:#dbe8ff; padding:.5rem; font-size:.78rem; }
+  .trigger-safety-suggestions { display:flex; flex-wrap:wrap; gap:.35rem; min-height:1.7rem; }
+  .trigger-safety-chip { border:1px solid #1f6f8f; border-radius:999px; padding:.15rem .5rem; background:#0d2630; color:#d6f6ff; font-size:.76rem; }
+  @media (max-width: 767.98px) {
+    .trigger-safety-grid { grid-template-columns:1fr; }
+  }
   .workdir-tree { display:flex; flex-direction:column; gap:.15rem; margin-top:.4rem; }
   .workdir-row { display:flex; align-items:center; gap:.35rem; padding:.2rem .35rem; border-radius:.35rem; cursor:pointer; user-select:none; }
   .workdir-row.is-selected { background:#1b2b4a; border:1px solid #2d4f86; }
@@ -638,6 +654,50 @@
               <div class="small text-muted" id="project-init-plan"></div>
             </div>
           </div>
+        </div>
+      </div>
+
+      <div class="col-md-12">
+        <div class="tag-explorer">
+          <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-2">
+            <div>
+              <label class="form-label mb-1">Trigger Safety Check</label>
+              <div class="small text-muted">Scan trigger-related text before publishing or uploading metadata.</div>
+            </div>
+            <div class="trigger-safety-result">
+              <span class="trigger-safety-badge" id="trigger-safety-badge">Unchecked</span>
+              <span class="trigger-safety-score" id="trigger-safety-score">Score: -</span>
+            </div>
+          </div>
+          <div class="trigger-safety-grid">
+            <div>
+              <label class="form-label small mb-1" for="trigger-safety-trigger">Trigger</label>
+              <input type="text" class="form-control form-control-sm" id="trigger-safety-trigger" placeholder="trg_k8v2q">
+            </div>
+            <div>
+              <label class="form-label small mb-1" for="trigger-safety-model">Model title</label>
+              <input type="text" class="form-control form-control-sm" id="trigger-safety-model" placeholder="Optional model title">
+            </div>
+            <div>
+              <label class="form-label small mb-1" for="trigger-safety-version">Version name</label>
+              <input type="text" class="form-control form-control-sm" id="trigger-safety-version" placeholder="Optional version">
+            </div>
+            <div class="trigger-safety-wide">
+              <label class="form-label small mb-1" for="trigger-safety-prompt">Sample prompt</label>
+              <textarea class="form-control form-control-sm" id="trigger-safety-prompt" rows="2" placeholder="Optional sample prompt"></textarea>
+            </div>
+          </div>
+          <div class="trigger-safety-actions mt-2">
+            <div class="form-check form-switch me-auto">
+              <input class="form-check-input" type="checkbox" id="trigger-safety-online" checked>
+              <label class="form-check-label small" for="trigger-safety-online">Online POI check (slower, safer)</label>
+            </div>
+            <button type="button" class="btn btn-outline-info btn-sm" id="trigger-safety-check">Check Trigger</button>
+            <button type="button" class="btn btn-outline-warning btn-sm" id="trigger-safety-add" disabled>Add Trigger to Local Blacklist</button>
+          </div>
+          <div class="trigger-safety-suggestions mt-2" id="trigger-safety-suggestions"></div>
+          <div class="trigger-safety-log mt-2" id="trigger-safety-log">No scan run yet.</div>
+          <div class="small text-muted mt-2" id="trigger-safety-meta"></div>
         </div>
       </div>
 
@@ -1261,7 +1321,10 @@
               <div class="quiz-tag-panel" id="tagging-quiz-glossary-panel">
                 <div class="quiz-tag-panel-head">
                   <div class="quiz-tag-panel-title" id="tagging-quiz-glossary-title">Glossarium Tags</div>
-                  <button type="button" class="btn btn-sm btn-outline-light" id="tagging-quiz-glossary-open">Open Glossary</button>
+                  <div class="quiz-glossary-actions">
+                    <button type="button" class="btn btn-sm btn-outline-info" id="tagging-quiz-glossary-resync">Resync</button>
+                    <button type="button" class="btn btn-sm btn-outline-light" id="tagging-quiz-glossary-open">Open Glossary</button>
+                  </div>
                 </div>
                 <div class="quiz-glossary-controls">
                   <input type="text" class="form-control form-control-sm" id="tagging-quiz-glossary-search" placeholder="Search glossary tags">
@@ -1277,6 +1340,7 @@
       <div class="modal-footer justify-content-between">
         <div class="d-flex gap-2 flex-wrap">
           <button type="button" class="btn btn-outline-info" id="tagging-quiz-prev-image">Previous Image</button>
+          <button type="button" class="btn btn-outline-warning d-none" id="tagging-quiz-retry-guided">Retry Guided Tagging</button>
           <button type="button" class="btn btn-outline-light" id="tagging-quiz-prev-segment">Previous Segment</button>
           <button type="button" class="btn btn-outline-light" id="tagging-quiz-next-segment">Next Segment</button>
           <button type="button" class="btn btn-outline-secondary" id="tagging-quiz-skip">Skip Segment</button>
@@ -1499,6 +1563,20 @@
     planWrap: 'project-init-plan-wrap',
     plan: 'project-init-plan'
   };
+  const TRIGGER_SAFETY = {
+    trigger: 'trigger-safety-trigger',
+    model: 'trigger-safety-model',
+    version: 'trigger-safety-version',
+    prompt: 'trigger-safety-prompt',
+    online: 'trigger-safety-online',
+    check: 'trigger-safety-check',
+    add: 'trigger-safety-add',
+    badge: 'trigger-safety-badge',
+    score: 'trigger-safety-score',
+    log: 'trigger-safety-log',
+    suggestions: 'trigger-safety-suggestions',
+    meta: 'trigger-safety-meta'
+  };
   const tagVizState = {
     items: [],
     selected: new Set(),
@@ -1558,6 +1636,12 @@
     triggerWord: '',
     initPreview: null
   };
+  const triggerSafetyState = {
+    lastResult: null,
+    lastAddTerm: '',
+    lastAddHit: null,
+    busy: false
+  };
   const QUIZ = {
     start: 'tagging-quiz-start',
     cont: 'tagging-quiz-continue',
@@ -1613,9 +1697,11 @@
     glossaryPanel: 'tagging-quiz-glossary-panel',
     glossaryTitle: 'tagging-quiz-glossary-title',
     glossaryClear: 'tagging-quiz-glossary-clear',
+    glossaryResync: 'tagging-quiz-glossary-resync',
     glossaryOpen: 'tagging-quiz-glossary-open',
     prev: 'tagging-quiz-prev-segment',
     prevImage: 'tagging-quiz-prev-image',
+    retryGuided: 'tagging-quiz-retry-guided',
     next: 'tagging-quiz-next-segment',
     skip: 'tagging-quiz-skip',
     saveImage: 'tagging-quiz-save-image',
@@ -1637,6 +1723,7 @@
     reviewSteps: [],
     session: null,
     recentManualTags: [],
+    recentManualTagsBySegment: {},
     glossarySearch: '',
     glossaryFilter: '__all__',
     drag: null,
@@ -1645,6 +1732,9 @@
     lastManualApplyAll: null,
     manualConfirmResolve: null,
     saveTimer: null,
+    saveSeq: 0,
+    lastAcceptedSaveSeq: 0,
+    sessionVersion: 0,
     setupModal: null,
     quizModal: null,
     overviewModal: null
@@ -1752,19 +1842,64 @@
   function qLoadRecentManualTags(){
     try{
       const raw = JSON.parse(localStorage.getItem(TAGGING_QUIZ_MANUAL_RECENT_KEY) || '[]');
-      quizState.recentManualTags = qTags(Array.isArray(raw) ? raw : []).slice(0, 80);
+      if (Array.isArray(raw)){
+        quizState.recentManualTags = qTags(raw).slice(0, 80);
+        quizState.recentManualTagsBySegment = {};
+        return;
+      }
+      const bySegment = raw && typeof raw === 'object' && raw.by_segment && typeof raw.by_segment === 'object'
+        ? raw.by_segment
+        : {};
+      quizState.recentManualTags = [];
+      quizState.recentManualTagsBySegment = {};
+      Object.keys(bySegment).forEach(segId => {
+        const key = String(segId || '').trim();
+        const tags = qTags(bySegment[segId] || []).map(normalizeDanbooruTag).filter(Boolean).slice(0, 80);
+        if (key && tags.length) quizState.recentManualTagsBySegment[key] = tags;
+      });
     }catch(_){
       quizState.recentManualTags = [];
+      quizState.recentManualTagsBySegment = {};
     }
   }
 
-  function qRememberRecentManualTags(tags){
-    const incoming = qTags(tags || []);
-    if (!incoming.length) return;
-    quizState.recentManualTags = Array.from(new Set([...incoming.reverse(), ...(quizState.recentManualTags || [])])).slice(0, 80);
+  function qPersistRecentManualTags(){
+    const bySegment = {};
+    Object.keys(quizState.recentManualTagsBySegment || {}).forEach(segId => {
+      const tags = qTags(quizState.recentManualTagsBySegment[segId] || []).map(normalizeDanbooruTag).filter(Boolean).slice(0, 80);
+      if (segId && tags.length) bySegment[segId] = tags;
+    });
+    quizState.recentManualTagsBySegment = bySegment;
     try{
-      localStorage.setItem(TAGGING_QUIZ_MANUAL_RECENT_KEY, JSON.stringify(quizState.recentManualTags));
+      localStorage.setItem(TAGGING_QUIZ_MANUAL_RECENT_KEY, JSON.stringify({ version: 2, by_segment: bySegment }));
     }catch(_){}
+  }
+
+  function qRecentManualTagsForSegment(segment = qCurrentSegment()){
+    const segId = String(segment?.id || '').trim();
+    if (!segId) return [];
+    const scoped = qTags(quizState.recentManualTagsBySegment?.[segId] || []);
+    const legacy = qTags(quizState.recentManualTags || []);
+    const allowed = qSegmentOptionTagSet(segment);
+    const legacyForSegment = allowed.size
+      ? legacy.map(normalizeDanbooruTag).filter(tag => tag && allowed.has(tag))
+      : [];
+    return Array.from(new Set([...scoped.map(normalizeDanbooruTag), ...legacyForSegment].filter(Boolean)))
+      .slice(0, 80);
+  }
+
+  function qRememberRecentManualTags(tags, segment = qCurrentSegment()){
+    const segId = String(segment?.id || '').trim();
+    const incoming = qTags(tags || []).map(normalizeDanbooruTag).filter(Boolean);
+    if (!incoming.length) return;
+    if (!segId) return;
+    const current = qTags(quizState.recentManualTagsBySegment?.[segId] || []).map(normalizeDanbooruTag).filter(Boolean);
+    if (!quizState.recentManualTagsBySegment || typeof quizState.recentManualTagsBySegment !== 'object'){
+      quizState.recentManualTagsBySegment = {};
+    }
+    quizState.recentManualTagsBySegment[segId] = Array.from(new Set([...incoming.reverse(), ...current]))
+      .slice(0, 80);
+    qPersistRecentManualTags();
   }
 
   async function qPost(url, payload){
@@ -1784,6 +1919,23 @@
     const el = get(id);
     if (!el || !window.bootstrap) return null;
     return bootstrap.Modal.getOrCreateInstance(el);
+  }
+
+  function qMarkSessionDirty(){
+    quizState.sessionVersion = (quizState.sessionVersion || 0) + 1;
+    return quizState.sessionVersion;
+  }
+
+  function qReplaceSession(session){
+    quizState.session = session || null;
+    qMarkSessionDirty();
+    return quizState.session;
+  }
+
+  function qAcceptServerSession(session){
+    quizState.saveSeq = (quizState.saveSeq || 0) + 1;
+    quizState.lastAcceptedSaveSeq = quizState.saveSeq;
+    return qReplaceSession(session);
   }
 
   async function qLoadSettings(){
@@ -2226,7 +2378,7 @@
       recommendations: quizState.recommendations,
       session_defaults: quizState.sessionDefaults
     });
-    quizState.session = data.session;
+    qAcceptServerSession(data.session);
     qUpdateResumeBanner();
     qSetStatus((data.logs || ['Started tagging flow']).join(' | '));
     quizState.setupUsesCurrentSettings = false;
@@ -2239,7 +2391,7 @@
     if (!root) return null;
     try{
       const data = await qPost('/api/tagging-quiz/session/load', {project_root: root});
-      quizState.session = data.session || null;
+      qReplaceSession(data.session || null);
       if (quizState.session){
         quizState.mappingRows = JSON.parse(JSON.stringify(quizState.session.mapping_rows || []));
         quizState.recommendations = JSON.parse(JSON.stringify(quizState.session.recommendations || {}));
@@ -2429,6 +2581,11 @@
       applyBtn.textContent = freeMode
         ? 'Add to Caption'
         : (singleChoiceMode ? 'Use Option' : 'Add to Selected');
+    }
+    const retryBtn = get(QUIZ.retryGuided);
+    if (retryBtn){
+      retryBtn.classList.toggle('d-none', !freeMode);
+      retryBtn.disabled = !freeMode || !segments.length || !rel;
     }
     const stage = get(QUIZ.imageStage);
     if (stage) {
@@ -2863,7 +3020,7 @@
     state.manual = qTags(state.manual || []).filter(tag => !tags.includes(tag));
     const added = qAddTagsToSegmentState(state, tags, {entry, segId: qIsFreeTaggingMode() ? '__unsorted__' : (seg?.id || '')});
     if (entry && (qIsFreeTaggingMode() || added.length)) entry.final_tags_written = false;
-    if (added.length) qRememberRecentManualTags(added);
+    if (added.length) qRememberRecentManualTags(added, seg);
     const input = get(QUIZ.manual);
     if (input) input.value = '';
     qRenderQuizChips();
@@ -2914,7 +3071,7 @@
     const actuallyAddedTags = Array.from(new Set(Object.values(addedByRel).flat().map(normalizeDanbooruTag).filter(Boolean)));
     const input = get(QUIZ.manual);
     if (input) input.value = '';
-    if (actuallyAddedTags.length) qRememberRecentManualTags(actuallyAddedTags);
+    if (actuallyAddedTags.length) qRememberRecentManualTags(actuallyAddedTags, seg);
     quizState.lastManualApplyAll = {segment_id: seg.id, tags: tags.slice(), added: addedByRel, previous_written: previousWrittenByRel};
     qRenderManualUndo();
     qRenderQuiz();
@@ -3089,15 +3246,62 @@
     }
   }
 
+  async function qResyncQuizGlossary(){
+    const btn = get(QUIZ.glossaryResync);
+    const previousText = btn?.textContent || 'Resync';
+    if (btn){
+      btn.disabled = true;
+      btn.textContent = 'Syncing...';
+    }
+    qSetManualStatus('Syncing glossary suggestions...');
+    try{
+      const server = await fetchGlossaryFromServer();
+      if (!server.ok) throw new Error(server.error || 'Glossary sync failed');
+      const merged = mergeGlossaryPayload(danbooruState.glossary, server.glossary);
+      danbooruState.glossary = merged;
+      try{ localStorage.setItem(DANBOORU_GLOSSARY_KEY, JSON.stringify(merged)); }catch(_){}
+      broadcastGlossaryUpdate();
+      renderGlossarySelectors();
+      renderGlossaryList();
+      qRenderGlossaryTags();
+      renderGalleryGlossaryQuick();
+      refreshGlossarySuggests();
+      updateDanbooruActionState();
+      scheduleGlossaryMetaHydration();
+      qSetManualStatus('Glossary suggestions synced.');
+    }catch(err){
+      qSetManualStatus(`Glossary sync failed: ${err && err.message ? err.message : err}`);
+    }finally{
+      if (btn){
+        btn.disabled = false;
+        btn.textContent = previousText;
+      }
+    }
+  }
+
   async function qSaveSessionNow(){
+    if (quizState.saveTimer){
+      clearTimeout(quizState.saveTimer);
+      quizState.saveTimer = null;
+    }
     if (!quizState.session || !qProjectRoot()) return;
     qUpdateStateFromInputs();
+    const saveVersion = qMarkSessionDirty();
+    const saveSeq = ++quizState.saveSeq;
     const autosaveEl = get(QUIZ.autosave);
     if (autosaveEl) autosaveEl.textContent = 'Autosaving...';
     try{
       const data = await qPost('/api/tagging-quiz/session/save', {project_root: qProjectRoot(), session: quizState.session});
-      quizState.session = data.session || quizState.session;
-      if (autosaveEl) autosaveEl.textContent = 'Autosaved';
+      if (saveVersion === quizState.sessionVersion && saveSeq === quizState.saveSeq){
+        quizState.session = data.session || quizState.session;
+        quizState.lastAcceptedSaveSeq = saveSeq;
+        if (autosaveEl) autosaveEl.textContent = 'Autosaved';
+      } else {
+        if (autosaveEl) autosaveEl.textContent = 'Autosave pending';
+        if (!quizState.saveTimer && saveSeq < (quizState.lastAcceptedSaveSeq || 0)){
+          qScheduleSessionSave(true);
+        }
+      }
       qUpdateResumeBanner();
     }catch(err){
       if (autosaveEl) autosaveEl.textContent = `Autosave failed: ${err.message}`;
@@ -3105,7 +3309,11 @@
   }
 
   function qScheduleSessionSave(immediate = false){
-    if (quizState.saveTimer) clearTimeout(quizState.saveTimer);
+    if (quizState.saveTimer){
+      clearTimeout(quizState.saveTimer);
+      quizState.saveTimer = null;
+    }
+    qMarkSessionDirty();
     if (immediate) {
       qSaveSessionNow();
       return;
@@ -3250,6 +3458,35 @@
     return qGoImageFree(-1);
   }
 
+  async function qRetryCurrentImageGuided(){
+    if (!quizState.session || !qIsFreeTaggingMode()) return;
+    const rel = qCurrentImageRel();
+    const entry = qCurrentImageEntry();
+    const segments = qSegments();
+    if (!rel || !entry || !segments.length){
+      qSetStatus('No guided tagging segment is available for this image.');
+      return;
+    }
+    qUpdateStateFromInputs();
+    const images = Object.keys(quizState.session.images || {});
+    const imageIndex = Math.max(0, images.indexOf(rel));
+    entry.status = 'in_progress';
+    entry.final_tags_written = false;
+    entry.free_tagging = false;
+    entry.updated_at = new Date().toISOString();
+    quizState.session.status = 'active';
+    quizState.session.current = {
+      image_index: imageIndex,
+      image_rel: rel,
+      segment_index: 0,
+      segment_id: (segments[0] || {}).id || '',
+      free_tagging: false,
+    };
+    qSetStatus('Retrying this image in guided tagging mode.');
+    qRenderQuiz();
+    await qSaveSessionNow();
+  }
+
   async function qHandleQuizImageArrow(event){
     if (!event || event.defaultPrevented || event.altKey || event.metaKey || event.shiftKey) return;
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
@@ -3283,6 +3520,7 @@
   async function qSaveImage(){
     if (!quizState.session) return;
     qUpdateStateFromInputs();
+    qMarkSessionDirty();
     const rel = qCurrentImageRel();
     const entry = qCurrentImageEntry();
     const data = await qPost('/api/tagging-quiz/image/save', {
@@ -3292,7 +3530,7 @@
       session: quizState.session,
       backup: true
     });
-    quizState.session = data.session || quizState.session;
+    qAcceptServerSession(data.session || quizState.session);
     qSetStatus((data.logs || [`Saved ${rel}`]).join(' | '));
     qUpdateResumeBanner();
     if (quizState.session.status === 'completed'){
@@ -3340,7 +3578,7 @@
     const ok = await showConfirm('Delete the active guided tagging session JSON? Caption .txt files are not deleted.', 'Delete session');
     if (!ok) return;
     await qPost('/api/tagging-quiz/session/delete', {project_root: qProjectRoot(), confirm: true});
-    quizState.session = null;
+    qAcceptServerSession(null);
     qUpdateResumeBanner();
     qRenderOverview();
     qSetStatus('Deleted tagging session.');
@@ -3349,7 +3587,7 @@
   async function qArchiveSession(){
     if (!qProjectRoot()) return;
     const data = await qPost('/api/tagging-quiz/session/archive', {project_root: qProjectRoot()});
-    quizState.session = null;
+    qAcceptServerSession(null);
     qUpdateResumeBanner();
     qRenderOverview();
     qSetStatus((data.logs || ['Archived session']).join(' | '));
@@ -3398,11 +3636,13 @@
       quizState.glossaryFilter = '__all__';
       qRenderGlossaryTags();
     });
+    get(QUIZ.glossaryResync)?.addEventListener('click', () => qResyncQuizGlossary());
     get(QUIZ.glossaryOpen)?.addEventListener('click', qOpenGlossaryFromQuiz);
     get(DANBOORU.offcanvas)?.addEventListener('hidden.bs.offcanvas', () => {
       get(DANBOORU.offcanvas)?.classList.remove('is-quiz-overlay');
     });
     get(QUIZ.prevImage)?.addEventListener('click', () => qGoPreviousImageFree().catch(err => qSetStatus(`Previous image failed: ${err.message}`)));
+    get(QUIZ.retryGuided)?.addEventListener('click', () => qRetryCurrentImageGuided().catch(err => qSetStatus(`Retry guided tagging failed: ${err.message}`)));
     get(QUIZ.prev)?.addEventListener('click', () => qMoveSegment(-1));
     get(QUIZ.next)?.addEventListener('click', () => qMoveSegment(1));
     get(QUIZ.skip)?.addEventListener('click', qSkipSegment);
@@ -4388,6 +4628,189 @@
     refreshWorkspaceGating();
   }
 
+  function triggerSafetyPayload(){
+    return {
+      trigger: get(TRIGGER_SAFETY.trigger)?.value || '',
+      model_name: get(TRIGGER_SAFETY.model)?.value || '',
+      version_name: get(TRIGGER_SAFETY.version)?.value || '',
+      sample_prompt: get(TRIGGER_SAFETY.prompt)?.value || '',
+      online_poi: !!get(TRIGGER_SAFETY.online)?.checked
+    };
+  }
+
+  function setTriggerSafetyBusy(isBusy){
+    triggerSafetyState.busy = !!isBusy;
+    const check = get(TRIGGER_SAFETY.check);
+    const add = get(TRIGGER_SAFETY.add);
+    if (check) check.disabled = triggerSafetyState.busy;
+    if (add) add.disabled = triggerSafetyState.busy || !triggerSafetyState.lastResult;
+  }
+
+  function setTriggerSafetyBadge(risk){
+    const badge = get(TRIGGER_SAFETY.badge);
+    if (!badge) return;
+    const clean = String(risk || 'unchecked').toLowerCase();
+    badge.className = 'trigger-safety-badge';
+    if (clean === 'safe') badge.classList.add('is-safe');
+    else if (clean === 'warning') badge.classList.add('is-warning');
+    else if (clean === 'block') badge.classList.add('is-block');
+    badge.textContent = clean === 'unchecked' ? 'Unchecked' : clean.toUpperCase();
+  }
+
+  function setTriggerSafetyLog(lines, append=false){
+    const log = get(TRIGGER_SAFETY.log);
+    if (!log) return;
+    const text = Array.isArray(lines) ? lines.filter(Boolean).join('\n') : String(lines || '');
+    if (append && log.textContent && log.textContent !== 'No scan run yet.'){
+      log.textContent = `${log.textContent.replace(/\s+$/,'')}\n${text}`;
+    } else {
+      log.textContent = text || 'No scan run yet.';
+    }
+  }
+
+  function appendTriggerSafetyLog(line){
+    setTriggerSafetyLog(line, true);
+  }
+
+  function formatTriggerSafetyHit(hit){
+    const severity = String(hit?.severity || 'warning').toUpperCase();
+    const field = hit?.source === 'online_poi' ? 'online poi' : (hit?.field || 'trigger');
+    const source = hit?.source === 'local_blacklist'
+      ? `local blacklist ${hit?.match_mode || 'match'} hit`
+      : (hit?.source === 'builtin' ? 'built-in safety term' : (hit?.match_mode || 'match'));
+    const term = hit?.term ? `: "${hit.term}"` : '';
+    const reason = hit?.reason && hit?.source === 'online_poi' ? ` - ${hit.reason}` : '';
+    return `[${severity}] ${field} -> ${source}${term}${reason}`;
+  }
+
+  function chooseTriggerSafetyAddTarget(result){
+    const hits = Array.isArray(result?.hits) ? result.hits : [];
+    const blockHit = hits.find(hit => String(hit?.severity || '').toLowerCase() === 'block' && hit?.term);
+    const anyHit = hits.find(hit => hit?.term);
+    const hit = blockHit || anyHit || null;
+    const rawTrigger = get(TRIGGER_SAFETY.trigger)?.value?.trim() || '';
+    return {
+      term: hit?.term || rawTrigger,
+      hit
+    };
+  }
+
+  function renderTriggerSafetySuggestions(suggestions){
+    const wrap = get(TRIGGER_SAFETY.suggestions);
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    (suggestions || []).forEach(value => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'trigger-safety-chip';
+      btn.dataset.suggestion = value;
+      btn.textContent = value;
+      wrap.appendChild(btn);
+    });
+  }
+
+  function renderTriggerSafetyResult(data){
+    triggerSafetyState.lastResult = data || null;
+    const target = chooseTriggerSafetyAddTarget(data);
+    triggerSafetyState.lastAddTerm = target.term || '';
+    triggerSafetyState.lastAddHit = target.hit || null;
+    setTriggerSafetyBadge(data?.risk || 'unchecked');
+    const score = get(TRIGGER_SAFETY.score);
+    if (score) score.textContent = `Score: ${Number.isFinite(Number(data?.score)) ? data.score : '-'}`;
+    const lines = [];
+    const hits = Array.isArray(data?.hits) ? data.hits : [];
+    if (hits.length){
+      hits.forEach(hit => lines.push(formatTriggerSafetyHit(hit)));
+    } else {
+      lines.push('[SAFE] no local or online trigger safety hits');
+    }
+    (data?.warnings || []).forEach(item => lines.push(`[WARN] ${item}`));
+    (data?.suggestions || []).forEach(item => lines.push(`[SUGGEST] ${item}`));
+    setTriggerSafetyLog(lines);
+    renderTriggerSafetySuggestions(data?.suggestions || []);
+    const add = get(TRIGGER_SAFETY.add);
+    if (add) add.disabled = !triggerSafetyState.lastAddTerm;
+  }
+
+  function maybeAutofillTriggerSafety(trigger){
+    const input = get(TRIGGER_SAFETY.trigger);
+    if (!input || !trigger) return;
+    const current = input.value.trim();
+    const previousAuto = input.dataset.autofilledFrom || '';
+    if (!current || current === previousAuto){
+      input.value = trigger;
+      input.dataset.autofilledFrom = trigger;
+      const meta = get(TRIGGER_SAFETY.meta);
+      if (meta) meta.textContent = `Trigger auto-filled from prompt.txt: ${trigger}`;
+    }
+  }
+
+  async function checkTriggerSafety(){
+    if (triggerSafetyState.busy) return;
+    setTriggerSafetyBusy(true);
+    setTriggerSafetyBadge('unchecked');
+    setTriggerSafetyLog('Checking trigger safety...');
+    try {
+      const res = await fetch('/api/trigger-safety/check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(triggerSafetyPayload())
+      });
+      let data = null;
+      try { data = await res.json(); } catch(_) {}
+      if (!res.ok || !data || !data.ok){
+        throw new Error((data && data.error) ? data.error : `HTTP ${res.status}`);
+      }
+      renderTriggerSafetyResult(data);
+    } catch (err) {
+      triggerSafetyState.lastResult = null;
+      triggerSafetyState.lastAddTerm = '';
+      setTriggerSafetyBadge('unchecked');
+      setTriggerSafetyLog(`[ERROR] ${err && err.message ? err.message : 'Trigger safety check failed.'}`);
+      renderTriggerSafetySuggestions([]);
+    } finally {
+      setTriggerSafetyBusy(false);
+    }
+  }
+
+  async function addTriggerSafetyBlacklistEntry(){
+    if (triggerSafetyState.busy) return;
+    const target = chooseTriggerSafetyAddTarget(triggerSafetyState.lastResult);
+    const term = (target.term || '').trim();
+    if (!term){
+      appendTriggerSafetyLog('[ERROR] No trigger term available to add.');
+      return;
+    }
+    const hit = target.hit || {};
+    setTriggerSafetyBusy(true);
+    try {
+      const res = await fetch('/api/trigger-safety/blacklist/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          term,
+          reason: 'Flagged by CivitAI',
+          category: hit.category || 'poi',
+          severity: hit.severity || 'block',
+          match_mode: hit.match_mode || (hit.category === 'age_term' ? 'token_exact' : 'compact_contains')
+        })
+      });
+      let data = null;
+      try { data = await res.json(); } catch(_) {}
+      if (!res.ok || !data || !data.ok){
+        throw new Error((data && data.error) ? data.error : `HTTP ${res.status}`);
+      }
+      const status = data.duplicate ? 'duplicate skipped' : 'file updated';
+      appendTriggerSafetyLog(`[BLACKLIST] "${term}" ${status}; total entries: ${data.entry_count}`);
+      (data.info || []).forEach(item => appendTriggerSafetyLog(`[INFO] ${item}`));
+      (data.warnings || []).forEach(item => appendTriggerSafetyLog(`[WARN] ${item}`));
+    } catch (err) {
+      appendTriggerSafetyLog(`[ERROR] ${err && err.message ? err.message : 'Blacklist update failed.'}`);
+    } finally {
+      setTriggerSafetyBusy(false);
+    }
+  }
+
   async function loadProjectState(opts={}){
     const folder = getProjectRootInput();
     projectState.root = folder;
@@ -4436,6 +4859,7 @@
       projectState.normalizedFromLegacy = !!data.normalized_from_legacy;
       projectState.triggerWord = data.trigger_word || '';
       projectState.initPreview = data.init_preview || null;
+      maybeAutofillTriggerSafety(projectState.triggerWord);
       if (projectState.root && projectState.root !== folder){
         const input = get(IDS.folder);
         if (input) input.value = projectState.root;
@@ -7376,6 +7800,52 @@
     return output;
   }
 
+  function mergeGlossaryPayload(localPayload, serverPayload){
+    const localGlossary = normalizeGlossaryPayload(localPayload);
+    const serverGlossary = normalizeGlossaryPayload(serverPayload);
+    const merged = { version: 2, categories: {}, tag_meta: {}, updated_at: Math.max(localGlossary.updated_at || 0, serverGlossary.updated_at || 0) };
+    const seen = new Set();
+    function ensureCategory(category){
+      const name = normalizeGlossaryCategory(category);
+      if (!merged.categories[name]) merged.categories[name] = [];
+      return name;
+    }
+    function addFrom(glossary){
+      glossaryCategoryNamesForPayload(glossary).forEach(category => {
+        const target = ensureCategory(category);
+        (glossary.categories[category] || []).forEach(rawTag => {
+          const tag = normalizeDanbooruTag(rawTag);
+          if (!tag || seen.has(tag)) return;
+          seen.add(tag);
+          merged.categories[target].push(tag);
+        });
+      });
+    }
+    addFrom(localGlossary);
+    addFrom(serverGlossary);
+    if (!merged.categories.Unsorted) merged.categories.Unsorted = [];
+    seen.forEach(tag => {
+      const localMeta = localGlossary.tag_meta?.[tag] || null;
+      const serverMeta = serverGlossary.tag_meta?.[tag] || null;
+      if (!localMeta && !serverMeta) return;
+      if (!localMeta) merged.tag_meta[tag] = serverMeta;
+      else if (!serverMeta) merged.tag_meta[tag] = localMeta;
+      else merged.tag_meta[tag] = (serverMeta.fetched_at || 0) >= (localMeta.fetched_at || 0) ? serverMeta : localMeta;
+    });
+    return normalizeGlossaryPayload(merged);
+  }
+
+  function glossaryCategoryNamesForPayload(glossary){
+    const names = Object.keys((glossary && glossary.categories) || {});
+    if (!names.includes('Unsorted')) names.push('Unsorted');
+    names.sort((a,b)=>{
+      if (a === 'Unsorted') return -1;
+      if (b === 'Unsorted') return 1;
+      return a.localeCompare(b);
+    });
+    return names;
+  }
+
   function glossaryTagMeta(tag){
     return danbooruState.glossary.tag_meta?.[normalizeDanbooruTag(tag)] || null;
   }
@@ -7534,7 +8004,7 @@
         });
       });
       if (!segmentOnly){
-        (quizState.recentManualTags || []).forEach(tag => {
+        qRecentManualTagsForSegment(seg).forEach(tag => {
           if (!selected.has(tag)) addRow(tag, 'recent', null, 40);
         });
         reviewSuggestions.other.forEach(({ step, tags }) => {
@@ -9068,6 +9538,23 @@
     });
     get(PROJECT.refresh)?.addEventListener('click', async ()=>{ await loadProjectState({ silent: false }); await loadGallery(); await loadWorkdirRoot(); await scanTagViz(); });
     get(PROJECT.initPreview)?.addEventListener('click', previewProjectInit);
+    get(TRIGGER_SAFETY.check)?.addEventListener('click', checkTriggerSafety);
+    get(TRIGGER_SAFETY.add)?.addEventListener('click', addTriggerSafetyBlacklistEntry);
+    get(TRIGGER_SAFETY.trigger)?.addEventListener('input', (e)=>{
+      if ((e.target?.value || '').trim() !== (e.target?.dataset?.autofilledFrom || '')){
+        e.target.dataset.autofilledFrom = '';
+      }
+    });
+    get(TRIGGER_SAFETY.suggestions)?.addEventListener('click', (e)=>{
+      const btn = e.target?.closest?.('[data-suggestion]');
+      if (!btn) return;
+      const input = get(TRIGGER_SAFETY.trigger);
+      if (input){
+        input.value = btn.dataset.suggestion || '';
+        input.dataset.autofilledFrom = '';
+        input.focus();
+      }
+    });
     get(GALLERY.refresh)?.addEventListener('click', loadGallery);
     get('btn-dataset-zip')?.addEventListener('click', zipDatasetFolder);
     get(WORKDIR.sendSelected)?.addEventListener('click', sendSelectedGalleryItemsToTemp);

@@ -46,6 +46,23 @@
         ]
       },
       {
+        "id": "breast_size",
+        "label": "Breast Size",
+        "mode": "single",
+        "required": false,
+        "auto_advance": true,
+        "autosuggest_segment_only": true,
+        "allow_not_applicable": true,
+        "queue_mode": "all",
+        "tags": [
+          "flat_chest",
+          "small_breasts",
+          "medium_breasts",
+          "large_breasts",
+          "huge_breasts"
+        ]
+      },
+      {
         "id": "outfit",
         "label": "Outfit",
         "mode": "multi",

@@ -1,0 +1,115 @@
+<div class="card p-4">
+  <form method="post" data-tool-label="EPUB Image Extractor">
+    <input type="hidden" name="tool" value="epub_extractor">
+
+    <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+      <div>
+        <h2 class="h5 mb-1">EPUB Image Extractor</h2>
+        <div class="text-muted small">Extract images from .epub into clean folders. Reading order is used when possible.</div>
+      </div>
+      <div class="text-muted small">Outputs: <code>&lt;output&gt;\&lt;epub_stem&gt;\001.jpg</code></div>
+    </div>
+
+    <div class="epub-section">
+      <div class="epub-section-title">Input & Output</div>
+      <div class="row g-3">
+        <div class="col-lg-6">
+          <label class="form-label" for="epub_input">EPUB file or folder</label>
+          <div class="input-group">
+            <input id="epub_input" name="epub_input" type="text" class="form-control" placeholder="D:\books or D:\books\comic.epub" data-root-sync="1">
+            <button class="btn btn-outline-light btn-browse" type="button" data-target="epub_input">Browse</button>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <label class="form-label" for="epub_output">Output folder</label>
+          <div class="input-group">
+            <input id="epub_output" name="output_dir" type="text" class="form-control" placeholder="D:\extract">
+            <button class="btn btn-outline-light btn-browse" type="button" data-target="epub_output">Browse</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="epub-section">
+      <div class="epub-section-title">Options</div>
+      <div class="row g-3 align-items-end">
+        <div class="col-sm-6 col-lg-3">
+          <label class="form-label" for="epub_rename_mode">Rename mode</label>
+          <select id="epub_rename_mode" name="rename_mode" class="form-select">
+            <option value="sequential" selected>Sequential</option>
+            <option value="original">Original filename</option>
+          </select>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+          <label class="form-label" for="epub_start_number">Start number</label>
+          <input id="epub_start_number" type="number" name="start_number" class="form-control" value="1" min="0">
+        </div>
+        <div class="col-sm-6 col-lg-3">
+          <label class="form-label" for="epub_pad">Pad</label>
+          <input id="epub_pad" type="number" name="pad" class="form-control" value="3" min="1">
+        </div>
+        <div class="col-sm-6 col-lg-3">
+          <label class="form-label" for="epub_limit">Limit</label>
+          <input id="epub_limit" type="number" name="limit" class="form-control" value="0" min="0">
+          <div class="form-text">0 means all EPUB files.</div>
+        </div>
+      </div>
+
+      <div class="d-flex flex-wrap gap-4 mt-3">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="epub_recursive" name="recursive">
+          <label class="form-check-label" for="epub_recursive">Recursive</label>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="epub_use_reading_order" name="use_reading_order" value="on" checked data-bs-toggle="tooltip" data-bs-title="Uses EPUB OPF spine to keep page order when possible.">
+          <input type="hidden" name="use_reading_order" value="off">
+          <label class="form-check-label" for="epub_use_reading_order">Use reading order when possible</label>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="epub_extract_cover" name="extract_cover" value="on" checked>
+          <input type="hidden" name="extract_cover" value="off">
+          <label class="form-check-label" for="epub_extract_cover">Extract cover image</label>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="epub_extract_svg" name="extract_svg" data-bs-toggle="tooltip" data-bs-title="SVG is not always useful for dataset images, so it is off by default.">
+          <label class="form-check-label" for="epub_extract_svg">Extract SVG</label>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="epub_create_report" name="create_report" value="on" checked>
+          <input type="hidden" name="create_report" value="off">
+          <label class="form-check-label" for="epub_create_report">Create report JSON</label>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="epub_dry_run" name="dry_run" data-bs-toggle="tooltip" data-bs-title="Only preview what would be extracted.">
+          <label class="form-check-label" for="epub_dry_run">Dry run</label>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="epub_overwrite" name="overwrite" data-bs-toggle="tooltip" data-bs-title="Replace existing files. Keep off for safer reruns.">
+          <label class="form-check-label" for="epub_overwrite">Overwrite existing files</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="d-flex justify-content-end">
+      <button class="btn btn-primary px-4">Extract Images</button>
+    </div>
+  </form>
+</div>
+
+<style>
+  .epub-section {
+    border: 1px solid var(--bs-border-color, #2a2a2a);
+    border-radius: .75rem;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    background: rgba(255,255,255,0.02);
+  }
+  .epub-section-title {
+    font-weight: 600;
+    margin-bottom: .75rem;
+    opacity: .9;
+  }
+  @media (prefers-color-scheme: dark) {
+    .epub-section { background: rgba(255,255,255,0.03); }
+  }
+</style>

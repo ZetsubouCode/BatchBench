@@ -6,16 +6,18 @@
       <button class="nav-link bb-menu-link {{ 'active' if tab=='guide' }}" data-bs-toggle="tab" data-bs-target="#tab-guide" type="button"><i class="bi bi-signpost-split" aria-hidden="true"></i><span>Workflow Guide</span></button>
     </li>
     <li class="nav-item dropdown">
-      <button class="nav-link bb-menu-link dropdown-toggle {{ 'active' if tab in ['webp', 'batch', 'blur_brush'] }}" data-bs-toggle="dropdown" type="button" aria-expanded="false"><i class="bi bi-images" aria-hidden="true"></i><span>Image Tools</span></button>
+      <button class="nav-link bb-menu-link dropdown-toggle {{ 'active' if tab in ['webp', 'batch', 'blur_brush', 'palette_helper'] }}" data-bs-toggle="dropdown" type="button" aria-expanded="false"><i class="bi bi-images" aria-hidden="true"></i><span>Image Tools</span></button>
       <ul class="dropdown-menu">
         <li><button class="dropdown-item {{ 'active' if tab=='webp' }}" data-bs-toggle="tab" data-bs-target="#tab-webp" type="button"><i class="bi bi-images" aria-hidden="true"></i><span>Image -&gt; PNG Converter</span></button></li>
         <li><button class="dropdown-item {{ 'active' if tab=='batch' }}" data-bs-toggle="tab" data-bs-target="#tab-batch" type="button"><i class="bi bi-sliders2" aria-hidden="true"></i><span>Photo Adjust (preset)</span></button></li>
         <li><button class="dropdown-item {{ 'active' if tab=='blur_brush' }}" data-bs-toggle="tab" data-bs-target="#tab-blur-brush" type="button"><i class="bi bi-brush" aria-hidden="true"></i><span>Brush Blur</span></button></li>
+        <li><button class="dropdown-item {{ 'active' if tab=='palette_helper' }}" data-bs-toggle="tab" data-bs-target="#tab-palette-helper" type="button"><i class="bi bi-palette" aria-hidden="true"></i><span>Manga Palette Helper</span></button></li>
       </ul>
     </li>
     <li class="nav-item dropdown">
-      <button class="nav-link bb-menu-link dropdown-toggle {{ 'active' if tab in ['webtoon', 'merge', 'rename', 'combine'] }}" data-bs-toggle="dropdown" type="button" aria-expanded="false"><i class="bi bi-collection" aria-hidden="true"></i><span>Dataset Assembly</span></button>
+      <button class="nav-link bb-menu-link dropdown-toggle {{ 'active' if tab in ['epub_extractor', 'webtoon', 'merge', 'rename', 'combine'] }}" data-bs-toggle="dropdown" type="button" aria-expanded="false"><i class="bi bi-collection" aria-hidden="true"></i><span>Dataset Assembly</span></button>
       <ul class="dropdown-menu">
+        <li><button class="dropdown-item {{ 'active' if tab=='epub_extractor' }}" data-bs-toggle="tab" data-bs-target="#tab-epub-extractor" type="button"><i class="bi bi-book" aria-hidden="true"></i><span>EPUB Extractor</span></button></li>
         <li><button class="dropdown-item {{ 'active' if tab=='webtoon' }}" data-bs-toggle="tab" data-bs-target="#tab-webtoon" type="button"><i class="bi bi-scissors" aria-hidden="true"></i><span>Webtoon Panel Splitter</span></button></li>
         <li><button class="dropdown-item {{ 'active' if tab=='merge' }}" data-bs-toggle="tab" data-bs-target="#tab-merge" type="button"><i class="bi bi-columns-gap" aria-hidden="true"></i><span>Stitch Groups</span></button></li>
         <li><button class="dropdown-item {{ 'active' if tab=='rename' }}" data-bs-toggle="tab" data-bs-target="#tab-rename" type="button"><i class="bi bi-sort-numeric-down" aria-hidden="true"></i><span>Flatten &amp; Renumber</span></button></li>
@@ -145,6 +147,16 @@
       {% endif %}
     </div>
 
+    <div class="tab-pane fade {{ 'show active' if tab=='epub_extractor' }}" id="tab-epub-extractor">
+      {% include "epub_extractor.html" %}
+      {% if log and tab=='epub_extractor' %}
+        <div class="card p-3 mt-3">
+          <h5>Log</h5>
+          <pre class="monospace">{{ log }}</pre>
+        </div>
+      {% endif %}
+    </div>
+
     <div class="tab-pane fade {{ 'show active' if tab=='blur_brush' }}" id="tab-blur-brush">
       {% include "blur_brush.html" %}
       {% if log and tab=='blur_brush' %}
@@ -153,6 +165,10 @@
           <pre class="monospace">{{ log }}</pre>
         </div>
       {% endif %}
+    </div>
+
+    <div class="tab-pane fade {{ 'show active' if tab=='palette_helper' }}" id="tab-palette-helper">
+      {% include "palette_helper.html" %}
     </div>
 
     <div class="tab-pane fade {{ 'show active' if tab=='clip_tokens' }}" id="tab-clip-tokens">

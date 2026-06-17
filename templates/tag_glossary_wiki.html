@@ -9,6 +9,9 @@
   .gw-manager-row { display:flex; gap:.4rem; }
   .gw-manager-row .form-control { min-width:0; }
   .gw-manager-row .form-select { max-width:180px; }
+  .gw-add-feedback { margin-top:.38rem; color:var(--bb-muted); font-size:.78rem; line-height:1.35; min-height:1.05rem; }
+  .gw-add-feedback.is-success { color:#9cd9ea; }
+  .gw-add-feedback.is-warning { color:#ffd28a; }
   .gw-sync { color:var(--bb-muted); font-size:.76rem; text-align:right; }
   .gw-layout { display:grid; grid-template-columns:minmax(270px, 340px) minmax(0,1fr); gap:1rem; align-items:start; }
   .gw-sidebar, .gw-article { border:1px solid var(--bb-border); border-radius:.7rem; background:rgba(15,23,42,.92); }
@@ -87,6 +90,7 @@
         <select class="form-select form-select-sm" id="gw-add-tag-category"></select>
         <button type="button" class="btn btn-sm btn-outline-info" id="gw-add-tags-btn">Add</button>
       </div>
+      <div class="gw-add-feedback" id="gw-add-feedback" aria-live="polite"></div>
     </div>
     <div class="gw-manager-block">
       <label class="gw-manager-label" for="gw-add-category">Create category</label>
@@ -283,6 +287,14 @@
     el.classList.toggle('is-error', !!isError);
   }
 
+  function setAddFeedback(message='', tone=''){
+    const el = get('gw-add-feedback');
+    if (!el) return;
+    el.textContent = message;
+    el.classList.toggle('is-success', tone === 'success');
+    el.classList.toggle('is-warning', tone === 'warning');
+  }
+
   function broadcastGlossary(){
     document.dispatchEvent(new CustomEvent('bb:glossary-updated', {
       detail: { source: 'glossary-wiki', glossary: normalizeGlossary(state.glossary) }
@@ -362,23 +374,73 @@
     });
   }
 
+  function formatTagList(tags, limit=5){
+    const items = (tags || []).filter(Boolean);
+    if (!items.length) return '';
+    const shown = items.slice(0, limit).join(', ');
+    const remaining = items.length - limit;
+    return remaining > 0 ? `${shown}, +${remaining} more` : shown;
+  }
+
+  function describeDuplicate(entry){
+    if (!entry) return '';
+    return `${entry.tag} (${entry.category || 'Unsorted'})`;
+  }
+
+  function summarizeAddResult(result, target){
+    const addedCount = result.added.length;
+    const skippedCount = result.existing.length + result.repeated.length;
+    if (!addedCount && !skippedCount) return 'Enter one or more tags separated by commas, semicolons, or new lines.';
+
+    const parts = [];
+    if (addedCount){
+      parts.push(`Added ${addedCount} tag${addedCount === 1 ? '' : 's'} to ${target}: ${formatTagList(result.added)}.`);
+    }
+    if (result.existing.length){
+      parts.push(`Skipped ${result.existing.length} already in the glossary: ${formatTagList(result.existing.map(describeDuplicate))}.`);
+    }
+    if (result.repeated.length){
+      parts.push(`Ignored ${result.repeated.length} repeated in this input: ${formatTagList(result.repeated)}.`);
+    }
+    return parts.join(' ');
+  }
+
   function addTags(raw, category){
     const target = normalizeCategory(category);
     if (!state.glossary.categories[target]) state.glossary.categories[target] = [];
+    const result = { added: [], existing: [], repeated: [] };
+    const seenInput = new Set();
     const tags = String(raw || '').split(/[,;\n]+/).map(normalizeTag).filter(Boolean);
     tags.forEach(tag=>{
-      removeFromBuckets(tag);
+      if (seenInput.has(tag)){
+        result.repeated.push(tag);
+        return;
+      }
+      seenInput.add(tag);
+      const existingCategory = categoryFor(tag);
+      if (existingCategory){
+        result.existing.push({ tag, category: existingCategory });
+        return;
+      }
       state.glossary.categories[target].push(tag);
+      result.added.push(tag);
     });
     state.glossary.categories[target] = Array.from(new Set(state.glossary.categories[target])).sort((a,b)=> a.localeCompare(b));
-    if (tags.length) void saveGlossary();
-    return tags;
+    if (result.added.length) void saveGlossary();
+    setAddFeedback(summarizeAddResult(result, target), result.existing.length || result.repeated.length ? 'warning' : (result.added.length ? 'success' : ''));
+    return result;
   }
 
   function moveTag(tag, category){
     const cleanTag = normalizeTag(tag);
     if (!cleanTag) return;
-    addTags(cleanTag, category);
+    const target = normalizeCategory(category);
+    if (!state.glossary.categories[target]) state.glossary.categories[target] = [];
+    removeFromBuckets(cleanTag);
+    state.glossary.categories[target].push(cleanTag);
+    state.glossary.categories[target] = Array.from(new Set(state.glossary.categories[target])).sort((a,b)=> a.localeCompare(b));
+    setAddFeedback(`Moved ${cleanTag} to ${target}.`, 'success');
+    void saveGlossary();
   }
 
   function deleteTag(tag){
@@ -748,8 +810,8 @@
     });
     get('gw-add-tags-btn')?.addEventListener('click', ()=>{
       const input = get('gw-add-tags');
-      const added = addTags(input?.value || '', get('gw-add-tag-category')?.value || 'Unsorted');
-      if (added.length && input) input.value = '';
+      const result = addTags(input?.value || '', get('gw-add-tag-category')?.value || 'Unsorted');
+      if ((result.added.length || result.existing.length || result.repeated.length) && input) input.value = '';
     });
     get('gw-add-tags')?.addEventListener('keydown', e=>{
       if (e.key !== 'Enter') return;
@@ -763,7 +825,10 @@
       createCategory();
     });
     get('gw-active-category')?.addEventListener('change', e=> moveTag(state.activeTag, e.target.value));
-    get('gw-add-active')?.addEventListener('click', ()=> addTags(state.activeTag, get('gw-add-tag-category')?.value || 'Unsorted'));
+    get('gw-add-active')?.addEventListener('click', ()=>{
+      const result = addTags(state.activeTag, get('gw-add-tag-category')?.value || 'Unsorted');
+      if (result.added.length) updateActiveActions();
+    });
     get('gw-rename-active')?.addEventListener('click', ()=> renameTag(state.activeTag));
     get('gw-delete-active')?.addEventListener('click', ()=>{
       if (!state.activeTag || !confirm(`Delete "${state.activeTag}" from your glossary?`)) return;

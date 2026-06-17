@@ -19,6 +19,7 @@ from services import tag_editor
 from services import review_quiz
 from services import danbooru_client
 from services import blur_brush
+from services import trigger_safety
 from services.pipeline import PIPELINE_MANAGER
 
 load_dotenv()
@@ -72,6 +73,8 @@ WORKFLOW_GUIDE_META = [
     {"readme_title": "Image -> PNG Converter", "id": "webp", "icon": "images", "title": "Image to PNG Converter"},
     {"readme_title": "Photo Adjust (preset)", "id": "batch", "icon": "sliders2", "title": "Photo Adjust"},
     {"readme_title": "Brush Blur", "id": "blur", "icon": "brush", "title": "Brush Blur"},
+    {"readme_title": "Manga Palette Helper", "id": "palette_helper", "icon": "palette", "title": "Manga Palette Helper"},
+    {"readme_title": "EPUB Image Extractor", "id": "epub-extractor", "icon": "book", "title": "EPUB Image Extractor"},
     {"readme_title": "Webtoon Panel Splitter", "id": "webtoon", "icon": "scissors", "title": "Webtoon Panel Splitter"},
     {"readme_title": "Stitch Groups", "id": "merge", "icon": "columns-gap", "title": "Stitch Groups"},
     {"readme_title": "Flatten & Renumber", "id": "rename", "icon": "sort-numeric-down", "title": "Flatten & Renumber"},
@@ -1103,6 +1106,60 @@ def api_tags_project_init():
     result.setdefault("info", [])
     result["apply"] = True
     return jsonify(result), code
+
+
+@app.post("/api/trigger-safety/check")
+def api_trigger_safety_check():
+    payload = request.get_json(silent=True) or {}
+    try:
+        result = trigger_safety.scan_trigger_payload(
+            payload,
+            online_poi=_parse_bool(payload.get("online_poi"), True),
+        )
+    except Exception as exc:
+        return _json_error(f"Trigger safety check failed: {exc}", 500)
+    result.setdefault("warnings", [])
+    result.setdefault("info", [])
+    return jsonify(result), 200
+
+
+@app.post("/api/trigger-safety/blacklist/add")
+def api_trigger_safety_blacklist_add():
+    payload = request.get_json(silent=True) or {}
+    term = str(payload.get("term") or "").strip()
+    if not term:
+        return _json_error("term is required", 400)
+    try:
+        result = trigger_safety.add_blacklist_entry(
+            term=term,
+            reason=str(payload.get("reason") or "").strip() or "Flagged by CivitAI",
+            category=str(payload.get("category") or "poi").strip() or "poi",
+            severity=str(payload.get("severity") or "block").strip() or "block",
+            match_mode=str(payload.get("match_mode") or "compact_contains").strip() or "compact_contains",
+        )
+    except Exception as exc:
+        return _json_error(f"Blacklist update failed: {exc}", 500)
+    code = 200 if result.get("ok") else 400
+    result.setdefault("warnings", [])
+    result.setdefault("info", [])
+    return jsonify(result), code
+
+
+@app.get("/api/trigger-safety/blacklist/meta")
+def api_trigger_safety_blacklist_meta():
+    try:
+        payload = trigger_safety.load_blacklist()
+    except Exception as exc:
+        return _json_error(f"Blacklist metadata failed: {exc}", 500)
+    entries = payload.get("entries") or []
+    return jsonify({
+        "ok": True,
+        "entry_count": len(entries),
+        "updated_at": payload.get("updated_at") or 0,
+        "recent_entries": entries[-5:],
+        "warnings": payload.get("_warnings") or [],
+        "info": payload.get("_info") or [],
+    })
 
 
 @app.post("/api/tags/database-to-temp")
