@@ -150,6 +150,131 @@ class ReviewQuizApiTests(unittest.TestCase):
         session = start_response.get_json()["session"]
         self.assertEqual([step["id"] for step in session["quiz_segments"]], ["custom_camera"])
 
+    def test_tagging_quiz_left_only_mapping_row_creates_quiz_segment(self):
+        project, _ = self._project()
+        dataset = project / "dataset"
+        (dataset / "sample.png").write_bytes(b"img")
+        (project / "prompt.txt").write_text(
+            "trigger\n\naccessory: hair ornament, necklace\n\nbackground: indoors\n",
+            encoding="utf-8",
+        )
+        review_quiz.save_review_quiz_config(review_quiz.default_review_quiz_config())
+
+        response = self.client.post(
+            "/api/tagging-quiz/session/start",
+            json={
+                "project_root": str(project),
+                "exts": ".png",
+                "mapping_rows": [
+                    {"left_sections": ["accessory"], "right_segment": None},
+                    {"left_sections": ["background"], "right_segment": "background"},
+                ],
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        session = response.get_json()["session"]
+        self.assertEqual([step["id"] for step in session["quiz_segments"][:2]], ["accessory", "background"])
+        segment = next(seg for seg in session["quiz_segments"] if seg["id"] == "accessory")
+        self.assertEqual(segment["label"], "Accessory")
+        self.assertEqual(session["mapping_rows"][0], {"left_sections": ["accessory"], "right_segment": "accessory"})
+        self.assertEqual(session["recommendations"]["accessory"], ["hair_ornament", "necklace"])
+
+    def test_tagging_quiz_sessions_are_restored_by_dataset_image_set(self):
+        project, _ = self._project()
+        dataset = project / "dataset"
+        (dataset / "first.png").write_bytes(b"img")
+        review_quiz.save_review_quiz_config(review_quiz.default_review_quiz_config())
+
+        first_response = self.client.post(
+            "/api/tagging-quiz/session/start",
+            json={"project_root": str(project), "exts": ".png", "mapping_rows": []},
+        )
+        self.assertEqual(first_response.status_code, 200)
+        first_session = first_response.get_json()["session"]
+        first_session["images"]["dataset/first.png"]["status"] = "in_progress"
+        save_first = self.client.post(
+            "/api/tagging-quiz/session/save",
+            json={"project_root": str(project), "session": first_session},
+        )
+        self.assertEqual(save_first.status_code, 200)
+
+        (dataset / "first.png").unlink()
+        (dataset / "second.png").write_bytes(b"img")
+        second_response = self.client.post(
+            "/api/tagging-quiz/session/start",
+            json={"project_root": str(project), "exts": ".png", "mapping_rows": []},
+        )
+        self.assertEqual(second_response.status_code, 200)
+        second_session = second_response.get_json()["session"]
+        second_session["images"]["dataset/second.png"]["status"] = "in_progress"
+        save_second = self.client.post(
+            "/api/tagging-quiz/session/save",
+            json={"project_root": str(project), "session": second_session},
+        )
+        self.assertEqual(save_second.status_code, 200)
+
+        (dataset / "second.png").unlink()
+        (dataset / "first.png").write_bytes(b"img")
+        restored_first = self.client.post("/api/tagging-quiz/session/load", json={"project_root": str(project)})
+        self.assertEqual(restored_first.status_code, 200)
+        first_loaded = restored_first.get_json()["session"]
+        self.assertEqual(list(first_loaded["images"].keys()), ["dataset/first.png"])
+        self.assertEqual(first_loaded["images"]["dataset/first.png"]["status"], "in_progress")
+
+        (dataset / "first.png").unlink()
+        (dataset / "second.png").write_bytes(b"img")
+        restored_second = self.client.post("/api/tagging-quiz/session/load", json={"project_root": str(project)})
+        self.assertEqual(restored_second.status_code, 200)
+        second_loaded = restored_second.get_json()["session"]
+        self.assertEqual(list(second_loaded["images"].keys()), ["dataset/second.png"])
+        self.assertEqual(second_loaded["images"]["dataset/second.png"]["status"], "in_progress")
+
+    def test_tagging_quiz_save_rejects_session_from_different_project(self):
+        project, _ = self._project()
+        other = Path(self.temp_dir.name) / "other_project"
+        (project / "dataset" / "sample.png").write_bytes(b"img")
+        (other / "dataset" / "_temp").mkdir(parents=True, exist_ok=True)
+        (other / "dataset" / "other.png").write_bytes(b"img")
+        review_quiz.save_review_quiz_config(review_quiz.default_review_quiz_config())
+
+        start_response = self.client.post(
+            "/api/tagging-quiz/session/start",
+            json={"project_root": str(project), "exts": ".png", "mapping_rows": []},
+        )
+        self.assertEqual(start_response.status_code, 200)
+        session = start_response.get_json()["session"]
+
+        save_response = self.client.post(
+            "/api/tagging-quiz/session/save",
+            json={"project_root": str(other), "session": session},
+        )
+        self.assertEqual(save_response.status_code, 400)
+        self.assertIn("different project root", save_response.get_json()["error"])
+
+    def test_tagging_quiz_load_keeps_active_session_when_image_list_changed(self):
+        project, _ = self._project()
+        dataset = project / "dataset"
+        (dataset / "first.png").write_bytes(b"img")
+        review_quiz.save_review_quiz_config(review_quiz.default_review_quiz_config())
+
+        start_response = self.client.post(
+            "/api/tagging-quiz/session/start",
+            json={"project_root": str(project), "exts": ".png", "mapping_rows": []},
+        )
+        self.assertEqual(start_response.status_code, 200)
+
+        (dataset / "first.png").unlink()
+        (dataset / "second.png").write_bytes(b"img")
+        load_response = self.client.post("/api/tagging-quiz/session/load", json={"project_root": str(project)})
+
+        self.assertEqual(load_response.status_code, 200)
+        data = load_response.get_json()
+        self.assertTrue(data["session"])
+        self.assertIn("Dataset image list changed", " | ".join(data.get("warnings") or []))
+        self.assertTrue(data["session"]["images"]["dataset/first.png"]["missing"])
+        self.assertIn("dataset/second.png", data["session"]["images"])
+
     def test_manual_quiz_save_creates_caption_when_enabled(self):
         project, temp = self._project()
         (temp / "sample.png").write_bytes(b"img")

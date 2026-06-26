@@ -26,9 +26,12 @@ CATEGORY_NAMES = {
     4: "character",
     5: "meta",
 }
+_CATALOG_PAGE_LIMIT_MAX = 1000
 
 _CACHE: "OrderedDict[str, Tuple[float, Dict[str, Any]]]" = OrderedDict()
 _CACHE_LOCK = threading.Lock()
+_CATALOG_RETRY_LOGS: List[str] = []
+_CATALOG_RETRY_LOGS_LOCK = threading.Lock()
 
 
 def _env_int(name: str, default: int, *, min_value: int, max_value: int) -> int:
@@ -233,6 +236,90 @@ def _fetch_tag_meta(tag: str, timeout_seconds: float) -> Tuple[Optional[Dict[str
         },
         None,
     )
+
+
+def _is_transient_catalog_error(error: Optional[str]) -> bool:
+    if not error:
+        return False
+    text = str(error)
+    if "timed out" in text.lower() or "timeout" in text.lower():
+        return True
+    if "HTTP 429" in text:
+        return True
+    for code in range(500, 600):
+        if f"HTTP {code}" in text:
+            return True
+    return False
+
+
+def _normalize_catalog_record(item: Any) -> Optional[Dict[str, Any]]:
+    if not isinstance(item, dict):
+        return None
+    name = normalize_tag(item.get("name"))
+    if not name:
+        return None
+    category = _to_int(item.get("category"))
+    return {
+        "id": _to_int(item.get("id")) or 0,
+        "name": name,
+        "category": category if category is not None else 0,
+        "post_count": _to_int(item.get("post_count")) or 0,
+        "updated_at": str(item.get("updated_at") or ""),
+    }
+
+
+def drain_catalog_retry_logs() -> List[str]:
+    with _CATALOG_RETRY_LOGS_LOCK:
+        logs = list(_CATALOG_RETRY_LOGS)
+        _CATALOG_RETRY_LOGS.clear()
+    return logs
+
+
+def _catalog_retry_log(message: str) -> None:
+    with _CATALOG_RETRY_LOGS_LOCK:
+        _CATALOG_RETRY_LOGS.append(message)
+
+
+def fetch_tag_page(after_id: Optional[int], limit: int = 1000) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    """Fetch one Danbooru tag catalog page using Danbooru's id cursor pagination.
+
+    Danbooru returns tag lists newest/highest-id first for search[order]=id. To
+    keep walking older rows, pass page=b<lowest_seen_id> on the next request.
+    """
+    try:
+        page_limit = int(limit)
+    except Exception:
+        page_limit = _CATALOG_PAGE_LIMIT_MAX
+    page_limit = max(1, min(_CATALOG_PAGE_LIMIT_MAX, page_limit))
+
+    params: Dict[str, Any] = {
+        "limit": page_limit,
+        "search[order]": "id",
+    }
+    if after_id is not None:
+        params["page"] = f"b{max(0, int(after_id))}"
+
+    timeout_seconds = _request_timeout_seconds()
+    attempts = 4
+    last_error: Optional[str] = None
+    for attempt in range(1, attempts + 1):
+        payload, err = _http_get_json("/tags.json", params, timeout_seconds)
+        if not err:
+            if not isinstance(payload, list):
+                return [], "Invalid tag page payload from Danbooru"
+            rows = []
+            for item in payload:
+                record = _normalize_catalog_record(item)
+                if record:
+                    rows.append(record)
+            return rows, None
+        last_error = err
+        if not _is_transient_catalog_error(err) or attempt >= attempts:
+            return [], err
+        wait_seconds = min(4.0, 0.5 * (2 ** (attempt - 1)))
+        _catalog_retry_log(f"[sync] Retry {attempt}/{attempts} after {err}. Waiting {wait_seconds:.1f} seconds.")
+        time.sleep(wait_seconds)
+    return [], last_error or "Danbooru request failed"
 
 
 def lookup_tag_summaries(raw_tags: Any) -> Dict[str, Any]:

@@ -51,6 +51,7 @@ DEFAULT_TAGGING_QUIZ_SETTINGS = {
 }
 TAGGING_QUIZ_SETTINGS_PATH = Path(__file__).resolve().parent.parent / "settings" / "tagging_quiz.json"
 TAGGING_SESSION_REL = Path("dataset") / "_temp" / "tagging_session.json"
+TAGGING_SESSION_STORE_REL = Path("dataset") / "_temp" / "tagging_sessions"
 _TXT_TAG_CACHE: "OrderedDict[str, Tuple[Tuple[int, int], List[str]]]" = OrderedDict()
 _TXT_TAG_CACHE_MAX = 4096
 
@@ -326,6 +327,16 @@ def _normalize_quiz_segments(raw_segments: Any) -> List[Dict[str, Any]]:
     if not out:
         out = _json_clone(DEFAULT_QUIZ_SEGMENTS)
     return sorted(out, key=lambda item: (int(item.get("order") or 0), str(item.get("id") or "")))
+
+
+def _segment_id_from_label(label: str) -> str:
+    seg_id = re.sub(r"[^a-z0-9_]+", "_", str(label or "").strip().lower()).strip("_")
+    return seg_id or "segment"
+
+
+def _segment_label_from_cheatsheet_name(name: str) -> str:
+    label = re.sub(r"[_\s]+", " ", str(name or "").strip())
+    return label.title() or "Segment"
 
 
 def default_tagging_quiz_settings() -> Dict[str, Any]:
@@ -909,6 +920,11 @@ def tagging_session_path(project_root: Path) -> Path:
     return paths["project_root"] / TAGGING_SESSION_REL
 
 
+def tagging_session_store_dir(project_root: Path) -> Path:
+    paths = resolve_project_paths(project_root)
+    return paths["project_root"] / TAGGING_SESSION_STORE_REL
+
+
 def _stable_hash(value: Any) -> str:
     text = json.dumps(value, ensure_ascii=False, sort_keys=True)
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -929,6 +945,61 @@ def _image_list_hash(images: List[Path], root: Path) -> str:
         except Exception:
             rels.append(str(img))
     return _stable_hash(rels)
+
+
+def _session_image_list_hash(session: Dict[str, Any]) -> str:
+    fp = session.get("source_fingerprint") if isinstance(session.get("source_fingerprint"), dict) else {}
+    return re.sub(r"[^a-fA-F0-9]+", "", str(fp.get("image_list_hash") or "").strip().lower())
+
+
+def _session_slot_path(project_root: Path, session: Dict[str, Any]) -> Optional[Path]:
+    image_hash = _session_image_list_hash(session)
+    if not image_hash:
+        return None
+    return tagging_session_store_dir(project_root) / f"tagging_session_{image_hash[:32]}.json"
+
+
+def _read_json_file(path: Path) -> Dict[str, Any]:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _save_session_slot(project_root: Path, session: Dict[str, Any]) -> Optional[Path]:
+    if not isinstance(session, dict):
+        return None
+    slot = _session_slot_path(project_root, session)
+    if not slot:
+        return None
+    payload = _json_clone(session)
+    payload["project_root"] = str(resolve_project_paths(project_root)["project_root"])
+    payload["updated_at"] = payload.get("updated_at") or _utc_now_iso()
+    atomic_write_json(slot, payload)
+    return slot
+
+
+def _find_session_slot_by_image_hash(project_root: Path, image_hash: str) -> Optional[Tuple[Path, Dict[str, Any]]]:
+    clean_hash = re.sub(r"[^a-fA-F0-9]+", "", str(image_hash or "").strip().lower())
+    if not clean_hash:
+        return None
+    store = tagging_session_store_dir(project_root)
+    if not store.exists() or not store.is_dir():
+        return None
+    matches: List[Tuple[float, Path, Dict[str, Any]]] = []
+    for path in store.glob("tagging_session_*.json"):
+        try:
+            session = _read_json_file(path)
+        except Exception:
+            continue
+        if _session_image_list_hash(session) != clean_hash:
+            continue
+        try:
+            mtime = path.stat().st_mtime
+        except Exception:
+            mtime = 0.0
+        matches.append((mtime, path, session))
+    if not matches:
+        return None
+    _, path, session = sorted(matches, key=lambda item: item[0], reverse=True)[0]
+    return path, session
 
 
 def _normalize_mapping_rows(rows: Any) -> List[Dict[str, Any]]:
@@ -953,6 +1024,85 @@ def _normalize_mapping_rows(rows: Any) -> List[Dict[str, Any]]:
         else:
             out.append({"left_sections": left, "right_segment": right})
     return out
+
+
+def _materialize_mapping_row_segments(
+    settings_segments: Any,
+    rows: Any,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    segments = _normalize_quiz_segments(settings_segments)
+    segment_by_id: Dict[str, Dict[str, Any]] = {str(segment.get("id") or ""): dict(segment) for segment in segments}
+    mapping_rows = _normalize_mapping_rows(rows)
+    known_ids = set(segment_by_id)
+    generated_ids: Dict[str, str] = {}
+    used_ids = set(known_ids)
+    ordered_ids: List[str] = []
+
+    def add_ordered_id(seg_id: Optional[str]) -> None:
+        clean = str(seg_id or "").strip()
+        if clean and clean not in ordered_ids:
+            ordered_ids.append(clean)
+
+    def unique_id(base: str) -> str:
+        clean = _segment_id_from_label(base)
+        candidate = clean
+        suffix = 2
+        while candidate in used_ids:
+            candidate = f"{clean}_{suffix}"
+            suffix += 1
+        used_ids.add(candidate)
+        return candidate
+
+    materialized_rows: List[Dict[str, Any]] = []
+    for row in mapping_rows:
+        left = list(row.get("left_sections") or [])
+        right = row.get("right_segment")
+        if right and right in known_ids:
+            materialized_rows.append({"left_sections": left, "right_segment": right})
+            add_ordered_id(right)
+            continue
+        if left:
+            first_section = left[0]
+            label = _segment_label_from_cheatsheet_name(first_section)
+            if right:
+                generated_id = str(right)
+                if generated_id not in used_ids:
+                    used_ids.add(generated_id)
+                elif generated_id not in generated_ids.values():
+                    generated_id = unique_id(generated_id)
+            else:
+                generated_id = generated_ids.get(first_section)
+                if not generated_id:
+                    generated_id = unique_id(first_section)
+                    generated_ids[first_section] = generated_id
+            if generated_id not in known_ids and generated_id not in segment_by_id:
+                segment_by_id[generated_id] = {"id": generated_id, "label": label, "order": len(segment_by_id) + 1}
+                known_ids.add(generated_id)
+            materialized_rows.append({"left_sections": left, "right_segment": generated_id})
+            add_ordered_id(generated_id)
+            continue
+        materialized_rows.append({"left_sections": left, "right_segment": right})
+
+    ordered_segments: List[Dict[str, Any]] = []
+    seen_segment_ids: Set[str] = set()
+    for seg_id in ordered_ids:
+        segment = segment_by_id.get(seg_id)
+        if not segment or seg_id in seen_segment_ids:
+            continue
+        seen_segment_ids.add(seg_id)
+        ordered_segments.append({**segment, "order": len(ordered_segments) + 1})
+    for segment in segments:
+        seg_id = str(segment.get("id") or "")
+        if not seg_id or seg_id in seen_segment_ids:
+            continue
+        seen_segment_ids.add(seg_id)
+        ordered_segments.append({**segment, "order": len(ordered_segments) + 1})
+    for seg_id, segment in segment_by_id.items():
+        if not seg_id or seg_id in seen_segment_ids:
+            continue
+        seen_segment_ids.add(seg_id)
+        ordered_segments.append({**segment, "order": len(ordered_segments) + 1})
+    return _normalize_quiz_segments(ordered_segments), materialized_rows
 
 
 def _section_tag_index(parsed: Dict[str, Any]) -> Dict[str, List[str]]:
@@ -983,8 +1133,9 @@ def build_tagging_quiz_recommendations(
         warnings.append(parsed.get("error") or "Cheatsheet not available; recommendations are empty.")
         parsed = {"sections": [], "trigger": "", "tags": []}
     index = _section_tag_index(parsed)
-    recommendations: Dict[str, List[str]] = {segment["id"]: [] for segment in settings.get("segments") or []}
-    for row in _normalize_mapping_rows(mapping_rows):
+    segments, materialized_rows = _materialize_mapping_row_segments(settings.get("segments"), mapping_rows)
+    recommendations: Dict[str, List[str]] = {segment["id"]: [] for segment in segments}
+    for row in materialized_rows:
         segment_id = row.get("right_segment")
         if not segment_id:
             continue
@@ -1006,6 +1157,8 @@ def build_tagging_quiz_recommendations(
     return {
         "ok": True,
         "recommendations": recommendations,
+        "segments": segments,
+        "mapping_rows": materialized_rows,
         "trigger": parsed.get("trigger") or "",
         "warnings": warnings,
         "logs": logs,
@@ -1093,21 +1246,43 @@ def _ensure_session_image_entry(session: Dict[str, Any], image_rel: str) -> Dict
 def load_tagging_session(project_root: Path) -> Dict[str, Any]:
     paths = resolve_project_paths(project_root)
     session_path = tagging_session_path(paths["project_root"])
-    if not session_path.exists():
-        return {"ok": True, "session": None, "exists": False, **_make_serializable_path_info(paths)}
-    try:
-        session = json.loads(session_path.read_text(encoding="utf-8"))
-    except Exception as exc:
-        return {"ok": False, "error": f"Could not read tagging session: {exc}", **_make_serializable_path_info(paths)}
     warnings: List[str] = []
+    exts = [".jpg", ".jpeg", ".png", ".webp"]
+    images = _list_images(paths["dataset_root"], exts, recursive=True, exclude_dir=paths["temp_root"])
+    image_rels = [_image_rel_for_session(paths["dataset_root"], img) for img in images]
+    current_image_hash = _image_list_hash(images, paths["dataset_root"])
+    session: Optional[Dict[str, Any]] = None
+    restored_from = ""
+    if session_path.exists():
+        try:
+            session = _read_json_file(session_path)
+        except Exception as exc:
+            return {"ok": False, "error": f"Could not read tagging session: {exc}", **_make_serializable_path_info(paths)}
+        active_hash = _session_image_list_hash(session)
+        if active_hash and active_hash != current_image_hash:
+            _save_session_slot(paths["project_root"], session)
+            found = _find_session_slot_by_image_hash(paths["project_root"], current_image_hash)
+            if found:
+                restored_from, session = str(found[0].name), found[1]
+                atomic_write_json(session_path, session)
+                warnings.append(f"Restored saved tagging session for this dataset: {restored_from}")
+            else:
+                warnings.append("Dataset image list changed since this session was saved; loading the active session and updating image entries.")
+    else:
+        found = _find_session_slot_by_image_hash(paths["project_root"], current_image_hash)
+        if found:
+            restored_from, session = str(found[0].name), found[1]
+            atomic_write_json(session_path, session)
+            warnings.append(f"Restored saved tagging session for this dataset: {restored_from}")
+        else:
+            return {"ok": True, "session": None, "exists": False, **_make_serializable_path_info(paths)}
+    if not isinstance(session, dict):
+        return {"ok": True, "session": None, "exists": False, **_make_serializable_path_info(paths)}
     fp = session.get("source_fingerprint") if isinstance(session.get("source_fingerprint"), dict) else {}
     current_prompt_mtime = _prompt_mtime(paths)
     if fp.get("prompt_txt_mtime") and int(fp.get("prompt_txt_mtime") or 0) != current_prompt_mtime:
         warnings.append("Cheatsheet changed since this session started.")
 
-    exts = [".jpg", ".jpeg", ".png", ".webp"]
-    images = _list_images(paths["dataset_root"], exts, recursive=True, exclude_dir=paths["temp_root"])
-    image_rels = [_image_rel_for_session(paths["dataset_root"], img) for img in images]
     existing_set = set(image_rels)
     for rel in image_rels:
         _ensure_session_image_entry(session, rel)
@@ -1146,9 +1321,22 @@ def save_tagging_session(project_root: Path, session: Dict[str, Any]) -> Dict[st
     paths = resolve_project_paths(project_root)
     if not isinstance(session, dict):
         return {"ok": False, "error": "session must be an object", **_make_serializable_path_info(paths)}
+    incoming_root = str(session.get("project_root") or "").strip()
+    if incoming_root:
+        try:
+            incoming_paths = resolve_project_paths(Path(incoming_root))
+            if incoming_paths["project_root"].resolve() != paths["project_root"].resolve():
+                return {
+                    "ok": False,
+                    "error": "Session belongs to a different project root; refusing to overwrite this dataset session.",
+                    **_make_serializable_path_info(paths),
+                }
+        except Exception:
+            return {"ok": False, "error": "Invalid session project_root", **_make_serializable_path_info(paths)}
     session["project_root"] = str(paths["project_root"])
     session["updated_at"] = _utc_now_iso()
     atomic_write_json(tagging_session_path(paths["project_root"]), session)
+    _save_session_slot(paths["project_root"], session)
     return {"ok": True, "session": session, "logs": ["Autosaved session"], **_make_serializable_path_info(paths)}
 
 
@@ -1163,8 +1351,7 @@ def start_tagging_session(
 ) -> Dict[str, Any]:
     paths = resolve_project_paths(project_root)
     settings = normalize_tagging_quiz_settings(settings or load_tagging_quiz_settings())
-    segments = _normalize_quiz_segments(settings.get("segments"))
-    mapping_rows = _normalize_mapping_rows(mapping_rows or [])
+    segments, mapping_rows = _materialize_mapping_row_segments(settings.get("segments"), mapping_rows or [])
     session_defaults = {
         str(k): _dedup_tags(v if isinstance(v, list) else parse_tag_list(v))
         for k, v in (session_defaults or {}).items()
@@ -1216,6 +1403,13 @@ def start_tagging_session(
             "missing": False,
         }
     if replace:
+        existing_path = tagging_session_path(paths["project_root"])
+        if existing_path.exists():
+            try:
+                existing_session = _read_json_file(existing_path)
+                _save_session_slot(paths["project_root"], existing_session)
+            except Exception:
+                pass
         save_tagging_session(paths["project_root"], session)
     return {
         "ok": True,
@@ -1340,8 +1534,17 @@ def save_tagging_quiz_image(
 def delete_tagging_session(project_root: Path) -> Dict[str, Any]:
     paths = resolve_project_paths(project_root)
     path = tagging_session_path(paths["project_root"])
+    session: Optional[Dict[str, Any]] = None
+    if path.exists():
+        try:
+            session = _read_json_file(path)
+        except Exception:
+            session = None
     if path.exists():
         path.unlink()
+    slot = _session_slot_path(paths["project_root"], session or {}) if session else None
+    if slot and slot.exists():
+        slot.unlink()
     return {"ok": True, "deleted": True, "logs": ["Deleted tagging session"], **_make_serializable_path_info(paths)}
 
 
@@ -1350,10 +1553,17 @@ def archive_tagging_session(project_root: Path) -> Dict[str, Any]:
     path = tagging_session_path(paths["project_root"])
     if not path.exists():
         return {"ok": False, "error": "No tagging session to archive", **_make_serializable_path_info(paths)}
+    try:
+        session = _read_json_file(path)
+    except Exception:
+        session = {}
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     target = path.with_name(f"tagging_session_{stamp}.json")
     target, _ = _next_unique_file(target)
     shutil.move(str(path), str(target))
+    slot = _session_slot_path(paths["project_root"], session) if session else None
+    if slot and slot.exists():
+        slot.unlink()
     return {
         "ok": True,
         "archive": target.name,

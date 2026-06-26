@@ -18,6 +18,8 @@ from services import normalizer
 from services import tag_editor
 from services import review_quiz
 from services import danbooru_client
+from services import tag_catalog
+from services import tagging_assist
 from services import blur_brush
 from services import trigger_safety
 from services.pipeline import PIPELINE_MANAGER
@@ -89,8 +91,8 @@ WORKFLOW_GUIDE_META = [
 ]
 
 WORKFLOW_GUIDE_GROUP_HEADINGS = {"Image Tools", "Dataset Assembly", "Tag Tools"}
-WORKFLOW_GUIDE_USE_LABELS = {"Cara pakai", "Cara pakai (disarankan)"}
-WORKFLOW_GUIDE_WATCH_LABELS = {"Perhatian"}
+WORKFLOW_GUIDE_USE_LABELS = {"How to use"}
+WORKFLOW_GUIDE_WATCH_LABELS = {"Watch out"}
 
 
 def _normalize_guide_label(raw: str) -> str:
@@ -798,6 +800,161 @@ def api_danbooru_tag_wiki():
     return jsonify(result), code
 
 
+def _tag_suggestion_section_defs() -> List[Dict[str, str]]:
+    sections: List[Dict[str, str]] = []
+    try:
+        config = review_quiz.load_review_quiz_config()
+        for step in (config.get("quiz_review") or {}).get("steps") or []:
+            step_id = str(step.get("id") or "").strip()
+            if step_id:
+                sections.append({"id": step_id, "label": str(step.get("label") or step_id)})
+    except Exception:
+        pass
+    return sections
+
+
+def _danbooru_step_suggestions_enabled(section: str) -> Optional[bool]:
+    section_key = tag_catalog.normalize_tag_name(section)
+    if not section_key or section_key == "manual_tags":
+        return None
+    try:
+        config = review_quiz.load_review_quiz_config()
+        for step in (config.get("quiz_review") or {}).get("steps") or []:
+            step_id = tag_catalog.normalize_tag_name(step.get("id") or "")
+            if step_id == section_key:
+                return bool(step.get("danbooru_autosuggest", False))
+    except Exception:
+        return False
+    return None
+
+
+@app.get("/api/tag-catalog/status")
+def api_tag_catalog_status():
+    return jsonify(tag_catalog.get_catalog_status())
+
+
+@app.post("/api/tag-catalog/sync")
+def api_tag_catalog_sync():
+    result = tag_catalog.start_full_sync()
+    return jsonify(result), 200 if result.get("ok") else 400
+
+
+@app.post("/api/tag-catalog/cancel")
+def api_tag_catalog_cancel():
+    result = tag_catalog.cancel_sync()
+    return jsonify(result), 200 if result.get("ok") else 400
+
+
+@app.post("/api/tag-catalog/import")
+def api_tag_catalog_import():
+    upload = request.files.get("file")
+    if not upload or not upload.filename:
+        return _json_error("CSV file is required.", 400)
+    name = Path(upload.filename).name
+    if not name.lower().endswith(".csv"):
+        return _json_error("Import file must be a CSV.", 400)
+    temp_dir = Path(WORK_DIR) / "uploads" / "tag_catalog"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    temp_path = temp_dir / f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{name}"
+    upload.save(str(temp_path))
+    try:
+        result = tag_catalog.import_csv(temp_path)
+    finally:
+        try:
+            temp_path.unlink()
+        except Exception:
+            pass
+    return jsonify(result), 200 if result.get("ok") else 400
+
+
+@app.get("/api/tag-catalog/export")
+def api_tag_catalog_export():
+    try:
+        path = tag_catalog.export_csv()
+    except FileNotFoundError as exc:
+        return _json_error(str(exc), 404)
+    return send_file(path, as_attachment=True, download_name="danbooru_tags.csv", mimetype="text/csv")
+
+
+@app.post("/api/tag-catalog/rebuild-index")
+def api_tag_catalog_rebuild_index():
+    result = tag_catalog.rebuild_sqlite_from_csv()
+    return jsonify(result), 200 if result.get("ok") else 400
+
+
+@app.post("/api/tag-catalog/suggest")
+def api_tag_catalog_suggest():
+    payload = request.get_json(silent=True) or {}
+    query = str(payload.get("query") or "")
+    if len(query) > 120:
+        return _json_error("query is too long", 400)
+    section = tag_catalog.normalize_tag_name(payload.get("section") or "manual_tags")
+    settings = tag_catalog.settings_with_sections(_tag_suggestion_section_defs())
+    catalog_status = tag_catalog.get_catalog_status()
+    step_enabled = _danbooru_step_suggestions_enabled(section)
+    section_enabled = bool((settings.get("sections") or {}).get(section, {}).get("enabled", False))
+    if step_enabled is not None:
+        section_enabled = step_enabled
+    master_enabled = bool(settings.get("enabled") or step_enabled is True)
+    enabled = bool(master_enabled and section_enabled and catalog_status.get("ready"))
+    if not enabled:
+        return jsonify({"ok": True, "enabled": False, "suggestions": [], "warnings": [], "info": []})
+    try:
+        limit = int(payload.get("limit", settings.get("max_suggestions", 12)))
+    except Exception:
+        limit = int(settings.get("max_suggestions", 12))
+    limit = max(1, min(30, limit))
+    include_categories = [
+        name for name, include in (settings.get("include_categories") or {}).items()
+        if include
+    ]
+    step_cfg = None
+    try:
+        for cfg_step in (review_quiz.load_review_quiz_config().get("quiz_review") or {}).get("steps") or []:
+            if tag_catalog.normalize_tag_name(cfg_step.get("id") or "") == section:
+                step_cfg = cfg_step
+                break
+    except Exception:
+        step_cfg = None
+    if step_cfg and not _parse_bool(payload.get("show_all")):
+        preferred_categories = [
+            tag_catalog.normalize_tag_name(name)
+            for name in (step_cfg.get("preferred_danbooru_categories") or [])
+            if tag_catalog.normalize_tag_name(name)
+        ]
+        if preferred_categories:
+            include_categories = [name for name in include_categories if name in preferred_categories] or include_categories
+        project_tags = list(payload.get("project_tags") if isinstance(payload.get("project_tags"), list) else [])
+        project_tags.extend(step_cfg.get("preferred_tags") or [])
+    else:
+        project_tags = payload.get("project_tags") if isinstance(payload.get("project_tags"), list) else []
+    suggestions = tag_catalog.search_suggestions(
+        query=query,
+        limit=limit,
+        min_post_count=int(settings.get("min_post_count", 0) or 0),
+        include_categories=include_categories,
+        include_deprecated=bool(settings.get("include_deprecated")),
+        existing_tags=payload.get("existing_tags") if isinstance(payload.get("existing_tags"), list) else [],
+        project_tags=project_tags,
+        glossary_tags=payload.get("glossary_tags") if isinstance(payload.get("glossary_tags"), list) else [],
+    )
+    return jsonify({"ok": True, "enabled": True, "suggestions": suggestions, "warnings": [], "info": []})
+
+
+@app.get("/api/tag-suggestion-settings")
+def api_tag_suggestion_settings_get():
+    return jsonify({"ok": True, "settings": tag_catalog.settings_with_sections(_tag_suggestion_section_defs()), "warnings": [], "info": []})
+
+
+@app.post("/api/tag-suggestion-settings")
+def api_tag_suggestion_settings_post():
+    payload = request.get_json(silent=True) or {}
+    settings = payload.get("settings") if isinstance(payload.get("settings"), dict) else payload
+    saved = tag_catalog.save_settings(settings)
+    saved = tag_catalog.settings_with_sections(_tag_suggestion_section_defs())
+    return jsonify({"ok": True, "settings": saved, "warnings": [], "info": ["Tag suggestion settings saved"]})
+
+
 @app.get("/api/settings/review-quiz")
 def api_settings_review_quiz_get():
     return jsonify({"ok": True, "config": review_quiz.load_review_quiz_config(), "warnings": [], "info": []})
@@ -899,6 +1056,8 @@ def api_tags_quiz_save():
             selected_tags=payload.get("selected_tags") or [],
             manual_tags=payload.get("manual_tags") if "manual_tags" in payload else None,
             not_applicable=_parse_bool(payload.get("not_applicable")),
+            uncertain=_parse_bool(payload.get("uncertain")),
+            uncertain_note=payload.get("uncertain_note") or "",
             mark_reviewed=_parse_bool(payload.get("mark_reviewed"), True),
             backup=_parse_bool(payload.get("backup"), True),
         )
@@ -931,6 +1090,211 @@ def api_tags_quiz_restore():
         return _json_error(f"Quiz Review restore failed: {exc}", 500, normalized_root=str(paths["project_root"]))
     result.update({"normalized_root": str(paths["project_root"]), "needs_init": False, "info": []})
     return jsonify(result)
+
+
+@app.post("/api/tags/assist/state")
+def api_tags_assist_state():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    state = tagging_assist.load_state(paths["project_root"])
+    return jsonify({"ok": True, "assist": state, "normalized_root": str(paths["project_root"]), "warnings": [], "info": []})
+
+
+@app.post("/api/tags/assist/custom-tags")
+def api_tags_assist_custom_tags():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    state = tagging_assist.set_custom_tags(paths["project_root"], payload.get("tags") or [])
+    return jsonify({"ok": True, "assist": state, "normalized_root": str(paths["project_root"]), "warnings": [], "info": []})
+
+
+@app.post("/api/tags/packs/list")
+def api_tags_packs_list():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    result = tagging_assist.list_packs(
+        paths["project_root"],
+        segment_id=payload.get("segment_id") or "",
+        show_all=_parse_bool(payload.get("show_all")),
+    )
+    result["normalized_root"] = str(paths["project_root"])
+    return jsonify(result)
+
+
+@app.post("/api/tags/packs/save")
+def api_tags_packs_save():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    try:
+        result = tagging_assist.upsert_pack(paths["project_root"], payload.get("pack") if isinstance(payload.get("pack"), dict) else payload)
+    except ValueError as exc:
+        return _json_error(str(exc), 400, normalized_root=str(paths["project_root"]))
+    result["normalized_root"] = str(paths["project_root"])
+    return jsonify(result)
+
+
+@app.post("/api/tags/packs/delete")
+def api_tags_packs_delete():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    try:
+        result = tagging_assist.delete_pack(paths["project_root"], payload.get("id") or "")
+    except ValueError as exc:
+        return _json_error(str(exc), 404, normalized_root=str(paths["project_root"]))
+    result["normalized_root"] = str(paths["project_root"])
+    return jsonify(result)
+
+
+@app.post("/api/tags/packs/apply")
+def api_tags_packs_apply():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    try:
+        result = tagging_assist.apply_pack(paths["project_root"], payload.get("id") or "", payload.get("current_tags") or [])
+    except ValueError as exc:
+        return _json_error(str(exc), 404, normalized_root=str(paths["project_root"]))
+    result["normalized_root"] = str(paths["project_root"])
+    return jsonify(result)
+
+
+@app.post("/api/tags/siblings/group")
+def api_tags_siblings_group():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    try:
+        result = tagging_assist.upsert_sibling_group(paths["project_root"], payload.get("group") if isinstance(payload.get("group"), dict) else payload)
+    except ValueError as exc:
+        return _json_error(str(exc), 400, normalized_root=str(paths["project_root"]))
+    result["normalized_root"] = str(paths["project_root"])
+    return jsonify(result)
+
+
+@app.post("/api/tags/siblings/preview")
+def api_tags_siblings_preview():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    try:
+        result = tagging_assist.sibling_preview(
+            paths["project_root"],
+            payload.get("area") or "temp",
+            payload.get("source_rel") or "",
+            payload.get("dest_rels") or [],
+            payload.get("tags") or [],
+            payload.get("mode") or "append",
+        )
+    except ValueError as exc:
+        return _json_error(str(exc), 400, normalized_root=str(paths["project_root"]))
+    result["normalized_root"] = str(paths["project_root"])
+    return jsonify(result)
+
+
+@app.post("/api/tags/siblings/apply")
+def api_tags_siblings_apply():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    try:
+        result = tagging_assist.sibling_apply(
+            paths["project_root"],
+            payload.get("area") or "temp",
+            payload.get("source_rel") or "",
+            payload.get("dest_rels") or [],
+            payload.get("tags") or [],
+            payload.get("mode") or "append",
+        )
+    except ValueError as exc:
+        return _json_error(str(exc), 400, normalized_root=str(paths["project_root"]))
+    result["normalized_root"] = str(paths["project_root"])
+    return jsonify(result)
+
+
+@app.post("/api/tags/machine-suggestions")
+def api_tags_machine_suggestions():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    if request.method == "POST":
+        try:
+            result = tagging_assist.list_machine_suggestions(paths["project_root"], payload.get("rel") or "")
+        except ValueError as exc:
+            return _json_error(str(exc), 400, normalized_root=str(paths["project_root"]))
+        result["normalized_root"] = str(paths["project_root"])
+        return jsonify(result)
+
+
+@app.post("/api/tags/machine-suggestions/store")
+def api_tags_machine_suggestions_store():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    try:
+        result = tagging_assist.store_machine_suggestions(paths["project_root"], payload.get("rel") or "", payload.get("suggestions") or [], payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {})
+    except ValueError as exc:
+        return _json_error(str(exc), 400, normalized_root=str(paths["project_root"]))
+    result["normalized_root"] = str(paths["project_root"])
+    return jsonify(result)
+
+
+@app.post("/api/tags/machine-suggestions/ignore")
+def api_tags_machine_suggestions_ignore():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    try:
+        result = tagging_assist.ignore_machine_suggestion(paths["project_root"], payload.get("rel") or "", payload.get("tag") or "")
+    except ValueError as exc:
+        return _json_error(str(exc), 400, normalized_root=str(paths["project_root"]))
+    result["normalized_root"] = str(paths["project_root"])
+    return jsonify(result)
+
+
+@app.post("/api/tags/lint")
+def api_tags_lint():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    try:
+        result = tagging_assist.lint_captions(
+            paths["project_root"],
+            area=payload.get("area") or "temp",
+            severity=str(payload.get("severity") or ""),
+            issue_type=str(payload.get("issue_type") or ""),
+        )
+    except ValueError as exc:
+        return _json_error(str(exc), 400, normalized_root=str(paths["project_root"]))
+    result["normalized_root"] = str(paths["project_root"])
+    return jsonify(result)
+
+
+@app.post("/api/tags/lint/export")
+def api_tags_lint_export():
+    payload = request.get_json(silent=True) or {}
+    report = payload.get("report") if isinstance(payload.get("report"), dict) else {"ok": True, "rows": []}
+    fmt = str(payload.get("format") or "json").lower()
+    text, mimetype = tagging_assist.export_lint(report, fmt)
+    download_name = "caption_lint.csv" if fmt == "csv" else "caption_lint.json"
+    return send_file(BytesIO(text.encode("utf-8")), as_attachment=True, download_name=download_name, mimetype=mimetype)
 
 
 @app.get("/api/tagging-quiz/settings")

@@ -17,7 +17,7 @@ from . import tag_editor
 
 REVIEW_QUIZ_CONFIG_PATH = Path(__file__).resolve().parent.parent / "_config" / "review_quiz.json"
 DEFAULT_IMAGE_EXTS = [".jpg", ".jpeg", ".png", ".webp"]
-QUEUE_MODES = {"missing_only", "all", "conflict_only", "not_reviewed"}
+QUEUE_MODES = {"missing_only", "all", "conflict_only", "not_reviewed", "uncertain_only"}
 STEP_MODES = {"single", "multi", "manual"}
 AREA_MODES = {"temp", "dataset"}
 _CONFIG_CACHE: Dict[str, Any] = {"signature": None, "payload": None}
@@ -73,6 +73,11 @@ def default_review_quiz_config() -> Dict[str, Any]:
                     "auto_advance": False,
                     "allow_not_applicable": False,
                     "queue_mode": "missing_only",
+                    "preferred_tags": ["long_hair", "short_hair", "bangs"],
+                    "mapped_glossary_categories": ["appearance"],
+                    "prioritize_segment_suggestions": True,
+                    "preferred_danbooru_categories": ["general"],
+                    "show_broad_suggestions": True,
                     "tags": ["hair_color", "eye_color", "hairstyle", "long_hair", "short_hair", "bangs"],
                 },
                 {
@@ -83,6 +88,11 @@ def default_review_quiz_config() -> Dict[str, Any]:
                     "auto_advance": False,
                     "allow_not_applicable": True,
                     "queue_mode": "missing_only",
+                    "preferred_tags": [],
+                    "mapped_glossary_categories": ["outfit"],
+                    "prioritize_segment_suggestions": True,
+                    "preferred_danbooru_categories": ["general", "copyright"],
+                    "show_broad_suggestions": True,
                     "tags": ["top", "bottom", "footwear", "dress", "shirt", "skirt"],
                 },
                 {
@@ -93,6 +103,11 @@ def default_review_quiz_config() -> Dict[str, Any]:
                     "auto_advance": False,
                     "allow_not_applicable": True,
                     "queue_mode": "missing_only",
+                    "preferred_tags": [],
+                    "mapped_glossary_categories": ["expression"],
+                    "prioritize_segment_suggestions": True,
+                    "preferred_danbooru_categories": ["general"],
+                    "show_broad_suggestions": True,
                     "tags": ["smile", "serious", "angry", "closed_eyes", "open_mouth", "sweat"],
                 },
                 {
@@ -103,6 +118,11 @@ def default_review_quiz_config() -> Dict[str, Any]:
                     "auto_advance": True,
                     "allow_not_applicable": False,
                     "queue_mode": "missing_only",
+                    "preferred_tags": [],
+                    "mapped_glossary_categories": ["pose", "body composition"],
+                    "prioritize_segment_suggestions": True,
+                    "preferred_danbooru_categories": ["general"],
+                    "show_broad_suggestions": True,
                     "tags": ["full_body", "cowboy_shot", "upper_body", "portrait", "standing", "sitting", "clenched_hands"],
                 },
                 {
@@ -113,6 +133,11 @@ def default_review_quiz_config() -> Dict[str, Any]:
                     "auto_advance": True,
                     "allow_not_applicable": True,
                     "queue_mode": "missing_only",
+                    "preferred_tags": [],
+                    "mapped_glossary_categories": ["camera", "pov"],
+                    "prioritize_segment_suggestions": True,
+                    "preferred_danbooru_categories": ["general"],
+                    "show_broad_suggestions": True,
                     "tags": ["looking_at_viewer", "from_front", "from_side", "from_behind", "from_above", "from_below"],
                 },
                 {
@@ -123,6 +148,11 @@ def default_review_quiz_config() -> Dict[str, Any]:
                     "auto_advance": False,
                     "allow_not_applicable": True,
                     "queue_mode": "missing_only",
+                    "preferred_tags": [],
+                    "mapped_glossary_categories": ["lighting"],
+                    "prioritize_segment_suggestions": True,
+                    "preferred_danbooru_categories": ["general", "meta"],
+                    "show_broad_suggestions": True,
                     "tags": ["soft_lighting", "backlighting", "dim_lighting", "sunlight", "shadow"],
                 },
                 {
@@ -133,6 +163,11 @@ def default_review_quiz_config() -> Dict[str, Any]:
                     "auto_advance": False,
                     "allow_not_applicable": True,
                     "queue_mode": "missing_only",
+                    "preferred_tags": [],
+                    "mapped_glossary_categories": ["background"],
+                    "prioritize_segment_suggestions": True,
+                    "preferred_danbooru_categories": ["general"],
+                    "show_broad_suggestions": True,
                     "tags": ["simple_background", "indoors", "outdoors", "bedroom", "street"],
                 },
             ],
@@ -168,6 +203,20 @@ def normalize_review_quiz_config(payload: Any) -> Dict[str, Any]:
                 "autosuggest_segment_only": bool(
                     raw_step.get("autosuggest_segment_only", quiz_src.get("autosuggest_segment_only", False))
                 ),
+                "danbooru_autosuggest": bool(raw_step.get("danbooru_autosuggest", False)),
+                "preferred_tags": _normalize_tags(raw_step.get("preferred_tags")),
+                "mapped_glossary_categories": [
+                    re.sub(r"\s+", " ", str(value or "").strip()).lower()
+                    for value in (raw_step.get("mapped_glossary_categories") if isinstance(raw_step.get("mapped_glossary_categories"), list) else [])
+                    if str(value or "").strip()
+                ],
+                "prioritize_segment_suggestions": bool(raw_step.get("prioritize_segment_suggestions", True)),
+                "preferred_danbooru_categories": [
+                    _normalize_tag(value)
+                    for value in (raw_step.get("preferred_danbooru_categories") if isinstance(raw_step.get("preferred_danbooru_categories"), list) else [])
+                    if _normalize_tag(value)
+                ],
+                "show_broad_suggestions": bool(raw_step.get("show_broad_suggestions", True)),
                 "allow_not_applicable": bool(raw_step.get("allow_not_applicable", False)),
                 "queue_mode": queue_mode,
                 "tags": _normalize_tags(raw_step.get("tags")),
@@ -307,26 +356,40 @@ def _metadata_path(root: Path) -> Path:
 def _load_metadata(root: Path) -> Dict[str, Any]:
     path = _metadata_path(root)
     if not path.exists():
-        return {"version": 1, "items": {}}
+        return {"version": 2, "items": {}}
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return {"version": 1, "items": {}}
     items = payload.get("items") if isinstance(payload, dict) and isinstance(payload.get("items"), dict) else {}
-    return {"version": 1, "items": items}
+    return {"version": max(2, int(payload.get("version") or 1)) if isinstance(payload, dict) else 2, "items": items}
 
 
 def _save_metadata(root: Path, payload: Dict[str, Any]) -> None:
-    _write_json(_metadata_path(root), {"version": 1, "items": payload.get("items") or {}})
+    _write_json(_metadata_path(root), {"version": 2, "items": payload.get("items") or {}})
 
 
 def _normalize_metadata_item(raw: Any) -> Dict[str, Any]:
     item = raw if isinstance(raw, dict) else {}
     reviewed = [str(value) for value in item.get("reviewed_steps", []) if str(value or "").strip()]
     not_applicable = [str(value) for value in item.get("not_applicable", []) if str(value or "").strip()]
+    uncertain_src = item.get("uncertain_steps") if isinstance(item.get("uncertain_steps"), dict) else {}
+    uncertain_steps: Dict[str, Dict[str, str]] = {}
+    for step_id, detail in uncertain_src.items():
+        clean_step = str(step_id or "").strip()
+        if not clean_step:
+            continue
+        if isinstance(detail, dict):
+            note = str(detail.get("note") or "").strip()
+            updated_at = str(detail.get("updated_at") or "").strip()
+        else:
+            note = str(detail or "").strip()
+            updated_at = ""
+        uncertain_steps[clean_step] = {"note": note[:500], "updated_at": updated_at}
     return {
         "reviewed_steps": list(dict.fromkeys(reviewed)),
         "not_applicable": list(dict.fromkeys(not_applicable)),
+        "uncertain_steps": uncertain_steps,
         "updated_at": str(item.get("updated_at") or ""),
     }
 
@@ -371,7 +434,11 @@ def list_quiz_items(
         meta = _normalize_metadata_item(metadata["items"].get(rel))
         reviewed = step["id"] in meta["reviewed_steps"]
         not_applicable = step["id"] in meta["not_applicable"]
+        uncertain_detail = (meta.get("uncertain_steps") or {}).get(step["id"]) or {}
+        uncertain = step["id"] in (meta.get("uncertain_steps") or {})
         missing = (not reviewed if step["mode"] == "manual" else not selected) and not not_applicable
+        if step["required"] and uncertain and not not_applicable:
+            missing = True
         conflict = step["mode"] != "manual" and len(set(selected)) > 1
         missing_count += int(missing)
         conflict_count += int(conflict)
@@ -382,6 +449,7 @@ def list_quiz_items(
             or (queue_mode == "missing_only" and missing)
             or (queue_mode == "conflict_only" and conflict)
             or (queue_mode == "not_reviewed" and not reviewed)
+            or (queue_mode == "uncertain_only" and uncertain)
         )
         if not include:
             continue
@@ -396,6 +464,8 @@ def list_quiz_items(
                 "conflict": conflict,
                 "reviewed": reviewed,
                 "not_applicable": not_applicable,
+                "uncertain": uncertain,
+                "uncertain_note": uncertain_detail.get("note") or "",
             }
         )
     return {
@@ -438,6 +508,8 @@ def save_quiz_item(
     selected_tags: Any,
     manual_tags: Any = None,
     not_applicable: bool = False,
+    uncertain: bool = False,
+    uncertain_note: str = "",
     mark_reviewed: bool = True,
     backup: bool = True,
 ) -> Dict[str, Any]:
@@ -468,6 +540,7 @@ def save_quiz_item(
         raise ValueError("Not Applicable is not allowed for this step.")
     if not_applicable:
         selected = []
+    uncertain_note = re.sub(r"\s+", " ", str(uncertain_note or "").strip())[:500]
     source_text = ""
     if had_txt:
         try:
@@ -497,6 +570,7 @@ def save_quiz_item(
     current_metadata = _normalize_metadata_item(previous_metadata)
     reviewed_steps = current_metadata["reviewed_steps"]
     na_steps = current_metadata["not_applicable"]
+    uncertain_steps = current_metadata.get("uncertain_steps") or {}
     if mark_reviewed and step["id"] not in reviewed_steps:
         reviewed_steps.append(step["id"])
     if not_applicable:
@@ -504,6 +578,13 @@ def save_quiz_item(
             na_steps.append(step["id"])
     else:
         current_metadata["not_applicable"] = [value for value in na_steps if value != step["id"]]
+    if uncertain:
+        uncertain_steps[step["id"]] = {"note": uncertain_note, "updated_at": _now_iso()}
+        if step["id"] in reviewed_steps and step["required"] and not not_applicable:
+            current_metadata["reviewed_steps"] = [value for value in reviewed_steps if value != step["id"]]
+    else:
+        uncertain_steps.pop(step["id"], None)
+    current_metadata["uncertain_steps"] = uncertain_steps
     current_metadata["updated_at"] = _now_iso()
     metadata["items"][rel_key] = current_metadata
     _save_metadata(root, metadata)
@@ -521,6 +602,8 @@ def save_quiz_item(
         "backup_created": backup_created,
         "reviewed": step["id"] in current_metadata["reviewed_steps"],
         "not_applicable": step["id"] in current_metadata["not_applicable"],
+        "uncertain": step["id"] in current_metadata.get("uncertain_steps", {}),
+        "uncertain_note": (current_metadata.get("uncertain_steps", {}).get(step["id"]) or {}).get("note", ""),
         "previous_has_txt": had_txt,
         "previous_tags": previous_tags,
         "previous_metadata": previous_metadata,

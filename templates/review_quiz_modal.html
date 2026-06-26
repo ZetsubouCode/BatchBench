@@ -33,6 +33,15 @@
   .quiz-review-manual-suggest-item:last-child { border-bottom:0; }
   .quiz-review-manual-suggest-item:hover, .quiz-review-manual-suggest-item.is-active { background:#183255; color:#f2f7ff; }
   .quiz-review-manual-suggest-source { color:#9fc8ff; font-size:.7rem; white-space:nowrap; }
+  .quiz-review-manual-suggest-meta { color:#9aa9bd; font-size:.68rem; margin-top:.08rem; }
+  .quiz-review-pack-list, .quiz-review-machine-list { display:flex; flex-direction:column; gap:.35rem; max-height:150px; overflow:auto; }
+  .quiz-review-pack { border:1px solid #365577; border-radius:.5rem; background:#0e1a2e; color:var(--bb-text); padding:.42rem .55rem; text-align:left; }
+  .quiz-review-pack:hover { border-color:#79c0ff; }
+  .quiz-review-pack-title { display:flex; align-items:center; justify-content:space-between; gap:.5rem; font-size:.78rem; font-weight:700; }
+  .quiz-review-pack-tags, .quiz-review-machine-meta { color:#9fb0c8; font-size:.7rem; margin-top:.12rem; }
+  .quiz-review-uncertain-badge { border-color:#e7b85f; color:#ffe5ad; background:#2c210d; }
+  .quiz-review-machine-row { display:grid; grid-template-columns:minmax(0,1fr) auto auto; gap:.35rem; align-items:center; font-size:.76rem; }
+  .quiz-review-mini-link { border:0; background:transparent; color:#9fd2ff; padding:0 .15rem; font-size:.74rem; }
   .quiz-review-glossary-controls { display:grid; grid-template-columns:minmax(0,1fr) 145px auto; gap:.4rem; }
   .quiz-review-glossary-list { display:flex; flex-wrap:wrap; gap:.3rem; max-height:180px; overflow:auto; }
   .quiz-review-glossary-chip { border:1px solid #1f6f8f; border-radius:999px; padding:.16rem .5rem; font-size:.74rem; background:#0d2630; color:#d6f6ff; }
@@ -80,6 +89,7 @@
             <option value="all">All images</option>
             <option value="conflict_only">Conflict only</option>
             <option value="not_reviewed">Not reviewed</option>
+            <option value="uncertain_only">Uncertain only</option>
           </select>
           <select class="form-select form-select-sm" id="quiz-review-area" style="max-width:180px;">
             <option value="temp">dataset/_temp</option>
@@ -94,6 +104,9 @@
               <div class="quiz-review-hotkeys-list">
                 <div class="quiz-review-hotkey-row"><span class="quiz-review-key">1..9</span><span class="quiz-review-hotkey-action">Choose visible option</span></div>
                 <div class="quiz-review-hotkey-row"><span class="quiz-review-key">Enter</span><span class="quiz-review-hotkey-action">Save selection and continue</span></div>
+                <div class="quiz-review-hotkey-row"><span class="quiz-review-key-combo"><span class="quiz-review-key">Ctrl</span><span class="quiz-review-key-plus">+</span><span class="quiz-review-key">Enter</span></span><span class="quiz-review-hotkey-action">Manual input: add typed tags</span></div>
+                <div class="quiz-review-hotkey-row"><span class="quiz-review-key-combo"><span class="quiz-review-key">Shift</span><span class="quiz-review-key-plus">+</span><span class="quiz-review-key">Enter</span></span><span class="quiz-review-hotkey-action">Manual input: save current image and continue</span></div>
+                <div class="quiz-review-hotkey-row"><span class="quiz-review-key-combo"><span class="quiz-review-key">Alt</span><span class="quiz-review-key-plus">+</span><span class="quiz-review-key">1..9</span></span><span class="quiz-review-hotkey-action">Apply visible pinned tag pack</span></div>
                 <div class="quiz-review-hotkey-row"><span class="quiz-review-key-combo"><span class="quiz-review-key">Left</span><span class="quiz-review-key-plus">/</span><span class="quiz-review-key">Right</span></span><span class="quiz-review-hotkey-action">Previous or next image</span></div>
                 <div class="quiz-review-hotkey-row"><span class="quiz-review-key">S</span><span class="quiz-review-hotkey-action">Skip current image</span></div>
                 <div class="quiz-review-hotkey-row"><span class="quiz-review-key">N</span><span class="quiz-review-hotkey-action">Mark Not Applicable when allowed</span></div>
@@ -159,6 +172,20 @@
                 <div class="quiz-review-manual-suggest" id="quiz-review-manual-suggest"></div>
               </div>
               <div class="quiz-review-status mt-2" id="quiz-review-manual-status"></div>
+              <label class="form-check form-switch mt-2 mb-0">
+                <input class="form-check-input" type="checkbox" id="quiz-review-show-all-tags">
+                <span class="form-check-label small">Show all tags</span>
+              </label>
+              <div class="small fw-semibold mt-3 mb-2">Relevant tag packs</div>
+              <div class="quiz-review-pack-list" id="quiz-review-pack-list"></div>
+              <div class="d-flex flex-wrap gap-2 mt-2">
+                <button type="button" class="btn btn-sm btn-outline-info" id="quiz-review-pack-create">Create pack from pending</button>
+                <button type="button" class="btn btn-sm btn-outline-light" id="quiz-review-custom-whitelist">Whitelist pending custom tags</button>
+              </div>
+              <details class="mt-3" id="quiz-review-machine-wrap">
+                <summary class="small fw-semibold">Optional machine suggestions</summary>
+                <div class="quiz-review-machine-list mt-2" id="quiz-review-machine-list"></div>
+              </details>
               <div class="small fw-semibold mt-3 mb-2">Glossary quick pick</div>
               <div class="quiz-review-glossary-controls">
                 <input type="text" class="form-control form-control-sm" id="quiz-review-glossary-search" placeholder="Search glossary tags">
@@ -171,6 +198,11 @@
                 <button type="button" class="btn btn-outline-light" id="quiz-review-manual-skip">Skip</button>
                 <button type="button" class="btn btn-outline-secondary" id="quiz-review-manual-undo">Undo</button>
               </div>
+            </section>
+            <section class="quiz-review-card">
+              <div class="small fw-semibold mb-2">Uncertain / revisit later</div>
+              <label class="form-check mb-2"><input class="form-check-input" type="checkbox" id="quiz-review-uncertain"> <span class="form-check-label">Mark this image uncertain for this step</span></label>
+              <input type="text" class="form-control form-control-sm" id="quiz-review-uncertain-note" maxlength="500" placeholder="Optional note">
             </section>
             <details class="quiz-review-card" id="quiz-review-current-wrap">
               <summary>Current caption tags</summary>
@@ -190,7 +222,8 @@
     config:null, steps:[], currentStepId:'', queue:'missing_only', area:'temp',
     items:[], index:0, selected:new Set(), manualTags:new Set(), undoStack:[], previousStepSelection:{}, summary:{}, busy:false,
     glossary:{ categories:{ Unsorted:[] } }, glossarySearch:'', glossaryFilter:'__all__',
-    initialManualTags:new Set(), recentManualTags:[], suggestRows:[], suggestIndex:-1
+    initialManualTags:new Set(), recentManualTags:[], suggestRows:[], suggestIndex:-1,
+    assist:{ custom_tags:[], packs:[] }, packs:[], machineSuggestions:[], showAllTags:false, suggestSeq:0
   };
   const MANUAL_RECENT_KEY = 'batchbench_quiz_manual_recent_tags_v1';
   const MANUAL_RESUME_KEY = 'batchbench_quiz_manual_resume_v1';
@@ -334,43 +367,85 @@
   function manualSuggestionRows(query) {
     const cleanQuery = normalizeTag(query);
     const rows = []; const seen = new Set();
-    function add(tag, source, recent=false, priority=0) {
+    function add(tag, source, recent=false, priority=0, extra={}) {
       const cleanTag = normalizeTag(tag);
       if (!cleanTag || seen.has(cleanTag) || (cleanQuery && !cleanTag.includes(cleanQuery))) return;
-      seen.add(cleanTag); rows.push({ tag:cleanTag, source, recent, priority, is_prefix:!cleanQuery || cleanTag.startsWith(cleanQuery) });
+      seen.add(cleanTag); rows.push(Object.assign({ tag:cleanTag, canonical:cleanTag, source, recent, priority, is_prefix:!cleanQuery || cleanTag.startsWith(cleanQuery) }, extra));
     }
     state.recentManualTags.forEach(tag => add(tag, 'recent', true, 30));
     const currentStep = step();
     (currentStep?.tags || []).forEach(tag => add(tag, currentStep.label || currentStep.id || 'step tags', false, 20));
-    (state.steps || []).forEach(entry => {
-      if (!entry || entry.id === currentStep?.id) return;
-      (entry.tags || []).forEach(tag => add(tag, entry.label || entry.id || 'step tags', false, 10));
-    });
+    if (state.showAllTags) {
+      (state.steps || []).forEach(entry => {
+        if (!entry || entry.id === currentStep?.id) return;
+        (entry.tags || []).forEach(tag => add(tag, entry.label || entry.id || 'step tags', false, 10));
+      });
+    }
     glossaryCategories().forEach(category => (state.glossary.categories[category] || []).forEach(tag => add(tag, category)));
     return rows.sort((a, b) => Number(b.recent) - Number(a.recent) || Number(b.is_prefix) - Number(a.is_prefix) || (b.priority || 0) - (a.priority || 0) || a.tag.localeCompare(b.tag)).slice(0, 10);
   }
-  function renderManualSuggest() {
-    const input = manualInput(); const host = q('quiz-review-manual-suggest');
-    if (!input || !host || !manualTagging()) return;
-    state.suggestRows = manualSuggestionRows(manualSuggestTokenRange().query);
+  function mergeSuggestionRows(localRows, remoteRows) {
+    const rows = []; const seen = new Set();
+    [...(remoteRows || []), ...(localRows || [])].forEach(row => {
+      const tag = normalizeTag(row.canonical || row.tag);
+      if (!tag || seen.has(tag)) return;
+      seen.add(tag); rows.push(Object.assign({}, row, { tag, canonical:tag }));
+    });
+    return rows.slice(0, 12);
+  }
+  async function fetchCatalogSuggestions(query, seq) {
+    const cleanQuery = normalizeTag(query);
+    if (!cleanQuery || cleanQuery.length < 2) return;
+    const glossaryTags = [];
+    glossaryCategories().forEach(category => (state.glossary.categories[category] || []).forEach(tag => glossaryTags.push(tag)));
+    try {
+      const data = await api('/api/tag-catalog/suggest', {
+        query:cleanQuery, section:step()?.id || 'manual_tags', limit:12, show_all:state.showAllTags,
+        existing_tags:Array.from(state.manualTags),
+        project_tags:state.showAllTags ? state.recentManualTags : [...(step()?.tags || []), ...state.recentManualTags],
+        glossary_tags:glossaryTags
+      });
+      if (seq !== state.suggestSeq) return;
+      state.suggestRows = mergeSuggestionRows(state.suggestRows, data.suggestions || []);
+      drawManualSuggest();
+    } catch (_) {}
+  }
+  function drawManualSuggest() {
+    const host = q('quiz-review-manual-suggest');
+    if (!host) return;
     state.suggestIndex = Math.min(Math.max(state.suggestIndex, 0), Math.max(0, state.suggestRows.length - 1));
     host.innerHTML = '';
     state.suggestRows.forEach((row, index) => {
       const button = document.createElement('button'); button.type = 'button';
       button.className = `quiz-review-manual-suggest-item${index === state.suggestIndex ? ' is-active' : ''}`;
-      const tag = document.createElement('span'); tag.textContent = row.tag; button.appendChild(tag);
-      const source = document.createElement('span'); source.className = 'quiz-review-manual-suggest-source'; source.textContent = row.source; button.appendChild(source);
+      const left = document.createElement('span');
+      const label = row.alias ? `${row.alias} -> ${row.canonical || row.tag}` : (row.canonical || row.tag);
+      left.textContent = label;
+      const meta = document.createElement('div'); meta.className = 'quiz-review-manual-suggest-meta';
+      meta.textContent = [row.validation_status, row.category, row.post_count ? `${row.post_count} posts` : ''].filter(Boolean).join(' · ');
+      if (meta.textContent) left.appendChild(meta);
+      button.appendChild(left);
+      const source = document.createElement('span'); source.className = 'quiz-review-manual-suggest-source'; source.textContent = row.source || 'tag'; button.appendChild(source);
       button.addEventListener('mousedown', event => event.preventDefault());
       button.addEventListener('click', () => selectManualSuggestion(index));
       host.appendChild(button);
     });
     host.classList.toggle('is-open', !!state.suggestRows.length);
   }
+  function renderManualSuggest() {
+    const input = manualInput(); const host = q('quiz-review-manual-suggest');
+    if (!input || !host || !manualTagging()) return;
+    const seq = ++state.suggestSeq;
+    state.suggestRows = manualSuggestionRows(manualSuggestTokenRange().query);
+    drawManualSuggest();
+    void fetchCatalogSuggestions(manualSuggestTokenRange().query, seq);
+  }
   function selectManualSuggestion(index) {
     const input = manualInput(); const row = state.suggestRows[index]; if (!input || !row) return false;
     const range = manualSuggestTokenRange();
-    input.value = `${input.value.slice(0, range.start)}${row.tag}${input.value.slice(range.end)}`;
-    const cursor = range.start + row.tag.length;
+    const tag = normalizeTag(row.canonical || row.tag);
+    input.value = `${input.value.slice(0, range.start)}${tag}${input.value.slice(range.end)}`;
+    const cursor = range.start + tag.length;
     input.setSelectionRange(cursor, cursor); input.focus(); closeManualSuggest();
     return true;
   }
@@ -412,8 +487,151 @@
       chip.appendChild(remove); host.appendChild(chip);
     });
     if (!host.children.length) host.innerHTML = '<span class="small text-muted">No caption tags prepared.</span>';
+    renderPacks();
+    renderMachineSuggestions();
     renderGlossaryQuickPick();
     broadcastManualCheatsheetState();
+  }
+  async function loadAssist() {
+    if (!root()) return;
+    try {
+      const data = await api('/api/tags/assist/state', {folder:root()});
+      state.assist = data.assist || { custom_tags:[], packs:[] };
+    } catch (_) {
+      state.assist = { custom_tags:[], packs:[] };
+    }
+  }
+  async function loadPacks() {
+    if (!root()) return;
+    try {
+      const data = await api('/api/tags/packs/list', {folder:root(), segment_id:step()?.id || '', show_all:state.showAllTags});
+      state.packs = data.packs || [];
+      state.assist.custom_tags = data.custom_tags || state.assist.custom_tags || [];
+      renderPacks();
+    } catch (_) {
+      state.packs = [];
+      renderPacks();
+    }
+  }
+  function renderPacks() {
+    const host = q('quiz-review-pack-list');
+    if (!host || !manualTagging()) return;
+    host.innerHTML = '';
+    const packs = (state.packs || []).slice(0, state.showAllTags ? 50 : 12);
+    packs.forEach((pack, index) => {
+      const wrap = document.createElement('div'); wrap.className = 'quiz-review-pack';
+      const title = document.createElement('div'); title.className = 'quiz-review-pack-title';
+      const name = document.createElement('span'); name.textContent = pack.name || 'Tag pack';
+      const meta = document.createElement('small'); meta.textContent = pack.pinned && index < 9 ? `Alt+${index + 1}` : (pack.segment_id || 'all');
+      title.append(name, meta); wrap.appendChild(title);
+      const tags = document.createElement('div'); tags.className = 'quiz-review-pack-tags'; tags.textContent = (pack.tags || []).join(', '); wrap.appendChild(tags);
+      const actions = document.createElement('div'); actions.className = 'd-flex flex-wrap gap-2 mt-2';
+      const use = document.createElement('button'); use.type = 'button'; use.className = 'btn btn-sm btn-outline-info'; use.textContent = 'Add';
+      use.addEventListener('click', () => applyPack(pack.id));
+      const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'btn btn-sm btn-outline-light'; edit.textContent = 'Edit';
+      edit.addEventListener('click', () => editPack(pack));
+      const del = document.createElement('button'); del.type = 'button'; del.className = 'btn btn-sm btn-outline-danger'; del.textContent = 'Delete';
+      del.addEventListener('click', () => deletePack(pack));
+      actions.append(use, edit, del); wrap.appendChild(actions);
+      host.appendChild(wrap);
+    });
+    if (!host.children.length) host.innerHTML = '<span class="small text-muted">No relevant packs yet.</span>';
+  }
+  async function applyPack(id) {
+    try {
+      const data = await api('/api/tags/packs/apply', {folder:root(), id, current_tags:Array.from(state.manualTags)});
+      state.manualTags = new Set(data.tags || []);
+      rememberRecentManualTags(data.added || []);
+      renderManualTagger();
+      q('quiz-review-manual-status').textContent = data.added?.length ? `Added ${data.added.length} tag(s) from pack.` : 'Pack tags were already present.';
+      await loadPacks();
+    } catch (error) {
+      q('quiz-review-manual-status').textContent = error.message || 'Could not apply pack.';
+    }
+  }
+  async function createPackFromPending() {
+    const tags = Array.from(state.manualTags);
+    if (!tags.length) { q('quiz-review-manual-status').textContent = 'Add pending tags before creating a pack.'; return; }
+    const name = prompt('Pack name', `${step()?.label || 'Tag'} pack`);
+    if (!name) return;
+    try {
+      await api('/api/tags/packs/save', {folder:root(), pack:{name, segment_id:step()?.id || '', tags, pinned:false}});
+      q('quiz-review-manual-status').textContent = `Created pack "${name}".`;
+      await loadPacks();
+    } catch (error) {
+      q('quiz-review-manual-status').textContent = error.message || 'Could not create pack.';
+    }
+  }
+  async function editPack(pack) {
+    const name = prompt('Pack name', pack.name || 'Tag pack');
+    if (!name) return;
+    const tagText = prompt('Pack tags, comma separated', (pack.tags || []).join(', '));
+    if (tagText === null) return;
+    const segment = prompt('Segment id, blank for all segments', pack.segment_id || step()?.id || '') ?? '';
+    const pinned = confirm('Pin this pack for Alt+number shortcut? OK = pinned, Cancel = unpinned.');
+    const orderText = prompt('Sort order number', String(pack.order ?? 0));
+    try {
+      await api('/api/tags/packs/save', {folder:root(), pack:{
+        id:pack.id, name, segment_id:segment, tags:tagsFrom(tagText), pinned,
+        usage_count:pack.usage_count || 0, last_used_at:pack.last_used_at || '',
+        note:pack.note || '', order:Number(orderText || 0)
+      }});
+      q('quiz-review-manual-status').textContent = `Updated pack "${name}".`;
+      await loadPacks();
+    } catch (error) {
+      q('quiz-review-manual-status').textContent = error.message || 'Could not update pack.';
+    }
+  }
+  async function deletePack(pack) {
+    if (!confirm(`Delete tag pack "${pack.name}"?`)) return;
+    try {
+      await api('/api/tags/packs/delete', {folder:root(), id:pack.id});
+      q('quiz-review-manual-status').textContent = `Deleted pack "${pack.name}".`;
+      await loadPacks();
+    } catch (error) {
+      q('quiz-review-manual-status').textContent = error.message || 'Could not delete pack.';
+    }
+  }
+  async function whitelistPendingCustomTags() {
+    const tags = Array.from(new Set([...(state.assist.custom_tags || []), ...Array.from(state.manualTags)]));
+    try {
+      const data = await api('/api/tags/assist/custom-tags', {folder:root(), tags});
+      state.assist = data.assist || state.assist;
+      q('quiz-review-manual-status').textContent = 'Project custom whitelist updated.';
+    } catch (error) {
+      q('quiz-review-manual-status').textContent = error.message || 'Could not update custom whitelist.';
+    }
+  }
+  async function loadMachineSuggestions() {
+    state.machineSuggestions = [];
+    if (!root() || !item()?.rel) return;
+    try {
+      const data = await api('/api/tags/machine-suggestions', {folder:root(), rel:item().rel});
+      state.machineSuggestions = data.suggestions || [];
+    } catch (_) {
+      state.machineSuggestions = [];
+    }
+  }
+  function renderMachineSuggestions() {
+    const host = q('quiz-review-machine-list');
+    if (!host || !manualTagging()) return;
+    host.innerHTML = '';
+    (state.machineSuggestions || []).forEach(row => {
+      const wrap = document.createElement('div'); wrap.className = 'quiz-review-machine-row';
+      const label = document.createElement('span'); label.textContent = row.tag; wrap.appendChild(label);
+      const confidence = document.createElement('span'); confidence.className = 'quiz-review-machine-meta'; confidence.textContent = `${Math.round(Number(row.confidence || 0) * 100)}%`; wrap.appendChild(confidence);
+      const actions = document.createElement('span');
+      const add = document.createElement('button'); add.type = 'button'; add.className = 'quiz-review-mini-link'; add.textContent = 'Add';
+      add.addEventListener('click', () => { state.manualTags.add(normalizeTag(row.tag)); rememberRecentManualTags([row.tag]); renderManualTagger(); });
+      const ignore = document.createElement('button'); ignore.type = 'button'; ignore.className = 'quiz-review-mini-link'; ignore.textContent = 'Ignore';
+      ignore.addEventListener('click', async () => {
+        await api('/api/tags/machine-suggestions/ignore', {folder:root(), rel:item()?.rel || '', tag:row.tag});
+        state.machineSuggestions = state.machineSuggestions.filter(item => item.tag !== row.tag);
+        renderMachineSuggestions();
+      });
+      actions.append(add, ignore); wrap.appendChild(actions); host.appendChild(wrap);
+    });
+    if (!host.children.length) host.innerHTML = '<span class="small text-muted">No machine suggestions stored for this image.</span>';
   }
   function broadcastManualCheatsheetState() {
     document.dispatchEvent(new CustomEvent('bb:quiz-manual-state', {
@@ -488,11 +706,14 @@
     q('quiz-review-badges').innerHTML = currentStep ? `
       <span class="quiz-review-badge">${manualTagging() ? 'Manual tagging' : (currentStep.mode === 'single' ? 'Single choice' : 'Multi choice')}</span>
       ${currentStep.required ? '<span class="quiz-review-badge">Required</span>' : ''}
-      ${currentStep.auto_advance ? '<span class="quiz-review-badge">Auto advance</span>' : ''}` : '';
+      ${currentStep.auto_advance ? '<span class="quiz-review-badge">Auto advance</span>' : ''}
+      ${current?.uncertain ? '<span class="quiz-review-badge quiz-review-uncertain-badge">Uncertain</span>' : ''}` : '';
     q('quiz-review-progress').textContent = state.config?.quiz_review?.show_progress
       ? `${state.summary.queue_count ?? state.items.length} queued / ${state.summary.total ?? 0} total` : '';
     q('quiz-review-warning').textContent = current?.conflict ? `Conflict: ${(current.selected_step_tags || []).join(' + ')}` : (!current?.has_txt && current ? (manualTagging() ? 'Missing .txt: add at least one manual tag to create the caption.' : 'Missing .txt: save is disabled for this image.') : '');
     q('quiz-review-na').classList.toggle('d-none', !currentStep?.allow_not_applicable);
+    if (q('quiz-review-uncertain')) q('quiz-review-uncertain').checked = !!current?.uncertain;
+    if (q('quiz-review-uncertain-note')) q('quiz-review-uncertain-note').value = current?.uncertain_note || '';
     q('quiz-review-save').classList.toggle('d-none', currentStep?.mode === 'single' && state.config?.quiz_review?.auto_save !== false);
     renderImage(); renderOptions(); renderTags(); renderManualTagger();
   }
@@ -503,6 +724,7 @@
     if (manualInput()) manualInput().value = '';
     if (q('quiz-review-manual-status')) q('quiz-review-manual-status').textContent = '';
     closeManualSuggest(); rememberManualResume();
+    void loadMachineSuggestions().then(renderMachineSuggestions);
   }
   function preload() {
     const count = Math.max(0, Math.min(6, Number(state.config?.quiz_review?.thumbnail_preload_count ?? 3)));
@@ -521,6 +743,7 @@
       state.items = data.items || []; state.summary = data.summary || {};
       const resumeIndex = resumeRel ? state.items.findIndex(entry => entry.rel === resumeRel) : -1;
       state.index = resumeIndex >= 0 ? resumeIndex : 0; applyItemSelection(); render();
+      await loadPacks();
       setStatus(`${state.items.length} image(s) in ${state.queue.replace(/_/g, ' ')} queue.${resumeIndex >= 0 ? ` Resumed at ${resumeRel}.` : ''}`);
     } catch (error) { state.items = []; state.summary = {}; render(); setStatus(error.message, 'error'); }
     finally { state.busy = false; }
@@ -540,7 +763,8 @@
     const current = item();
     const completed = (state.queue === 'missing_only' && !current?.missing)
       || (state.queue === 'conflict_only' && !current?.conflict)
-      || (state.queue === 'not_reviewed' && !!current?.reviewed);
+      || (state.queue === 'not_reviewed' && !!current?.reviewed)
+      || (state.queue === 'uncertain_only' && !current?.uncertain);
     if (!completed) return false;
     state.items.splice(state.index, 1);
     state.summary.queue_count = Math.max(0, Number(state.summary.queue_count || 0) - 1);
@@ -560,13 +784,19 @@
       const data = await api('/api/tags/quiz/save', {
         folder:root(), area:state.area, rel:current.rel, step_id:currentStep.id,
         selected_tags:Array.from(state.selected), ...(manualTagging() ? {manual_tags:Array.from(state.manualTags)} : {}),
-        not_applicable:notApplicable, mark_reviewed:true, backup:true
+        not_applicable:notApplicable,
+        uncertain:!!q('quiz-review-uncertain')?.checked,
+        uncertain_note:q('quiz-review-uncertain-note')?.value || '',
+        mark_reviewed:true, backup:true
       });
       state.undoStack.push({rel:current.rel, tags:data.previous_tags || [], metadata:data.previous_metadata || {}, had_txt:data.previous_has_txt !== false});
       state.previousStepSelection[currentStep.id] = notApplicable ? [] : Array.from(state.selected);
       current.tags = data.tags || []; current.selected_step_tags = notApplicable ? [] : (data.selected_step_tags || Array.from(state.selected));
-      current.not_applicable = !!data.not_applicable; current.reviewed = true;
-      current.missing = manualTagging() ? false : (!current.selected_step_tags.length && !current.not_applicable);
+      current.not_applicable = !!data.not_applicable; current.reviewed = !!data.reviewed;
+      current.uncertain = !!data.uncertain; current.uncertain_note = data.uncertain_note || '';
+      current.missing = current.uncertain && currentStep.required && !current.not_applicable
+        ? true
+        : (manualTagging() ? false : (!current.selected_step_tags.length && !current.not_applicable));
       current.conflict = !manualTagging() && current.selected_step_tags.length > 1;
       state.initialManualTags = new Set(current.tags);
       const changes = [...(data.added || []).map(tag => `added ${tag}`), ...(data.removed || []).map(tag => `removed ${tag}`)];
@@ -612,6 +842,7 @@
       if (!data.config?.quiz_review?.enabled) { setStatus('Quiz Review is disabled. Enable it in Settings first.', 'error'); render(); return; }
       if (!state.steps.length) { setStatus('No quiz steps configured. Open Settings to add steps.', 'error'); render(); return; }
       loadRecentManualTags();
+      await loadAssist();
       await loadGlossary();
       await loadQueue();
     } catch (error) { setStatus(error.message, 'error'); }
@@ -641,20 +872,39 @@
     q('quiz-review-manual-skip')?.addEventListener('click', advance);
     q('quiz-review-manual-undo')?.addEventListener('click', undo);
     q('quiz-review-manual-add')?.addEventListener('click', addManualTags);
+    q('quiz-review-pack-create')?.addEventListener('click', createPackFromPending);
+    q('quiz-review-custom-whitelist')?.addEventListener('click', whitelistPendingCustomTags);
+    q('quiz-review-show-all-tags')?.addEventListener('change', event => {
+      state.showAllTags = !!event.target.checked;
+      void loadPacks();
+      renderManualSuggest();
+    });
     q('quiz-review-manual-input')?.addEventListener('input', renderManualSuggest);
     q('quiz-review-manual-input')?.addEventListener('focus', renderManualSuggest);
     q('quiz-review-manual-input')?.addEventListener('blur', () => setTimeout(closeManualSuggest, 120));
     q('quiz-review-manual-input')?.addEventListener('keydown', event => {
-      if (event.key === 'ArrowDown' && state.suggestRows.length) {
+      if (event.altKey && /^[1-9]$/.test(event.key || '')) {
+        const pinned = (state.packs || []).filter(pack => pack.pinned);
+        const pack = pinned[Number(event.key) - 1] || (state.packs || [])[Number(event.key) - 1];
+        if (pack) { event.preventDefault(); void applyPack(pack.id); }
+      } else if (event.key === 'ArrowDown' && state.suggestRows.length) {
         event.preventDefault(); state.suggestIndex = (state.suggestIndex + 1) % state.suggestRows.length; renderManualSuggest();
       } else if (event.key === 'ArrowUp' && state.suggestRows.length) {
         event.preventDefault(); state.suggestIndex = (state.suggestIndex - 1 + state.suggestRows.length) % state.suggestRows.length; renderManualSuggest();
       } else if ((event.key === 'Enter' || event.key === 'Tab') && state.suggestRows.length && q('quiz-review-manual-suggest')?.classList.contains('is-open')) {
         event.preventDefault(); selectManualSuggestion(state.suggestIndex);
+      } else if (event.key === 'Enter' && event.shiftKey) {
+        event.preventDefault(); void saveCurrent(false);
+      } else if (event.key === 'Enter' && event.ctrlKey) {
+        event.preventDefault(); addManualTags();
       } else if (event.key === 'Enter') {
         event.preventDefault(); addManualTags();
+      } else if (event.key === 'Backspace' && !manualInput()?.value && state.manualTags.size) {
+        event.preventDefault();
+        const last = Array.from(state.manualTags).pop();
+        if (last) { state.manualTags.delete(last); renderManualTagger(); q('quiz-review-manual-status').textContent = `Removed "${last}".`; }
       } else if (event.key === 'Escape') {
-        closeManualSuggest();
+        if (state.suggestRows.length) { event.preventDefault(); closeManualSuggest(); }
       }
     });
     q('quiz-review-glossary-search')?.addEventListener('input', event => {

@@ -20,6 +20,13 @@
   .quiz-settings-note { color:var(--bb-muted); font-size:.8rem; }
   .quiz-settings-warn { color:#ffe0b2; font-size:.78rem; }
   .quiz-settings-tip { color:var(--bb-muted); font-size:.75rem; cursor:help; }
+  .catalog-settings-card { border:1px solid var(--bb-border); border-radius:.65rem; background:var(--bb-card); padding:1rem; margin-bottom:1rem; }
+  .catalog-settings-grid { display:grid; grid-template-columns:repeat(2, minmax(220px, 1fr)); gap:.75rem; }
+  .catalog-settings-actions { display:flex; flex-wrap:wrap; gap:.45rem; }
+  .catalog-status-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:.45rem .9rem; font-size:.82rem; }
+  .catalog-status-grid code { white-space:normal; overflow-wrap:anywhere; }
+  .catalog-log { max-height:9rem; overflow:auto; border:1px solid var(--bb-border); border-radius:.5rem; background:var(--bb-input-bg); padding:.55rem; font-size:.75rem; color:var(--bb-muted); white-space:pre-wrap; }
+  @media (max-width: 991.98px) { .catalog-settings-grid { grid-template-columns:1fr; } }
   @media (max-width: 991.98px) { .quiz-settings-grid { grid-template-columns:1fr; } }
 </style>
 
@@ -37,6 +44,49 @@
   </div>
 </div>
 <div class="quiz-settings-note mb-3" id="quiz-settings-status">Loading Guided Tagging Flow settings...</div>
+
+<section class="catalog-settings-card">
+  <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap mb-3">
+    <div>
+      <h5 class="mb-1">Danbooru Tag Suggestions</h5>
+      <div class="quiz-settings-note">Suggestions use the local catalog. Danbooru is contacted only when you manually sync the catalog.</div>
+    </div>
+    <div class="catalog-settings-actions">
+      <button type="button" class="btn btn-sm btn-outline-info" id="catalog-sync">Sync from Danbooru</button>
+      <button type="button" class="btn btn-sm btn-outline-warning d-none" id="catalog-cancel">Cancel Sync</button>
+      <button type="button" class="btn btn-sm btn-outline-light" id="catalog-import">Import CSV</button>
+      <a class="btn btn-sm btn-outline-light" id="catalog-export" href="/api/tag-catalog/export">Export CSV</a>
+      <button type="button" class="btn btn-sm btn-outline-light" id="catalog-rebuild">Rebuild Local Index</button>
+      <input type="file" id="catalog-import-file" accept=".csv,text/csv" class="d-none">
+    </div>
+  </div>
+  <div class="catalog-status-grid mb-3">
+    <div><span class="quiz-settings-note">Catalog status</span><div id="catalog-status">Loading...</div></div>
+    <div><span class="quiz-settings-note">Tag count</span><div id="catalog-count">0</div></div>
+    <div><span class="quiz-settings-note">CSV path</span><div><code id="catalog-csv-path"></code></div></div>
+    <div><span class="quiz-settings-note">Last successful sync</span><div id="catalog-last-sync">-</div></div>
+    <div><span class="quiz-settings-note">Progress</span><div id="catalog-progress">-</div></div>
+    <div><span class="quiz-settings-note">Current message</span><div id="catalog-message">-</div></div>
+  </div>
+  <div class="catalog-settings-grid mb-3">
+    <label class="form-check" data-bs-toggle="tooltip" data-bs-title="Master switch for the local Danbooru CSV/SQLite catalog. Guided steps still need their own Step Editor option enabled."><input class="form-check-input" type="checkbox" id="catalog-enabled"> <span class="form-check-label">Enable Danbooru catalog suggestions</span> <i class="bi bi-info-circle quiz-settings-tip"></i></label>
+    <label class="form-check" data-bs-toggle="tooltip" data-bs-title="Deprecated tags are obsolete or replaced Danbooru tags. Keep this off for clean dataset captions unless you are maintaining legacy captions."><input class="form-check-input" type="checkbox" id="catalog-include-deprecated"> <span class="form-check-label">Include deprecated tags</span> <i class="bi bi-info-circle quiz-settings-tip"></i></label>
+    <div>
+      <label class="form-label" for="catalog-min-posts">Minimum post count</label>
+      <input class="form-control" type="number" id="catalog-min-posts" min="0" value="5">
+    </div>
+    <div>
+      <label class="form-label" for="catalog-max-suggestions">Maximum suggestions</label>
+      <input class="form-control" type="number" id="catalog-max-suggestions" min="3" max="30" value="12">
+    </div>
+    <label class="form-check" data-bs-toggle="tooltip" data-bs-title="General tags describe visible content: poses, camera angle, body parts, clothing, objects, backgrounds, and composition. Usually the most useful for dataset tagging."><input class="form-check-input" type="checkbox" id="catalog-cat-general"> <span class="form-check-label">Include general tags</span> <i class="bi bi-info-circle quiz-settings-tip"></i></label>
+    <label class="form-check" data-bs-toggle="tooltip" data-bs-title="Character tags are named characters or people. Keep this off when you want reusable visual tags rather than identity labels."><input class="form-check-input" type="checkbox" id="catalog-cat-character"> <span class="form-check-label">Include character tags</span> <i class="bi bi-info-circle quiz-settings-tip"></i></label>
+    <label class="form-check" data-bs-toggle="tooltip" data-bs-title="Copyright tags are franchises, series, games, studios, or source works. Useful only when source identity should be part of captions."><input class="form-check-input" type="checkbox" id="catalog-cat-copyright"> <span class="form-check-label">Include copyright tags</span> <i class="bi bi-info-circle quiz-settings-tip"></i></label>
+    <label class="form-check" data-bs-toggle="tooltip" data-bs-title="Artist tags identify creators or style sources. Usually leave off unless intentionally training or labeling artist identity."><input class="form-check-input" type="checkbox" id="catalog-cat-artist"> <span class="form-check-label">Include artist tags</span> <i class="bi bi-info-circle quiz-settings-tip"></i></label>
+    <label class="form-check" data-bs-toggle="tooltip" data-bs-title="Meta tags describe image metadata or upload context, such as quality, resolution, commentary, or translation state. Some are useful, many are not visual content."><input class="form-check-input" type="checkbox" id="catalog-cat-meta"> <span class="form-check-label">Include meta tags</span> <i class="bi bi-info-circle quiz-settings-tip"></i></label>
+  </div>
+  <div class="catalog-log" id="catalog-log"></div>
+</section>
 
 <div class="quiz-settings-grid">
   <section class="quiz-settings-card">
@@ -99,6 +149,7 @@
             <label class="form-check" data-bs-toggle="tooltip" data-bs-title="Treat this category as expected. Missing queue will find images without an answer unless marked Not Applicable."><input class="form-check-input" type="checkbox" id="quiz-step-required"> <span class="form-check-label">Required</span> <i class="bi bi-info-circle quiz-settings-tip"></i></label>
             <label class="form-check" data-bs-toggle="tooltip" data-bs-title="After a saved single-choice answer, move to the next image. Multi-choice answers still use Enter or Save & Next."><input class="form-check-input" type="checkbox" id="quiz-step-auto"> <span class="form-check-label">Auto advance</span> <i class="bi bi-info-circle quiz-settings-tip"></i></label>
             <label class="form-check" data-bs-toggle="tooltip" data-bs-title="Limit manual tag suggestions for this step to mapped cheat-sheet tags and this step's configured answer tags."><input class="form-check-input" type="checkbox" id="quiz-step-autosuggest-segment-only"> <span class="form-check-label">Segment-only autosuggest</span> <i class="bi bi-info-circle quiz-settings-tip"></i></label>
+            <label class="form-check" data-bs-toggle="tooltip" data-bs-title="Adds local Danbooru CSV catalog matches to this step's manual tag autosuggest. It uses the synced local catalog only and does not contact Danbooru while typing."><input class="form-check-input" type="checkbox" id="quiz-step-danbooru-autosuggest"> <span class="form-check-label">Danbooru catalog autosuggest</span> <i class="bi bi-info-circle quiz-settings-tip"></i></label>
             <label class="form-check" data-bs-toggle="tooltip" data-bs-title="Add an N shortcut and button for cases where the category does not apply. This is stored as review metadata, never as a caption tag."><input class="form-check-input" type="checkbox" id="quiz-step-na"> <span class="form-check-label">Allow Not Applicable</span> <i class="bi bi-info-circle quiz-settings-tip"></i></label>
           </div>
           <div class="col-12">
@@ -152,7 +203,7 @@
 <script>
 (() => {
   const q = (id) => document.getElementById(id);
-  const state = { config: null, selected: -1, idDirty: false, draggingIndex: -1, suppressCardClick: false };
+  const state = { config: null, selected: -1, idDirty: false, draggingIndex: -1, suppressCardClick: false, catalogSettings: null, catalogPoll: null };
   const slug = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]+/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
   const normalizeTag = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
   const tagsFrom = (value) => {
@@ -194,6 +245,7 @@
           ${item.required ? '<span class="quiz-badge">Required</span>' : ''}
           ${item.auto_advance ? '<span class="quiz-badge">Auto advance</span>' : ''}
           ${item.autosuggest_segment_only ? '<span class="quiz-badge">Segment autosuggest</span>' : ''}
+          ${item.danbooru_autosuggest ? '<span class="quiz-badge">Danbooru autosuggest</span>' : ''}
         </div>`;
       card.querySelector('.quiz-step-title').textContent = item.label || '(Untitled step)';
       card.querySelector('.quiz-step-id').textContent = item.id || '(missing id)';
@@ -258,6 +310,7 @@
     q('quiz-step-required').checked = !!item.required;
     q('quiz-step-auto').checked = !!item.auto_advance;
     q('quiz-step-autosuggest-segment-only').checked = !!item.autosuggest_segment_only;
+    q('quiz-step-danbooru-autosuggest').checked = !!item.danbooru_autosuggest;
     q('quiz-step-na').checked = !!item.allow_not_applicable;
     q('quiz-step-tags').value = (item.tags || []).join('\n');
     renderTagPreview();
@@ -300,6 +353,7 @@
     item.required = q('quiz-step-required').checked;
     item.auto_advance = q('quiz-step-auto').checked;
     item.autosuggest_segment_only = q('quiz-step-autosuggest-segment-only').checked;
+    item.danbooru_autosuggest = q('quiz-step-danbooru-autosuggest').checked;
     item.allow_not_applicable = q('quiz-step-na').checked;
     item.tags = tagsFrom(q('quiz-step-tags').value);
   }
@@ -337,6 +391,117 @@
     return data;
   }
 
+  function catalogStatusText(status){
+    return status?.status || 'Not installed';
+  }
+
+  function renderCatalogStatus(status){
+    q('catalog-status').textContent = catalogStatusText(status);
+    q('catalog-count').textContent = Number(status?.tag_count || 0).toLocaleString();
+    q('catalog-csv-path').textContent = status?.csv_path || '';
+    const sync = status?.state || {};
+    q('catalog-last-sync').textContent = sync.last_successful_sync || '-';
+    q('catalog-progress').textContent = `page ${sync.current_page || 0}, fetched ${Number(sync.fetched_rows || 0).toLocaleString()}, accepted ${Number(sync.accepted_rows || 0).toLocaleString()}`;
+    q('catalog-message').textContent = sync.last_error || sync.message || '-';
+    const running = !!status?.running || sync.state === 'running';
+    q('catalog-sync')?.toggleAttribute('disabled', running);
+    q('catalog-cancel')?.classList.toggle('d-none', !running);
+    const logs = Array.isArray(sync.logs) ? sync.logs : [];
+    q('catalog-log').textContent = logs.join('\n');
+    if (running && !state.catalogPoll) state.catalogPoll = window.setInterval(loadCatalogStatus, 1500);
+    if (!running && state.catalogPoll){
+      window.clearInterval(state.catalogPoll);
+      state.catalogPoll = null;
+    }
+  }
+
+  async function loadCatalogStatus(){
+    try {
+      const data = await api('/api/tag-catalog/status');
+      renderCatalogStatus(data);
+    } catch (error) {
+      q('catalog-status').textContent = error.message;
+    }
+  }
+
+  function renderCatalogSettings(){
+    const settings = state.catalogSettings;
+    if (!settings) return;
+    q('catalog-enabled').checked = !!settings.enabled;
+    q('catalog-include-deprecated').checked = !!settings.include_deprecated;
+    q('catalog-min-posts').value = settings.min_post_count ?? 5;
+    q('catalog-max-suggestions').value = settings.max_suggestions ?? 12;
+    ['general','character','copyright','artist','meta'].forEach(cat => {
+      const el = q(`catalog-cat-${cat}`);
+      if (el) el.checked = !!settings.include_categories?.[cat];
+    });
+  }
+
+  async function loadCatalogSettings(){
+    try{
+      const data = await api('/api/tag-suggestion-settings');
+      state.catalogSettings = data.settings;
+      renderCatalogSettings();
+    }catch(error){
+      q('catalog-log').textContent = error.message;
+    }
+  }
+
+  function commitCatalogSettings(){
+    const settings = state.catalogSettings;
+    if (!settings) return null;
+    settings.enabled = q('catalog-enabled').checked;
+    settings.include_deprecated = q('catalog-include-deprecated').checked;
+    settings.min_post_count = Number.parseInt(q('catalog-min-posts').value || '5', 10);
+    settings.max_suggestions = Number.parseInt(q('catalog-max-suggestions').value || '12', 10);
+    settings.include_categories = settings.include_categories || {};
+    ['general','character','copyright','artist','meta'].forEach(cat => {
+      settings.include_categories[cat] = !!q(`catalog-cat-${cat}`)?.checked;
+    });
+    return settings;
+  }
+
+  async function saveCatalogSettings(){
+    const settings = commitCatalogSettings();
+    if (!settings) return;
+    try{
+      const data = await api('/api/tag-suggestion-settings', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({settings})
+      });
+      state.catalogSettings = data.settings;
+      renderCatalogSettings();
+    }catch(error){
+      q('catalog-log').textContent = error.message;
+    }
+  }
+
+  async function startCatalogSync(){
+    if (!confirm('This performs a full catalog refresh and may take time. Your existing catalog stays active until sync completes.')) return;
+    try{
+      await api('/api/tag-catalog/sync', {method:'POST'});
+      await loadCatalogStatus();
+    }catch(error){
+      q('catalog-log').textContent = error.message;
+    }
+  }
+
+  async function importCatalogCsv(file){
+    if (!file) return;
+    const form = new FormData();
+    form.append('file', file);
+    try{
+      const response = await fetch('/api/tag-catalog/import', {method:'POST', body:form});
+      const data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data.error || 'Import failed.');
+      q('catalog-log').textContent = (data.info || []).join('\n');
+      await loadCatalogStatus();
+    }catch(error){
+      q('catalog-log').textContent = error.message;
+    }
+  }
+
   async function loadConfig() {
     try {
       const data = await api('/api/settings/review-quiz');
@@ -361,7 +526,7 @@
   document.addEventListener('DOMContentLoaded', () => {
     q('quiz-step-add')?.addEventListener('click', () => {
       commitEditor();
-      quiz().steps.push({id:'new_step', label:'New Step', mode:'single', required:false, auto_advance:false, autosuggest_segment_only:false, allow_not_applicable:false, queue_mode:'all', tags:[]});
+      quiz().steps.push({id:'new_step', label:'New Step', mode:'single', required:false, auto_advance:false, autosuggest_segment_only:false, danbooru_autosuggest:false, allow_not_applicable:false, queue_mode:'all', tags:[]});
       state.selected = quiz().steps.length - 1; state.idDirty = false; render();
     });
     q('quiz-step-delete')?.addEventListener('click', () => {
@@ -417,6 +582,30 @@
         setStatus(`Created ${quiz().steps.length} editable step(s) from ${data.rel}. Press Save config to persist them.`);
       } catch (error) { setStatus(error.message, true); }
     });
+    q('catalog-sync')?.addEventListener('click', startCatalogSync);
+    q('catalog-cancel')?.addEventListener('click', async () => {
+      try{ await api('/api/tag-catalog/cancel', {method:'POST'}); await loadCatalogStatus(); }
+      catch(error){ q('catalog-log').textContent = error.message; }
+    });
+    q('catalog-rebuild')?.addEventListener('click', async () => {
+      try{
+        const data = await api('/api/tag-catalog/rebuild-index', {method:'POST'});
+        q('catalog-log').textContent = (data.info || []).join('\n');
+        await loadCatalogStatus();
+      }catch(error){ q('catalog-log').textContent = error.message; }
+    });
+    q('catalog-import')?.addEventListener('click', () => q('catalog-import-file')?.click());
+    q('catalog-import-file')?.addEventListener('change', event => {
+      const file = event.target.files?.[0];
+      event.target.value = '';
+      importCatalogCsv(file);
+    });
+    [
+      'catalog-enabled','catalog-include-deprecated','catalog-min-posts','catalog-max-suggestions',
+      'catalog-cat-general','catalog-cat-character','catalog-cat-copyright','catalog-cat-artist','catalog-cat-meta'
+    ].forEach(id => q(id)?.addEventListener('change', saveCatalogSettings));
+    loadCatalogSettings();
+    loadCatalogStatus();
     loadConfig();
   });
 })();

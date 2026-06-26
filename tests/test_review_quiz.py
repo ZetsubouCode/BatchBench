@@ -52,6 +52,65 @@ class ReviewQuizTests(unittest.TestCase):
         step = saved["quiz_review"]["steps"][0]
         self.assertEqual(step["id"], "camera_angle")
         self.assertEqual(step["tags"], ["from_side", "from_front"])
+        self.assertFalse(step["danbooru_autosuggest"])
+
+    def test_danbooru_autosuggest_step_setting_persists(self):
+        config = review_quiz.default_review_quiz_config()
+        config["quiz_review"]["steps"] = [
+            {
+                "id": "camera_angle",
+                "label": "Camera Angle",
+                "mode": "multi",
+                "required": False,
+                "danbooru_autosuggest": True,
+                "tags": ["from_below"],
+            }
+        ]
+
+        saved = review_quiz.save_review_quiz_config(config)
+
+        self.assertTrue(saved["quiz_review"]["steps"][0]["danbooru_autosuggest"])
+
+    def test_uncertain_required_step_stays_in_missing_and_uncertain_queue(self):
+        with tempfile.TemporaryDirectory() as project_td:
+            root = Path(project_td)
+            temp_root = root / "dataset" / "_temp"
+            temp_root.mkdir(parents=True)
+            (temp_root / "sample.jpg").write_bytes(b"")
+            (temp_root / "sample.txt").write_text("solo", encoding="utf-8")
+            config = review_quiz.default_review_quiz_config()
+            config["quiz_review"]["steps"] = [
+                {
+                    "id": "manual_review",
+                    "label": "Manual Review",
+                    "mode": "manual",
+                    "required": True,
+                    "auto_advance": False,
+                    "allow_not_applicable": False,
+                    "queue_mode": "missing_only",
+                    "tags": [],
+                }
+            ]
+            review_quiz.save_review_quiz_config(config)
+
+            saved = review_quiz.save_quiz_item(
+                root,
+                "temp",
+                "sample.jpg",
+                "manual_review",
+                selected_tags=[],
+                manual_tags=["solo", "blue_hair"],
+                uncertain=True,
+                uncertain_note="Need collar tag",
+            )
+            missing = review_quiz.list_quiz_items(root, "temp", "manual_review", "missing_only")
+            uncertain = review_quiz.list_quiz_items(root, "temp", "manual_review", "uncertain_only")
+
+            self.assertFalse(saved["reviewed"])
+            self.assertTrue(saved["uncertain"])
+            self.assertEqual(saved["uncertain_note"], "Need collar tag")
+            self.assertEqual(missing["items"][0]["rel"], "sample.jpg")
+            self.assertEqual(uncertain["items"][0]["uncertain_note"], "Need collar tag")
 
     def test_default_steps_match_guided_tagging_quiz_segments(self):
         config = review_quiz.default_review_quiz_config()

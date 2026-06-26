@@ -317,7 +317,8 @@
   .quiz-close-btn { position:absolute; right:1rem; top:50%; transform:translateY(-50%); opacity:.82; }
   .quiz-close-btn:hover { opacity:1; }
   .quiz-progress-line { display:flex; flex-wrap:wrap; gap:.45rem; color:var(--bb-muted); font-size:.82rem; }
-  .quiz-selected-list, .quiz-recommended-list { display:flex; flex-wrap:wrap; gap:.25rem; max-height:180px; overflow:auto; border:1px solid var(--bb-border); border-radius:.45rem; padding:.45rem; background:rgba(0,0,0,.12); }
+  .quiz-selected-list, .quiz-recommended-list { display:flex; flex-wrap:wrap; align-content:flex-start; gap:.25rem; max-height:180px; overflow:auto; border:1px solid var(--bb-border); border-radius:.45rem; padding:.45rem; background:rgba(0,0,0,.12); }
+  .quiz-recommended-list { min-height:116px; max-height:320px; }
   .quiz-segment-legend { display:flex; flex-wrap:wrap; gap:.35rem .65rem; margin-top:.42rem; color:#d8e6f2; font-size:.75rem; }
   .quiz-segment-legend-item { display:inline-flex; align-items:center; gap:.32rem; min-width:0; }
   .quiz-segment-mode-badge { border:1px solid #4b6f8d; border-radius:999px; background:#102336; color:#dceeff; font-size:.72rem; line-height:1.2; padding:.16rem .48rem; }
@@ -349,6 +350,8 @@
   .quiz-glossary-chip-tag { color:#f3fbff; font-weight:750; font-size:.84rem; line-height:1.15; }
   .quiz-glossary-chip-meta { border:1px solid rgba(127,215,255,.28); border-radius:999px; background:rgba(3,10,18,.5); color:#90a9b8; font-size:.64rem; line-height:1; padding:.16rem .34rem; }
   .danbooru-offcanvas.is-quiz-overlay { z-index:1095; box-shadow:-18px 0 42px rgba(0,0,0,.5); }
+  .modal.tags-confirm-top { z-index:2055; }
+  .modal-backdrop.tags-confirm-backdrop { z-index:2050; }
   .quiz-overview-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:.6rem; }
   .quiz-overview-stat { border:1px solid var(--bb-border); border-radius:.45rem; padding:.55rem; background:rgba(0,0,0,.14); }
   .tagging-quiz-hotkeys { position:relative; margin-left:auto; }
@@ -855,7 +858,7 @@
               <span id="mode-desc">Select a mode to continue.</span>
             </div>
             <label class="form-label">Tags / mapping</label>
-            <input class="form-control" id="tags" name="tags" form="tags-form"
+            <input class="form-control" id="tags" name="tags" form="tags-form" data-tag-suggestion-section="manual_tags"
                    placeholder="add/remove: tag1, tag2   |   rename: old->new; old2->new2"
                    data-bs-toggle="tooltip"
                    data-bs-title="Add/remove use a comma list. Rename uses mappings like old->new; old2->new2">
@@ -1029,7 +1032,7 @@
                 <div class="small text-muted" id="gallery-preview-temp-note">Manual add is available for items inside _temp.</div>
               </div>
               <div class="input-group input-group-sm mt-2">
-                <input type="text" class="form-control gallery-manual-input" id="gallery-preview-add-tags" placeholder="Add tags, comma separated">
+                <input type="text" class="form-control gallery-manual-input" id="gallery-preview-add-tags" data-tag-suggestion-section="manual_tags" placeholder="Add tags, comma separated">
                 <button type="button" class="btn btn-outline-light" id="gallery-preview-add-btn">Add tags</button>
               </div>
               <div class="gallery-manual-note mt-2" id="gallery-preview-add-status"></div>
@@ -1253,7 +1256,11 @@
               </div>
               <div class="tagging-quiz-hotkey-row">
                 <span class="tagging-quiz-key">Esc</span>
-                <span class="tagging-quiz-hotkey-action">Close suggestions, exit fullscreen, or close the tagging dialog</span>
+                <span class="tagging-quiz-hotkey-action">Close suggestions or exit fullscreen</span>
+              </div>
+              <div class="tagging-quiz-hotkey-row">
+                <span class="tagging-quiz-key-combo"><span class="tagging-quiz-key">Shift</span><span class="tagging-quiz-key-plus">+</span><span class="tagging-quiz-key">Esc</span></span>
+                <span class="tagging-quiz-hotkey-action">Close the tagging dialog</span>
               </div>
             </div>
           </div>
@@ -1296,7 +1303,7 @@
                   <div class="quiz-tag-panel-title">Manual Tags</div>
                   <div class="small text-muted" id="tagging-quiz-manual-help">Comma separated. Suggestions use your glossary.</div>
                 </div>
-                <textarea class="form-control" id="tagging-quiz-manual" rows="4" placeholder="tag1, tag2"></textarea>
+                <textarea class="form-control" id="tagging-quiz-manual" data-tag-suggestion-section="manual_tags" rows="4" placeholder="tag1, tag2"></textarea>
                 <label class="quiz-manual-apply-all" title="Adds these manual tags to the current segment for every image in this tagging session. You can still remove them per image later." data-bs-toggle="tooltip" data-bs-title="Adds these manual tags to the current segment for every image in this tagging session. You can still remove them per image later.">
                   <input class="form-check-input" type="checkbox" id="tagging-quiz-manual-apply-all">
                   <span>Apply to all session images</span>
@@ -1766,6 +1773,10 @@
     glossaryHydrateBusy: false,
     glossaryHydrateTimer: null
   };
+  const catalogSuggestState = {
+    settings: { enabled: false, max_suggestions: 12, sections: {} },
+    ready: false
+  };
   const glossarySuggests = [];
   let tagsSyncEnabled = true;
   let tagsSyncLocked = false;
@@ -1805,6 +1816,29 @@
 
   function qProjectRoot(){
     return (get(IDS.folder)?.value || projectState.root || '').trim();
+  }
+
+  function qRootKey(root){
+    return String(root || '').trim().replace(/[\\\/]+$/, '').replace(/\\/g, '/').toLowerCase();
+  }
+
+  function qSessionProjectRoot(){
+    return (quizState.session?.project_root || '').trim();
+  }
+
+  function qSessionRequestRoot(){
+    return qSessionProjectRoot() || qProjectRoot();
+  }
+
+  function qSessionMatchesCurrentProject(){
+    if (!quizState.session) return false;
+    const sessionRoot = qRootKey(qSessionProjectRoot());
+    const currentRoot = qRootKey(projectState.root || qProjectRoot());
+    return !sessionRoot || !currentRoot || sessionRoot === currentRoot;
+  }
+
+  function qHasActiveCurrentSession(){
+    return !!(quizState.session && qSessionMatchesCurrentProject() && quizState.session.status === 'active');
   }
 
   function escapeHtml(value){
@@ -1915,10 +1949,11 @@
     return data;
   }
 
-  function qModal(id){
+  function qModal(id, options = null){
     const el = get(id);
     if (!el || !window.bootstrap) return null;
-    return bootstrap.Modal.getOrCreateInstance(el);
+    const opts = options || (id === QUIZ.quizModal ? {keyboard: false} : undefined);
+    return bootstrap.Modal.getOrCreateInstance(el, opts);
   }
 
   function qMarkSessionDirty(){
@@ -1955,6 +1990,53 @@
   }
 
   function qSegments(){
+    const base = qBaseSegments();
+    const generated = qMaterializeSetupMappingRows(base);
+    const all = base.concat(generated)
+      .sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
+    if (!quizState.setupUsesCurrentSettings || !Array.isArray(quizState.mappingRows)){
+      return all;
+    }
+    const byId = new Map(all.map(seg => [String(seg.id || ''), seg]));
+    const ordered = [];
+    const seen = new Set();
+    const add = segId => {
+      const clean = String(segId || '').trim();
+      if (!clean || seen.has(clean) || !byId.has(clean)) return;
+      seen.add(clean);
+      ordered.push({...byId.get(clean), order: ordered.length + 1});
+    };
+    quizState.mappingRows.forEach(row => add(row?.right_segment));
+    all.forEach(seg => add(seg.id));
+    return ordered;
+  }
+
+  function qSectionNames(){
+    return (quizState.sections || []).map(s => s.name || s.category).filter(Boolean);
+  }
+
+  function qSegmentIdFromLabel(label){
+    return String(label || '').trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '') || 'segment';
+  }
+
+  function qSegmentLabelFromSectionName(name){
+    const clean = String(name || '').trim().replace(/[_\s]+/g, ' ');
+    return clean ? clean.replace(/\w\S*/g, word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()) : 'Segment';
+  }
+
+  function qUniqueSegmentId(base, used){
+    const clean = qSegmentIdFromLabel(base);
+    let candidate = clean;
+    let suffix = 2;
+    while (used.has(candidate)){
+      candidate = `${clean}_${suffix}`;
+      suffix += 1;
+    }
+    used.add(candidate);
+    return candidate;
+  }
+
+  function qBaseSegments(){
     const source = quizState.setupUsesCurrentSettings
       ? (quizState.settings && quizState.settings.segments)
       : ((quizState.session && quizState.session.quiz_segments) || (quizState.settings && quizState.settings.segments));
@@ -1963,8 +2045,29 @@
       .sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
   }
 
-  function qSectionNames(){
-    return (quizState.sections || []).map(s => s.name || s.category).filter(Boolean);
+  function qMaterializeSetupMappingRows(baseSegments = qBaseSegments()){
+    if (!quizState.setupUsesCurrentSettings || !Array.isArray(quizState.mappingRows)) return [];
+    const baseIds = new Set(baseSegments.map(seg => String(seg.id || '')));
+    const used = new Set(baseIds);
+    const derived = [];
+    quizState.mappingRows.forEach(row => {
+      if (!row || typeof row !== 'object') return;
+      const left = (row.left_sections || []).filter(Boolean);
+      const existing = String(row.right_segment || '').trim();
+      if (existing && baseIds.has(existing)) return;
+      if (!left.length) return;
+      const label = qSegmentLabelFromSectionName(left[0]);
+      let id = '';
+      if (existing && !used.has(existing)){
+        id = existing;
+        used.add(id);
+      } else {
+        id = qUniqueSegmentId(existing || left[0], used);
+      }
+      row.right_segment = id;
+      derived.push({id, label, order: (baseSegments.length + derived.length + 1), generated: true});
+    });
+    return derived;
   }
 
   function qEnsureRows(){
@@ -2276,6 +2379,7 @@
 
   async function qBuildRecommendations(){
     const root = qProjectRoot();
+    qMaterializeSetupMappingRows();
     qSetStatus('Building recommendations...', QUIZ.setupStatus);
     const data = await qPost('/api/tagging-quiz/recommendations/build', {
       project_root: root,
@@ -2283,7 +2387,10 @@
       mapping_rows: quizState.mappingRows
     });
     quizState.recommendations = data.recommendations || {};
+    if (Array.isArray(data.mapping_rows)) quizState.mappingRows = data.mapping_rows;
+    qSyncSetupToSession(data.segments);
     qSetStatus((data.logs || [`Built recommendations for ${Object.keys(quizState.recommendations).length} segment(s).`]).join(' | '), QUIZ.setupStatus);
+    qRenderMappingBoard();
     qRenderRecommendationPreview();
     qRenderDefaults();
     qScheduleSessionSave(true);
@@ -2334,8 +2441,52 @@
     });
   }
 
+  function qSetupDefaultSegmentState(segId){
+    return {
+      selected: qTags(quizState.sessionDefaults?.[segId] || []),
+      manual: [],
+      removed_defaults: [],
+      skipped: false,
+      updated_at: new Date().toISOString()
+    };
+  }
+
+  function qSyncSetupToSession(segmentsOverride = null){
+    if (!quizState.session || !quizState.setupUsesCurrentSettings) return false;
+    qMaterializeSetupMappingRows();
+    const segments = Array.isArray(segmentsOverride) && segmentsOverride.length
+      ? segmentsOverride
+      : qSegments();
+    quizState.session.quiz_segments = JSON.parse(JSON.stringify(segments));
+    quizState.session.mapping_rows = JSON.parse(JSON.stringify(quizState.mappingRows || []));
+    quizState.session.recommendations = JSON.parse(JSON.stringify(quizState.recommendations || {}));
+    quizState.session.session_defaults = JSON.parse(JSON.stringify(quizState.sessionDefaults || {}));
+    Object.values(quizState.session.images || {}).forEach(entry => {
+      if (!entry || typeof entry !== 'object') return;
+      if (!entry.segments) entry.segments = {};
+      segments.forEach(seg => {
+        const segId = String(seg?.id || '').trim();
+        if (segId && !entry.segments[segId]) entry.segments[segId] = qSetupDefaultSegmentState(segId);
+      });
+    });
+    const current = quizState.session.current || (quizState.session.current = {});
+    const ids = segments.map(seg => String(seg.id || '')).filter(Boolean);
+    if (!ids.includes(String(current.segment_id || ''))){
+      const idx = Math.min(Math.max(0, Number(current.segment_index || 0)), Math.max(0, ids.length - 1));
+      current.segment_index = idx;
+      current.segment_id = ids[idx] || '';
+    }
+    return true;
+  }
+
   async function qOpenSetup(){
     await qLoadSettings();
+    if (quizState.session && !qSessionMatchesCurrentProject()){
+      qReplaceSession(null);
+      await qLoadSession(true);
+    } else if (!quizState.session) {
+      await qLoadSession(true);
+    }
     quizState.setupUsesCurrentSettings = true;
     if (quizState.session){
       quizState.mappingRows = JSON.parse(JSON.stringify(quizState.session.mapping_rows || quizState.mappingRows || []));
@@ -2349,12 +2500,15 @@
     qRenderDefaults();
     qRenderRecommendationPreview();
     quizState.setupModal = qModal(QUIZ.setupModal);
+    qUpdateResumeBanner();
     quizState.setupModal?.show();
     await qParseCheatsheet();
+    qUpdateResumeBanner();
   }
 
   async function qOpenQuizEntry(){
     if (!quizState.settings) await qLoadSettings();
+    if (quizState.session && !qSessionMatchesCurrentProject()) qReplaceSession(null);
     if (!quizState.session) await qLoadSession(true);
     if (quizState.session && (quizState.session.mapping_rows || []).length){
       qOpenQuiz();
@@ -2368,6 +2522,7 @@
       qSetStatus('Project root is required.');
       return;
     }
+    qMaterializeSetupMappingRows();
     if (!Object.keys(quizState.recommendations || {}).length){
       await qBuildRecommendations().catch(() => null);
     }
@@ -2381,6 +2536,24 @@
     qAcceptServerSession(data.session);
     qUpdateResumeBanner();
     qSetStatus((data.logs || ['Started tagging flow']).join(' | '));
+    quizState.setupUsesCurrentSettings = false;
+    quizState.setupModal?.hide();
+    qOpenQuiz();
+  }
+
+  async function qContinueSessionFromSetup(){
+    if (!qHasActiveCurrentSession()){
+      await qStartSession();
+      return;
+    }
+    qMaterializeSetupMappingRows();
+    if (!Object.keys(quizState.recommendations || {}).length){
+      await qBuildRecommendations().catch(() => null);
+    }
+    qSyncSetupToSession();
+    await qSaveSessionNow();
+    qUpdateResumeBanner();
+    qSetStatus('Continuing existing guided tagging session.', QUIZ.setupStatus);
     quizState.setupUsesCurrentSettings = false;
     quizState.setupModal?.hide();
     qOpenQuiz();
@@ -2411,10 +2584,18 @@
     const banner = get(QUIZ.resume);
     const setupBtn = get(QUIZ.setup);
     const startBtn = get(QUIZ.start);
+    const setupStartBtn = get(QUIZ.startSetup);
     const session = quizState.session;
-    btn?.classList.toggle('d-none', !session || session.status !== 'active');
+    const activeCurrentSession = qHasActiveCurrentSession();
+    btn?.classList.toggle('d-none', !activeCurrentSession);
     if (setupBtn) setupBtn.textContent = session && (session.mapping_rows || []).length ? 'Edit Tagging Setup' : 'Tagging Setup';
     if (startBtn) startBtn.textContent = session && (session.mapping_rows || []).length ? 'Open Tagging Flow' : 'Start Tagging';
+    if (setupStartBtn) {
+      setupStartBtn.textContent = activeCurrentSession ? 'Continue Tagging' : 'Start Tagging';
+      setupStartBtn.title = activeCurrentSession
+        ? 'Continue the existing active session for this project path.'
+        : 'Create a new guided tagging session from this setup.';
+    }
     if (!banner) return;
     if (!session){
       banner.classList.add('d-none');
@@ -2505,7 +2686,7 @@
 
   function qImageUrl(rel){
     const clean = String(rel || '').replace(/\\/g, '/').replace(/^dataset\//i, '').replace(/^database\//i, '');
-    return `/api/tags/image?folder=${encodeURIComponent(qProjectRoot())}&area=dataset&path=${encodeURIComponent(clean)}`;
+    return `/api/tags/image?folder=${encodeURIComponent(qSessionRequestRoot())}&area=dataset&path=${encodeURIComponent(clean)}`;
   }
 
   function qOpenQuiz(){
@@ -2514,7 +2695,7 @@
       return;
     }
     quizState.setupUsesCurrentSettings = false;
-    quizState.quizModal = qModal(QUIZ.quizModal);
+    quizState.quizModal = qModal(QUIZ.quizModal, {keyboard: false});
     qRenderQuiz();
     qRenderGlossaryTags();
     quizState.quizModal?.show();
@@ -2683,18 +2864,32 @@
   }
 
   function qSegmentOptionTags(segment){
-    if (!segment) return [];
+    return qCleanSegmentTags([
+      ...qSegmentRecommendationTags(segment),
+      ...qSegmentSettingTags(segment)
+    ]);
+  }
+
+  function qCleanSegmentTags(rawTags){
     const out = [];
     const seen = new Set();
-    const add = tag => {
+    (rawTags || []).forEach(tag => {
       const clean = normalizeDanbooruTag(tag);
       if (!clean || seen.has(clean)) return;
       seen.add(clean);
       out.push(clean);
-    };
-    (quizState.session?.recommendations?.[segment.id] || quizState.recommendations[segment.id] || []).forEach(add);
-    qReviewStepSuggestionTags(segment).matching.forEach(({ tags }) => tags.forEach(add));
+    });
     return out;
+  }
+
+  function qSegmentRecommendationTags(segment){
+    if (!segment) return [];
+    return qCleanSegmentTags(quizState.session?.recommendations?.[segment.id] || quizState.recommendations[segment.id] || []);
+  }
+
+  function qSegmentSettingTags(segment){
+    if (!segment) return [];
+    return qCleanSegmentTags(qReviewStepSuggestionTags(segment).matching.flatMap(({ tags }) => tags || []));
   }
 
   function qSegmentOptionTagSet(segment){
@@ -2721,6 +2916,8 @@
     const recHost = get(QUIZ.recommended);
     selectedHost.innerHTML = '';
     recHost.innerHTML = '';
+    const recTitle = recHost.closest('.quiz-tag-panel')?.querySelector('.quiz-tag-panel-title');
+    if (recTitle) recTitle.textContent = 'Recommended';
     if (qIsFreeTaggingMode()){
       const rows = qCurrentFreeTagRows();
       if (!rows.length) selectedHost.appendChild(qGhost('No tags yet'));
@@ -2745,11 +2942,14 @@
       return;
     }
     const filter = (get(QUIZ.search)?.value || '').trim().toLowerCase();
+    const cheatRecommendations = qSegmentRecommendationTags(seg);
     const pool = qIsSingleChoiceSegment(seg)
       ? qSegmentOptionTags(seg)
-      : (quizState.session?.recommendations?.[seg.id] || quizState.recommendations[seg.id] || []);
-    const filtered = pool.filter(tag => !unavailable.has(normalizeDanbooruTag(tag)) && (!filter || tag.toLowerCase().includes(filter))).slice(0, filter ? 200 : 30);
+      : (cheatRecommendations.length ? cheatRecommendations : qSegmentSettingTags(seg));
+    const filtered = pool.filter(tag => !unavailable.has(normalizeDanbooruTag(tag)) && (!filter || tag.toLowerCase().includes(filter)));
+    if (recTitle) recTitle.textContent = `Recommended (${filtered.length})`;
     if (!filtered.length) recHost.appendChild(qGhost('No recommended tags'));
+    const frag = document.createDocumentFragment();
     filtered.forEach(tag => {
       const chip = document.createElement('button');
       chip.type = 'button';
@@ -2757,8 +2957,9 @@
       chip.textContent = tag;
       chip.title = `Add ${tag}`;
       chip.addEventListener('click', () => qAddRecommendedTag(tag).catch(err => qSetManualStatus(`Auto advance failed: ${err.message}`)));
-      recHost.appendChild(chip);
+      frag.appendChild(chip);
     });
+    recHost.appendChild(frag);
   }
 
   async function qMaybeAutoAdvanceAfterSelection(){
@@ -3285,13 +3486,14 @@
       quizState.saveTimer = null;
     }
     if (!quizState.session || !qProjectRoot()) return;
+    qSyncSetupToSession();
     qUpdateStateFromInputs();
     const saveVersion = qMarkSessionDirty();
     const saveSeq = ++quizState.saveSeq;
     const autosaveEl = get(QUIZ.autosave);
     if (autosaveEl) autosaveEl.textContent = 'Autosaving...';
     try{
-      const data = await qPost('/api/tagging-quiz/session/save', {project_root: qProjectRoot(), session: quizState.session});
+      const data = await qPost('/api/tagging-quiz/session/save', {project_root: qSessionRequestRoot(), session: quizState.session});
       if (saveVersion === quizState.sessionVersion && saveSeq === quizState.saveSeq){
         quizState.session = data.session || quizState.session;
         quizState.lastAcceptedSaveSeq = saveSeq;
@@ -3517,6 +3719,17 @@
     await qSaveImage();
   }
 
+  function qHandleQuizModalEscape(event){
+    if (!event || event.defaultPrevented || event.key !== 'Escape' || !event.shiftKey) return;
+    const modalEl = get(QUIZ.quizModal);
+    if (!modalEl?.classList.contains('show')) return;
+    const openModals = Array.from(document.querySelectorAll('.modal.show'));
+    if (openModals.length && openModals[openModals.length - 1] !== modalEl) return;
+    event.preventDefault();
+    event.stopPropagation();
+    qModal(QUIZ.quizModal)?.hide();
+  }
+
   async function qSaveImage(){
     if (!quizState.session) return;
     qUpdateStateFromInputs();
@@ -3524,7 +3737,7 @@
     const rel = qCurrentImageRel();
     const entry = qCurrentImageEntry();
     const data = await qPost('/api/tagging-quiz/image/save', {
-      project_root: qProjectRoot(),
+      project_root: qSessionRequestRoot(),
       image_rel: rel,
       segments: entry?.segments || {},
       session: quizState.session,
@@ -3574,10 +3787,10 @@
   }
 
   async function qDeleteSession(){
-    if (!qProjectRoot()) return;
+    if (!qSessionRequestRoot()) return;
     const ok = await showConfirm('Delete the active guided tagging session JSON? Caption .txt files are not deleted.', 'Delete session');
     if (!ok) return;
-    await qPost('/api/tagging-quiz/session/delete', {project_root: qProjectRoot(), confirm: true});
+    await qPost('/api/tagging-quiz/session/delete', {project_root: qSessionRequestRoot(), confirm: true});
     qAcceptServerSession(null);
     qUpdateResumeBanner();
     qRenderOverview();
@@ -3585,8 +3798,8 @@
   }
 
   async function qArchiveSession(){
-    if (!qProjectRoot()) return;
-    const data = await qPost('/api/tagging-quiz/session/archive', {project_root: qProjectRoot()});
+    if (!qSessionRequestRoot()) return;
+    const data = await qPost('/api/tagging-quiz/session/archive', {project_root: qSessionRequestRoot()});
     qAcceptServerSession(null);
     qUpdateResumeBanner();
     qRenderOverview();
@@ -3605,10 +3818,10 @@
     get(QUIZ.parse)?.addEventListener('click', qParseCheatsheet);
     get(QUIZ.addRow)?.addEventListener('click', () => { quizState.mappingRows.push({left_sections: [], right_segment: null}); qRenderMappingBoard(); });
     get(QUIZ.autoArrange)?.addEventListener('click', qAutoArrange);
-    get(QUIZ.clearMapping)?.addEventListener('click', () => { quizState.mappingRows = qSegments().map(seg => ({left_sections: [], right_segment: seg.id})); qRenderMappingBoard(); });
+    get(QUIZ.clearMapping)?.addEventListener('click', () => { quizState.mappingRows = qBaseSegments().map(seg => ({left_sections: [], right_segment: seg.id})); qRenderMappingBoard(); });
     get(QUIZ.saveMapping)?.addEventListener('click', () => { qSetStatus(`Mapping saved: ${quizState.mappingRows.length} rows`, QUIZ.setupStatus); qScheduleSessionSave(true); });
     get(QUIZ.buildRecs)?.addEventListener('click', () => qBuildRecommendations().catch(err => qSetStatus(err.message, QUIZ.setupStatus)));
-    get(QUIZ.startSetup)?.addEventListener('click', () => qStartSession().catch(err => qSetStatus(err.message, QUIZ.setupStatus)));
+    get(QUIZ.startSetup)?.addEventListener('click', () => qContinueSessionFromSetup().catch(err => qSetStatus(err.message, QUIZ.setupStatus)));
     get(QUIZ.previewSegment)?.addEventListener('change', () => { qRenderRecommendationPreview(); qRenderDefaults(); });
     get(QUIZ.search)?.addEventListener('input', qRenderQuizChips);
     get(QUIZ.manual)?.addEventListener('input', () => {
@@ -3622,6 +3835,7 @@
     get(QUIZ.manualUndo)?.addEventListener('click', () => qUndoManualApplyAll().catch(err => qSetManualStatus(`Undo failed: ${err.message}`)));
     get(QUIZ.manualClear)?.addEventListener('click', qClearManualTags);
     attachGlossarySuggest(get(QUIZ.manual));
+    attachGlossarySuggest(get(QUIZ.search));
     get(QUIZ.manual)?.addEventListener('keydown', qHandleManualEnter);
     get(QUIZ.glossarySearch)?.addEventListener('input', e => {
       quizState.glossarySearch = e.target.value || '';
@@ -3648,6 +3862,7 @@
     get(QUIZ.skip)?.addEventListener('click', qSkipSegment);
     get(QUIZ.saveImage)?.addEventListener('click', () => qSaveImage().catch(err => qSetStatus(`Save image failed: ${err.message}`)));
     document.addEventListener('keydown', event => qHandleQuizImageArrow(event).catch(err => qSetStatus(`Image navigation failed: ${err.message}`)));
+    document.addEventListener('keydown', qHandleQuizModalEscape);
     get(QUIZ.later)?.addEventListener('click', async () => { await qSaveSessionNow(); quizState.quizModal?.hide(); qSetStatus('Session saved. Continue later is ready.'); });
     get(QUIZ.openOverview)?.addEventListener('click', () => { qRenderOverview(); qModal(QUIZ.overviewModal)?.show(); });
     get(QUIZ.deleteSession)?.addEventListener('click', qDeleteSession);
@@ -7310,6 +7525,12 @@
       msgEl.style.whiteSpace = String(message || '').includes('\n') ? 'pre-wrap' : '';
       okBtn.textContent = okLabel;
       let done = false;
+      modalEl.classList.add('tags-confirm-top');
+      const markTopBackdrop = ()=>{
+        const backdrops = Array.from(document.querySelectorAll('.modal-backdrop'));
+        const backdrop = backdrops[backdrops.length - 1];
+        if (backdrop) backdrop.classList.add('tags-confirm-backdrop');
+      };
       const modal = new bootstrap.Modal(modalEl);
       const cleanup = (result)=>{
         if (done) return;
@@ -7317,12 +7538,18 @@
         okBtn.onclick = null;
         cancelBtn.onclick = null;
         msgEl.style.whiteSpace = '';
+        modalEl.classList.remove('tags-confirm-top');
+        document.querySelectorAll('.modal-backdrop.tags-confirm-backdrop').forEach(backdrop => {
+          backdrop.classList.remove('tags-confirm-backdrop');
+        });
         resolve(result);
       };
       okBtn.onclick = ()=>{ cleanup(true); modal.hide(); };
       cancelBtn.onclick = ()=>{ cleanup(false); modal.hide(); };
       modalEl.addEventListener('hidden.bs.modal', ()=> cleanup(false), { once: true });
+      modalEl.addEventListener('shown.bs.modal', markTopBackdrop, { once: true });
       modal.show();
+      requestAnimationFrame(markTopBackdrop);
     });
   }
 
@@ -7959,20 +8186,27 @@
     return { matching, other };
   }
 
+  function qIsGuidedCatalogInput(input){
+    return !!(input && (input.id === QUIZ.manual || input.id === QUIZ.search) && !qIsFreeTaggingMode());
+  }
+
   function glossarySuggestionRows(query){
     const cleanQuery = normalizeDanbooruTag(query);
     const quizManual = get(QUIZ.manual);
+    const quizSearch = get(QUIZ.search);
     const quizManualActive = !!(quizManual && document.activeElement === quizManual);
+    const quizSearchActive = !!(quizSearch && document.activeElement === quizSearch);
+    const quizGuidedActive = quizManualActive || quizSearchActive;
     const singleChoiceManual = !!(
-      quizManualActive &&
+      quizGuidedActive &&
       !qIsFreeTaggingMode() &&
       qIsSingleChoiceSegment(qCurrentSegment())
     );
     const segmentOnly = !!(
       singleChoiceManual ||
-      (quizManualActive && qReviewStepForSegment(qCurrentSegment())?.autosuggest_segment_only)
+      (quizGuidedActive && qReviewStepForSegment(qCurrentSegment())?.autosuggest_segment_only)
     );
-    if (!cleanQuery && !quizManualActive) return [];
+    if (!cleanQuery && !quizGuidedActive) return [];
     const rows = [];
     const seen = new Set();
     function addRow(tag, category, postCount=null, priority=0){
@@ -7987,7 +8221,7 @@
         is_prefix: cleanTag.startsWith(cleanQuery)
       });
     }
-    if (quizManualActive){
+    if (quizGuidedActive){
       const seg = qCurrentSegment();
       if (!qIsFreeTaggingMode() && qIsSingleChoiceSegment(seg) && qSelectedTagsForSegmentState(qCurrentSegmentState()).length >= 1){
         return [];
@@ -8032,6 +8266,121 @@
       .slice(0, 9);
   }
 
+  function allGlossarySuggestionTags(){
+    const out = [];
+    glossaryCategoryNames().forEach(category => {
+      (danbooruState.glossary.categories[category] || []).forEach(tag => out.push(tag));
+    });
+    return out;
+  }
+
+  async function loadCatalogSuggestSettings(){
+    try{
+      const res = await fetch('/api/tag-suggestion-settings');
+      const data = await res.json();
+      if (!res.ok || !data?.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      catalogSuggestState.settings = data.settings || catalogSuggestState.settings;
+    }catch(err){
+      catalogSuggestState.settings = { enabled: false, max_suggestions: 12, sections: {} };
+    }
+  }
+
+  function activeCatalogSuggestSection(input){
+    if (qIsGuidedCatalogInput(input)){
+      const seg = qCurrentSegment();
+      const step = qReviewStepForSegment(seg);
+      return normalizeDanbooruTag(step?.id || seg?.id || 'manual_tags') || 'manual_tags';
+    }
+    return input?.dataset?.tagSuggestionSection || 'manual_tags';
+  }
+
+  function catalogSectionEnabled(section, input=null){
+    const settings = catalogSuggestState.settings || {};
+    if (qIsGuidedCatalogInput(input)){
+      return !!qReviewStepForSegment(qCurrentSegment())?.danbooru_autosuggest;
+    }
+    if (!settings.enabled) return false;
+    const meta = settings.sections?.[section || 'manual_tags'];
+    return !!(meta && meta.enabled);
+  }
+
+  function catalogSuggestAllowed(entry, range){
+    const section = activeCatalogSuggestSection(entry.input);
+    if (!section || !catalogSectionEnabled(section, entry.input)) return false;
+    if ((entry.input.id === IDS.tags) && getModeOrDefault() === 'replace') return false;
+    return normalizeDanbooruTag(range.query).length >= 2;
+  }
+
+  function completedTagsForCatalogSuggest(input, range){
+    if (!input || input.id === QUIZ.search) return [];
+    const value = input.value || '';
+    const left = value.slice(0, Math.max(0, range.start || 0));
+    const right = value.slice(Math.max(0, range.end || 0));
+    return splitTagList(`${left},${right}`).map(normalizeDanbooruTag).filter(Boolean);
+  }
+
+  function compactPostCount(value){
+    const count = Number(value || 0);
+    if (!Number.isFinite(count) || count <= 0) return '0';
+    if (count >= 1000000) return `${(count / 1000000).toFixed(count >= 10000000 ? 0 : 1)}m`;
+    if (count >= 1000) return `${(count / 1000).toFixed(count >= 10000 ? 0 : 1)}k`;
+    return String(count);
+  }
+
+  function mergeSuggestionRows(glossaryRows, catalogRows){
+    const rows = [];
+    const seen = new Set();
+    [...(glossaryRows || []), ...(catalogRows || [])].forEach(row => {
+      const tag = normalizeDanbooruTag(row?.tag);
+      if (!tag || seen.has(tag)) return;
+      seen.add(tag);
+      rows.push({ ...row, tag });
+    });
+    return rows;
+  }
+
+  function scheduleCatalogSuggest(entry, range){
+    if (entry.catalogTimer) window.clearTimeout(entry.catalogTimer);
+    if (entry.catalogAbort) entry.catalogAbort.abort();
+    entry.catalogRows = [];
+    if (!catalogSuggestAllowed(entry, range)) return;
+    const seq = (entry.catalogSeq || 0) + 1;
+    entry.catalogSeq = seq;
+    entry.catalogTimer = window.setTimeout(async () => {
+      const controller = new AbortController();
+      entry.catalogAbort = controller;
+      const input = entry.input;
+      const existing = completedTagsForCatalogSuggest(input, range);
+      const projectTags = (tagVizState.items || []).map(item => item.tag).filter(Boolean);
+      try{
+        const res = await fetch('/api/tag-catalog/suggest', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          signal: controller.signal,
+          body: JSON.stringify({
+            query: range.query,
+            section: activeCatalogSuggestSection(input),
+            existing_tags: existing,
+            project_tags: projectTags,
+            glossary_tags: allGlossarySuggestionTags(),
+            limit: catalogSuggestState.settings?.max_suggestions || 12
+          })
+        });
+        const data = await res.json();
+        if (seq !== entry.catalogSeq || document.activeElement !== input) return;
+        entry.catalogRows = data?.ok && data.enabled ? (data.suggestions || []).map(row => ({
+          tag: row.tag,
+          category: row.category,
+          post_count: row.post_count,
+          source: row.source || 'danbooru'
+        })) : [];
+        renderGlossarySuggest(entry, { skipCatalog: true });
+      }catch(err){
+        if (err?.name !== 'AbortError') entry.catalogRows = [];
+      }
+    }, 180);
+  }
+
   function glossarySuggestTokenRange(input){
     const value = input.value || '';
     const cursor = Number.isFinite(input.selectionStart) ? input.selectionStart : value.length;
@@ -8060,12 +8409,28 @@
   function closeGlossarySuggest(entry){
     entry.rows = [];
     entry.activeIndex = -1;
+    entry.catalogRows = [];
+    if (entry.catalogTimer) window.clearTimeout(entry.catalogTimer);
+    entry.catalogTimer = null;
+    if (entry.catalogAbort) entry.catalogAbort.abort();
+    entry.catalogAbort = null;
     entry.box.classList.remove('is-open');
     entry.box.innerHTML = '';
   }
 
   function applyGlossarySuggest(entry, row){
     if (!row || entry.input.disabled) return;
+    if (entry.input.id === QUIZ.search && !qIsFreeTaggingMode()){
+      const tag = normalizeDanbooruTag(row.tag);
+      closeGlossarySuggest(entry);
+      entry.input.value = '';
+      entry.input.dispatchEvent(new Event('input', { bubbles: true }));
+      entry.input.focus();
+      if (tag){
+        qAddRecommendedTag(tag).catch(err => qSetManualStatus(`Catalog tag failed: ${err.message}`));
+      }
+      return;
+    }
     const range = glossarySuggestTokenRange(entry.input);
     entry.input.setRangeText(row.tag, range.start, range.end, 'end');
     entry.input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -8076,15 +8441,23 @@
     }
   }
 
-  function renderGlossarySuggest(entry){
+  function renderGlossarySuggest(entry, options={}){
     const input = entry.input;
     if (document.activeElement !== input || input.disabled || (input.id === IDS.tags && getModeOrDefault() === 'dedup')){
       closeGlossarySuggest(entry);
       return;
     }
     const range = glossarySuggestTokenRange(input);
-    entry.rows = glossarySuggestionRows(range.query);
+    const glossaryRows = glossarySuggestionRows(range.query).map(row => ({...row, source: 'glossary'}));
+    const waitingForCatalog = !options.skipCatalog && catalogSuggestAllowed(entry, range);
+    if (!options.skipCatalog) scheduleCatalogSuggest(entry, range);
+    entry.rows = mergeSuggestionRows(glossaryRows, entry.catalogRows || []);
     if (!entry.rows.length){
+      if (waitingForCatalog){
+        entry.box.classList.remove('is-open');
+        entry.box.innerHTML = '';
+        return;
+      }
       closeGlossarySuggest(entry);
       return;
     }
@@ -8100,12 +8473,15 @@
       tag.textContent = row.tag;
       const category = document.createElement('span');
       category.className = 'glossary-suggest-category';
-      category.textContent = row.category;
+      const source = row.source ? String(row.source).replace(/^./, ch => ch.toUpperCase()) : 'Glossary';
+      category.textContent = `${row.category || 'tag'} - ${source}`;
       main.appendChild(tag);
       main.appendChild(category);
       const detail = document.createElement('span');
       detail.className = 'glossary-suggest-detail';
-      detail.textContent = formatGlossaryPostCount(row.tag);
+      detail.textContent = row.source === 'danbooru' || row.source === 'project'
+        ? compactPostCount(row.post_count)
+        : formatGlossaryPostCount(row.tag);
       btn.appendChild(main);
       btn.appendChild(detail);
       btn.addEventListener('mousedown', e=> e.preventDefault());
@@ -8128,7 +8504,7 @@
     box.className = 'glossary-suggest';
     box.setAttribute('role', 'listbox');
     document.body.appendChild(box);
-    const entry = { input, box, rows: [], activeIndex: -1 };
+    const entry = { input, box, rows: [], activeIndex: -1, catalogRows: [], catalogSeq: 0, catalogTimer: null, catalogAbort: null };
     glossarySuggests.push(entry);
     input.addEventListener('input', ()=>{
       entry.activeIndex = 0;
@@ -8143,7 +8519,7 @@
         e.preventDefault();
         const step = e.key === 'ArrowDown' ? 1 : -1;
         entry.activeIndex = (entry.activeIndex + step + entry.rows.length) % entry.rows.length;
-        renderGlossarySuggest(entry);
+        renderGlossarySuggest(entry, { skipCatalog: true });
         return;
       }
       if (e.key === 'Enter' || e.key === 'Tab'){
@@ -9402,6 +9778,7 @@
     qLoadRecentManualTags();
     hookSavers();
     loadGlossary();
+    loadCatalogSuggestSettings();
     renderGlossarySelectors();
     renderGlossaryList();
     scheduleGlossaryMetaHydration();

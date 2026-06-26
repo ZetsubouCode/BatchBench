@@ -214,5 +214,8 @@ huggingface/
 .hf_cache/
 *.safetensors
 
+# Generated local Danbooru tag catalog
+data/tag_catalog/
+
 # Local notes/tasks
 todo/

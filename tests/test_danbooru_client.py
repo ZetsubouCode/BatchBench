@@ -133,6 +133,28 @@ class DanbooruClientTests(unittest.TestCase):
         self.assertEqual(second["summaries"], first["summaries"])
         self.assertEqual([path for path, _ in calls], ["/tags.json", "/tags.json"])
 
+    def test_fetch_tag_page_uses_danbooru_cursor_pagination(self):
+        calls = []
+
+        def fake_get(path, params, timeout_seconds):  # noqa: ARG001
+            calls.append((path, dict(params)))
+            return (
+                [
+                    {"id": 99, "name": "from_below", "category": 0, "post_count": 10, "updated_at": "2024-01-01T00:00:00Z"}
+                ],
+                None,
+            )
+
+        with patch("services.danbooru_client._http_get_json", side_effect=fake_get):
+            rows, err = danbooru_client.fetch_tag_page(after_id=100, limit=5000)
+
+        self.assertIsNone(err)
+        self.assertEqual(rows[0]["name"], "from_below")
+        self.assertEqual(calls[0][0], "/tags.json")
+        self.assertEqual(calls[0][1]["page"], "b100")
+        self.assertEqual(calls[0][1]["limit"], 1000)
+        self.assertNotIn("search[id_gt]", calls[0][1])
+
     def test_wiki_lookup_adds_guidance_groups_and_relationships(self):
         def fake_get(path, params, timeout_seconds):  # noqa: ARG001
             if path == "/tags.json":
