@@ -87,6 +87,107 @@ class TagEditorInitializeTests(unittest.TestCase):
             missing = result.get("missing") or []
             self.assertTrue(any(str(item).startswith("dataset(txt pairs:") for item in missing), msg=missing)
 
+    def test_multi_trigger_generates_folder_captions(self):
+        with tempfile.TemporaryDirectory() as td:
+            project = Path(td) / "project_multi"
+            (project / "default outfit").mkdir(parents=True)
+            (project / "bikini").mkdir(parents=True)
+            (project / "prompt.txt").write_text("my_character\n", encoding="utf-8")
+            (project / "default outfit" / "a.png").write_bytes(b"img")
+            (project / "bikini" / "b.png").write_bytes(b"img")
+
+            result = tag_editor.initialize_project_layout(project, [".png"], multi_trigger_mode=True)
+
+            self.assertTrue(result.get("ok"), msg=result)
+            self.assertEqual((project / "dataset" / "a.txt").read_text(encoding="utf-8").strip(), "my_character, default_outfit")
+            self.assertEqual((project / "dataset" / "b.txt").read_text(encoding="utf-8").strip(), "my_character, bikini")
+
+    def test_multi_trigger_ignores_underscore_source_folder(self):
+        with tempfile.TemporaryDirectory() as td:
+            project = Path(td) / "project_ignore"
+            (project / "_reference").mkdir(parents=True)
+            (project / "prompt.txt").write_text("my_character\n", encoding="utf-8")
+            (project / "_reference" / "skip.png").write_bytes(b"img")
+
+            result = tag_editor.initialize_project_layout(project, [".png"], multi_trigger_mode=True)
+
+            self.assertTrue(result.get("ok"), msg=result)
+            self.assertFalse((project / "dataset" / "skip.png").exists())
+            self.assertFalse((project / "dataset" / "skip.txt").exists())
+            preview = result.get("multi_trigger_preview") or {}
+            self.assertIn("_reference", preview.get("ignored_folders") or [])
+
+    def test_multi_trigger_root_level_image_uses_primary_only(self):
+        with tempfile.TemporaryDirectory() as td:
+            project = Path(td) / "project_root_fallback"
+            project.mkdir(parents=True)
+            (project / "prompt.txt").write_text("my_character\n", encoding="utf-8")
+            (project / "root.png").write_bytes(b"img")
+
+            result = tag_editor.initialize_project_layout(project, [".png"], multi_trigger_mode=True)
+
+            self.assertTrue(result.get("ok"), msg=result)
+            self.assertEqual((project / "dataset" / "root.txt").read_text(encoding="utf-8").strip(), "my_character")
+
+    def test_multi_trigger_existing_caption_is_not_overwritten(self):
+        with tempfile.TemporaryDirectory() as td:
+            project = Path(td) / "project_existing_caption"
+            dataset = project / "dataset"
+            (project / "default outfit").mkdir(parents=True)
+            dataset.mkdir(parents=True)
+            (project / "prompt.txt").write_text("my_character\n", encoding="utf-8")
+            (project / "default outfit" / "a.png").write_bytes(b"img")
+            (dataset / "a.png").write_bytes(b"img")
+            (dataset / "a.txt").write_text("custom_existing_caption", encoding="utf-8")
+
+            result = tag_editor.initialize_project_layout(project, [".png"], multi_trigger_mode=True)
+
+            self.assertTrue(result.get("ok"), msg=result)
+            self.assertEqual((dataset / "a.txt").read_text(encoding="utf-8").strip(), "custom_existing_caption")
+
+    def test_multi_trigger_nested_source_behavior(self):
+        with tempfile.TemporaryDirectory() as td:
+            project = Path(td) / "project_nested"
+            (project / "bikini" / "chapter_01").mkdir(parents=True)
+            (project / "bikini" / "_draft").mkdir(parents=True)
+            (project / "_hidden").mkdir(parents=True)
+            (project / "prompt.txt").write_text("my_character\n", encoding="utf-8")
+            (project / "bikini" / "chapter_01" / "a.png").write_bytes(b"img")
+            (project / "_hidden" / "skip_a.png").write_bytes(b"img")
+            (project / "bikini" / "_draft" / "skip_b.png").write_bytes(b"img")
+
+            result = tag_editor.initialize_project_layout(project, [".png"], multi_trigger_mode=True)
+
+            self.assertTrue(result.get("ok"), msg=result)
+            self.assertEqual((project / "dataset" / "a.txt").read_text(encoding="utf-8").strip(), "my_character, bikini")
+            self.assertFalse((project / "dataset" / "skip_a.png").exists())
+            self.assertFalse((project / "dataset" / "skip_b.png").exists())
+            preview = result.get("multi_trigger_preview") or {}
+            self.assertIn("_hidden", preview.get("ignored_folders") or [])
+            self.assertIn("bikini/_draft", preview.get("ignored_nested_folders") or [])
+
+    def test_multi_trigger_preview_matches_collected_sources(self):
+        with tempfile.TemporaryDirectory() as td:
+            project = Path(td) / "project_preview_multi"
+            (project / "default outfit").mkdir(parents=True)
+            (project / "bikini").mkdir(parents=True)
+            (project / "_reference").mkdir(parents=True)
+            (project / "prompt.txt").write_text("my_character\n", encoding="utf-8")
+            (project / "default outfit" / "a.png").write_bytes(b"img")
+            (project / "bikini" / "b.png").write_bytes(b"img")
+            (project / "_reference" / "skip.png").write_bytes(b"img")
+
+            result = tag_editor.inspect_project_layout(project, [".png"], multi_trigger_mode=True)
+
+            self.assertTrue(result.get("ok"), msg=result)
+            preview = result.get("multi_trigger_preview") or {}
+            self.assertTrue(preview.get("enabled"))
+            self.assertEqual(preview.get("source_folder_count"), 2)
+            self.assertEqual(preview.get("source_image_count"), 2)
+            self.assertIn("_reference", preview.get("ignored_folders") or [])
+            self.assertTrue(preview.get("examples"))
+            self.assertEqual(preview.get("source_image_count"), len(result.get("missing_root_in_dataset") or []))
+
 
 if __name__ == "__main__":
     unittest.main()

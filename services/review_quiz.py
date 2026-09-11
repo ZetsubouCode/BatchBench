@@ -13,9 +13,10 @@ from utils.parse import parse_tag_list
 from utils.text_io import read_text_best_effort
 
 from . import tag_editor
+from .paths import user_path
 
 
-REVIEW_QUIZ_CONFIG_PATH = Path(__file__).resolve().parent.parent / "_config" / "review_quiz.json"
+REVIEW_QUIZ_CONFIG_PATH = user_path("_config", "review_quiz.json")
 DEFAULT_IMAGE_EXTS = [".jpg", ".jpeg", ".png", ".webp"]
 QUEUE_MODES = {"missing_only", "all", "conflict_only", "not_reviewed", "uncertain_only"}
 STEP_MODES = {"single", "multi", "manual"}

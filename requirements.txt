@@ -9,4 +9,12 @@ huggingface_hub>=0.20.0
 safetensors>=0.4.2
 timm
 hf_xet
+httpx>=0.27.0
+httpcore>=1.0.0
+fsspec>=2024.0.0
+requests>=2.31.0
+urllib3>=2.0.0
+charset-normalizer>=3.0.0
 pytest
+pypresence>=4.6,<5
+pystray>=0.19,<1

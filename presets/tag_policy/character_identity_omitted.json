@@ -1,0 +1,15 @@
+{
+  "name": "character_identity_omitted",
+  "label": "Character - omit identity",
+  "version": 1,
+  "blocked_groups": [
+    "character_name",
+    "demographic",
+    "identity_appearance",
+    "identity_body"
+  ],
+  "optional_groups": [
+    "permanent_mark"
+  ],
+  "description": "Removes character names, count/gender, appearance identity, and body identity while keeping outfit, expression, pose, framing, background, objects, and lighting."
+}

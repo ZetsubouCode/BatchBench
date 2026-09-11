@@ -1,12 +1,17 @@
-import os, json, re, sys, shutil
+import atexit
+import os, json, re, sys, shutil, threading
+import time
+import webbrowser
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict, Any
-from flask import Flask, render_template, request, flash, jsonify, redirect, url_for, session, send_file
+from urllib.request import urlopen
+from flask import Flask, render_template, request, flash, jsonify, redirect, url_for, session, send_file, abort
 from markupsafe import Markup, escape
 from dotenv import load_dotenv
 from PIL import Image
+from werkzeug.serving import make_server
 
 from utils.io import readable_path, readable_path_or_none, windows_drives, default_browse_root
 from utils.image_ops import apply_preset
@@ -21,7 +26,15 @@ from services import danbooru_client
 from services import tag_catalog
 from services import tagging_assist
 from services import blur_brush
+from services import color_brush
 from services import trigger_safety
+from services.discord_presence import (
+    ACTIVITY_PAYLOADS,
+    DiscordPresenceService,
+    NullDiscordPresence,
+    normalize_activity_key,
+)
+from services.paths import resource_path, user_path
 from services.pipeline import PIPELINE_MANAGER
 
 load_dotenv()
@@ -30,6 +43,137 @@ APP_NAME = os.getenv("APP_NAME", "BatchBench")
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-dev-dev")
 app.config["APP_NAME"] = APP_NAME
+
+_NATIVE_FOLDER_PICKER_LOCK = threading.Lock()
+_RUNTIME_SERVICES_LOCK = threading.Lock()
+_RUNTIME_SERVICES_CONFIGURED = False
+_RUNTIME_SHUTDOWN_REGISTERED = False
+
+
+_APP_ROOT = resource_path()
+_LIVE_RELOAD_DIRS = ("services", "static", "templates", "utils")
+_LIVE_RELOAD_SUFFIXES = {".css", ".html", ".js", ".json", ".py"}
+
+
+def get_discord_presence():
+    return app.extensions.get("discord_presence") or NullDiscordPresence()
+
+
+def _stop_runtime_services() -> None:
+    try:
+        get_discord_presence().stop()
+    except Exception:
+        pass
+
+
+def configure_runtime_services() -> None:
+    global _RUNTIME_SERVICES_CONFIGURED, _RUNTIME_SHUTDOWN_REGISTERED
+    with _RUNTIME_SERVICES_LOCK:
+        if _RUNTIME_SERVICES_CONFIGURED:
+            return
+        service = DiscordPresenceService.from_env()
+        app.extensions["discord_presence"] = service
+        try:
+            service.start()
+            service.set_activity("home")
+        except Exception:
+            app.extensions["discord_presence"] = NullDiscordPresence()
+        if not _RUNTIME_SHUTDOWN_REGISTERED:
+            atexit.register(_stop_runtime_services)
+            _RUNTIME_SHUTDOWN_REGISTERED = True
+        _RUNTIME_SERVICES_CONFIGURED = True
+
+
+def _open_browser_when_ready(url: str, *, timeout_seconds: float = 15.0) -> None:
+    def worker() -> None:
+        deadline = time.monotonic() + timeout_seconds
+        opened = False
+        while time.monotonic() < deadline and not opened:
+            try:
+                with urlopen(url, timeout=0.75):
+                    webbrowser.open(url)
+                    opened = True
+                    return
+            except Exception:
+                time.sleep(0.25)
+        if not opened:
+            try:
+                webbrowser.open(url)
+            except Exception:
+                pass
+
+    thread = threading.Thread(target=worker, name="BatchBenchBrowserLauncher", daemon=True)
+    thread.start()
+
+
+def batchbench_host_port() -> Tuple[str, int]:
+    host = os.getenv("FLASK_RUN_HOST", "127.0.0.1").strip() or "127.0.0.1"
+    try:
+        port = int(os.getenv("FLASK_RUN_PORT", "5000"))
+    except ValueError:
+        port = 5000
+    return host, port
+
+
+def batchbench_local_url() -> str:
+    host, port = batchbench_host_port()
+    return f"http://{host}:{port}/"
+
+
+def run_batchbench_server(*, open_browser: bool = False, stop_event: Optional[threading.Event] = None) -> None:
+    host, port = batchbench_host_port()
+    url = f"http://{host}:{port}/"
+
+    configure_runtime_services()
+    server = None
+    try:
+        server = make_server(host, port, app, threaded=True)
+        if stop_event is not None:
+            def shutdown_when_requested() -> None:
+                stop_event.wait()
+                try:
+                    server.shutdown()
+                except Exception:
+                    pass
+
+            threading.Thread(target=shutdown_when_requested, name="BatchBenchShutdownWatcher", daemon=True).start()
+        if open_browser:
+            _open_browser_when_ready(url)
+        server.serve_forever()
+    finally:
+        if server is not None:
+            try:
+                server.server_close()
+            except Exception:
+                pass
+        _stop_runtime_services()
+
+
+def _live_reload_token() -> str:
+    newest = 0.0
+    for path in [_APP_ROOT / "app.py", *_iter_live_reload_files()]:
+        try:
+            newest = max(newest, path.stat().st_mtime)
+        except OSError:
+            continue
+    return str(int(newest * 1000))
+
+
+def _iter_live_reload_files():
+    for dirname in _LIVE_RELOAD_DIRS:
+        root = _APP_ROOT / dirname
+        if not root.exists():
+            continue
+        for path in root.rglob("*"):
+            if path.is_file() and path.suffix.lower() in _LIVE_RELOAD_SUFFIXES:
+                yield path
+
+
+@app.get("/api/dev/live-reload")
+def api_dev_live_reload():
+    if not app.debug:
+        abort(404)
+    return jsonify({"token": _live_reload_token()})
 
 
 @app.template_filter("guide_inline")
@@ -47,13 +191,15 @@ def guide_inline(value: Any) -> Markup:
     return Markup("".join(rendered))
 
 # Work dir
-WORK_DIR = os.getenv("WORK_DIR", "").strip() or str(Path(__file__).parent.joinpath("_work"))
+WORK_DIR = os.getenv("WORK_DIR", "").strip() or str(user_path("_work"))
 Path(WORK_DIR).mkdir(parents=True, exist_ok=True)
-TAG_EDITOR_GLOSSARY_PATH = Path(__file__).parent / "tag_editor_glossary.json"
-README_PATH = Path(__file__).parent / "README.md"
+TAG_EDITOR_GLOSSARY_PATH = user_path("tag_editor_glossary.json")
+DEFAULT_TAG_EDITOR_GLOSSARY_PATH = TAG_EDITOR_GLOSSARY_PATH
+TAG_EDITOR_GLOSSARY_RESOURCE_PATH = resource_path("tag_editor_glossary.json")
+README_PATH = resource_path("README.md")
 
 # Dataset normalization preset root
-NORMALIZE_PRESET_ROOT = Path(__file__).parent / "presets"
+NORMALIZE_PRESET_ROOT = resource_path("presets")
 NORMALIZE_PRESET_ROOT.mkdir(parents=True, exist_ok=True)
 SERVER_UPLOAD_IMAGE_EXTS = {ext.lower() for ext in normalizer.DEFAULT_IMAGE_EXTS}
 BROWSE_STRICT_MODE = parse_bool(os.getenv("BROWSE_STRICT_MODE"), default=False)
@@ -75,6 +221,7 @@ WORKFLOW_GUIDE_META = [
     {"readme_title": "Image -> PNG Converter", "id": "webp", "icon": "images", "title": "Image to PNG Converter"},
     {"readme_title": "Photo Adjust (preset)", "id": "batch", "icon": "sliders2", "title": "Photo Adjust"},
     {"readme_title": "Brush Blur", "id": "blur", "icon": "brush", "title": "Brush Blur"},
+    {"readme_title": "Color Brush", "id": "color-brush", "icon": "palette2", "title": "Color Brush"},
     {"readme_title": "Manga Palette Helper", "id": "palette_helper", "icon": "palette", "title": "Manga Palette Helper"},
     {"readme_title": "EPUB Image Extractor", "id": "epub-extractor", "icon": "book", "title": "EPUB Image Extractor"},
     {"readme_title": "Webtoon Panel Splitter", "id": "webtoon", "icon": "scissors", "title": "Webtoon Panel Splitter"},
@@ -83,16 +230,29 @@ WORKFLOW_GUIDE_META = [
     {"readme_title": "Combine Dataset", "id": "combine", "icon": "collection", "title": "Combine Dataset"},
     {"readme_title": "Dataset Tag Editor", "id": "tags", "icon": "tags", "title": "Dataset Tag Editor"},
     {"readme_title": "Dataset Normalization", "id": "normalize", "icon": "funnel", "title": "Dataset Normalization"},
-    {"readme_title": "Offline Tagger (WD v3)", "id": "offline", "icon": "cpu", "title": "Offline Tagger (WD v3)"},
+    {"readme_title": "Auto Tag Assist", "id": "offline", "icon": "cpu", "title": "Auto Tag Assist"},
     {"readme_title": "CLIP Token Check", "id": "clip-tokens", "icon": "body-text", "title": "CLIP Token Check"},
-    {"readme_title": "Pipeline (beta)", "id": "pipeline", "icon": "diagram-3", "title": "Pipeline (beta)"},
+    {"readme_title": "Dataset Workflow", "id": "pipeline", "icon": "diagram-3", "title": "Dataset Workflow"},
     {"readme_title": "Tag Glossary Wiki", "id": "tag-wiki", "icon": "journal-richtext", "title": "Tag Glossary Wiki"},
     {"readme_title": "Settings", "id": "settings", "icon": "gear", "title": "Settings"},
 ]
 
-WORKFLOW_GUIDE_GROUP_HEADINGS = {"Image Tools", "Dataset Assembly", "Tag Tools"}
+WORKFLOW_GUIDE_GROUP_HEADINGS = {"Image Tools", "Dataset Assembly", "Tag Tools", "Workflow", "Reference"}
 WORKFLOW_GUIDE_USE_LABELS = {"How to use"}
 WORKFLOW_GUIDE_WATCH_LABELS = {"Watch out"}
+
+
+def _read_packaged_text_file(path: Path, *, encoding: str = "utf-8") -> str:
+    candidates = [path]
+    if path.suffix:
+        candidates.append(path / path.name)
+    for candidate in candidates:
+        try:
+            if candidate.is_file():
+                return candidate.read_text(encoding=encoding)
+        except Exception:
+            continue
+    return ""
 
 
 def _normalize_guide_label(raw: str) -> str:
@@ -169,10 +329,7 @@ def _parse_readme_item_sections(raw_lines: List[str]) -> Dict[str, List[str]]:
 
 
 def _readme_workflow_guide_items() -> List[Dict[str, Any]]:
-    try:
-        readme_text = README_PATH.read_text(encoding="utf-8")
-    except Exception:
-        readme_text = ""
+    readme_text = _read_packaged_text_file(README_PATH)
     readme_items = _extract_workflow_readme_items(readme_text)
 
     out: List[Dict[str, Any]] = []
@@ -267,10 +424,87 @@ def _is_allowed_path(path: Path) -> bool:
             return True
     return False
 
+
+def _native_folder_picker(initial_dir: str = "") -> Dict[str, Any]:
+    """Open a local Windows folder dialog for Color Brush.
+
+    The native dialog opens on the machine running the Flask server. This is
+    correct for local BatchBench use and is not intended for remote-hosted
+    BatchBench sessions.
+    """
+    if os.name != "nt":
+        return {
+            "ok": False,
+            "error": "Native Windows folder picker is unavailable in this environment.",
+            "fallback_allowed": True,
+        }
+
+    if not _NATIVE_FOLDER_PICKER_LOCK.acquire(blocking=False):
+        return {
+            "ok": False,
+            "error": "Native Windows folder picker is already open.",
+            "fallback_allowed": True,
+        }
+
+    root = None
+    try:
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+        except Exception:
+            return {
+                "ok": False,
+                "error": "Native Windows folder picker is unavailable in this environment.",
+                "fallback_allowed": True,
+            }
+
+        picker_initial = None
+        raw_initial = str(initial_dir or "").strip()
+        if raw_initial:
+            candidate = readable_path(raw_initial)
+            if candidate.exists() and candidate.is_dir():
+                picker_initial = candidate
+
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            root.attributes("-topmost", True)
+        except Exception:
+            pass
+        try:
+            root.update()
+        except Exception:
+            pass
+
+        options: Dict[str, Any] = {"title": "Choose Color Brush image folder", "parent": root}
+        if picker_initial is not None:
+            options["initialdir"] = str(picker_initial)
+
+        selected = filedialog.askdirectory(**options)
+        if not selected:
+            return {"ok": True, "cancelled": True, "path": ""}
+
+        selected_path = readable_path(selected)
+        if not selected_path.exists() or not selected_path.is_dir():
+            return {"ok": False, "error": "Selected folder does not exist.", "fallback_allowed": True}
+        if not _is_allowed_path(selected_path):
+            return {"ok": False, "error": f"Path is outside allowed roots: {selected_path}", "fallback_allowed": False}
+
+        return {"ok": True, "cancelled": False, "path": str(selected_path)}
+    except Exception as exc:
+        return {"ok": False, "error": f"Native Windows folder picker failed: {exc}", "fallback_allowed": True}
+    finally:
+        if root is not None:
+            try:
+                root.destroy()
+            except Exception:
+                pass
+        _NATIVE_FOLDER_PICKER_LOCK.release()
+
 # Load presets if present
 PRESET_FILES = {}
 for name in ["preset_keep_warm_balanced.json", "preset_neutral_daylight.json", "preset_greyscale.json", "custom.json"]:
-    p = Path(__file__).parent / name
+    p = resource_path(name)
     if p.exists():
         try:
             PRESET_FILES[name] = json.loads(p.read_text(encoding="utf-8"))
@@ -658,10 +892,16 @@ def _normalize_glossary_payload(payload: Any) -> Dict[str, Any]:
 
 
 def _load_tag_editor_glossary() -> Dict[str, Any]:
-    if not TAG_EDITOR_GLOSSARY_PATH.exists():
+    use_resource_fallback = TAG_EDITOR_GLOSSARY_PATH == DEFAULT_TAG_EDITOR_GLOSSARY_PATH
+    path = (
+        TAG_EDITOR_GLOSSARY_PATH
+        if TAG_EDITOR_GLOSSARY_PATH.exists() or not use_resource_fallback
+        else TAG_EDITOR_GLOSSARY_RESOURCE_PATH
+    )
+    if not path.exists():
         return _default_glossary_payload()
     try:
-        payload = json.loads(TAG_EDITOR_GLOSSARY_PATH.read_text(encoding="utf-8"))
+        payload = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return _default_glossary_payload()
     return _normalize_glossary_payload(payload)
@@ -672,6 +912,7 @@ def _save_tag_editor_glossary(payload: Any) -> Dict[str, Any]:
     current = _load_tag_editor_glossary()
     if current.get("updated_at", 0) > normalized.get("updated_at", 0):
         return current
+    TAG_EDITOR_GLOSSARY_PATH.parent.mkdir(parents=True, exist_ok=True)
     TAG_EDITOR_GLOSSARY_PATH.write_text(json.dumps(normalized, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
     return normalized
 
@@ -752,6 +993,15 @@ def api_list_dir():
         return jsonify({**out, "ok": False, "error": str(exc)}), 500
     out["dirs"] = dirs
     return jsonify(out)
+
+
+@app.post("/api/native-folder-picker")
+def api_native_folder_picker():
+    payload = request.get_json(silent=True) or {}
+    initial_dir = str(payload.get("initial_dir") or "").strip()
+    result = _native_folder_picker(initial_dir)
+    status = 200 if result.get("ok") or result.get("fallback_allowed") else 403
+    return jsonify(result), status
 
 
 @app.post("/api/danbooru/taginfo")
@@ -1326,6 +1576,120 @@ def api_tagging_quiz_cheatsheet_parse():
     return jsonify(result), code
 
 
+@app.post("/api/tagging-quiz/cheatsheet/validate-danbooru")
+def api_tagging_quiz_cheatsheet_validate_danbooru():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_quiz_project_from_payload(payload)
+    if error:
+        return error
+    parsed = tag_editor.parse_cheatsheet_file(paths["project_root"], payload.get("prompt_file") or "prompt.txt")
+    if not parsed.get("ok"):
+        parsed.setdefault("normalized_root", str(paths["project_root"]))
+        parsed.setdefault("warnings", [])
+        parsed.setdefault("info", [])
+        return jsonify(parsed), 404
+
+    try:
+        max_tags = int(payload.get("max_tags") or 300)
+    except Exception:
+        max_tags = 300
+    max_tags = max(1, min(500, max_tags))
+
+    tag_sources: Dict[str, Dict[str, Any]] = {}
+
+    def remember(raw_tag: Any, section_name: str) -> None:
+        raw = str(raw_tag or "").strip()
+        tag = danbooru_client.normalize_tag(raw)
+        if not tag or len(tag) > 120:
+            return
+        item = tag_sources.setdefault(tag, {"raw": raw, "sections": []})
+        if raw and raw not in item.setdefault("raw_variants", []):
+            item["raw_variants"].append(raw)
+        if section_name and section_name not in item["sections"]:
+            item["sections"].append(section_name)
+
+    for section in parsed.get("sections") or []:
+        if not isinstance(section, dict):
+            continue
+        section_name = str(section.get("name") or section.get("category") or "Unsorted").strip() or "Unsorted"
+        for raw_tag in section.get("tags") or []:
+            remember(raw_tag, section_name)
+        for group in section.get("conditionals") or []:
+            for raw_tag in group or []:
+                remember(raw_tag, section_name)
+
+    tags = list(tag_sources.keys())[:max_tags]
+    summaries: Dict[str, Dict[str, Any]] = {}
+    errors: Dict[str, str] = {}
+    for idx in range(0, len(tags), 20):
+        batch = tags[idx : idx + 20]
+        batch_result = danbooru_client.lookup_tag_summaries(batch)
+        if isinstance(batch_result.get("summaries"), dict):
+            summaries.update(batch_result["summaries"])
+        if isinstance(batch_result.get("errors"), dict):
+            errors.update(batch_result["errors"])
+
+    rows: List[Dict[str, Any]] = []
+    counts = {"found": 0, "missing": 0, "deprecated": 0, "errors": len(errors), "checked": len(tags)}
+    for tag in tags:
+        source = tag_sources.get(tag) or {}
+        summary = summaries.get(tag) or {
+            "name": tag,
+            "category": None,
+            "category_name": "unknown",
+            "post_count": 0,
+            "found": False,
+        }
+        found = bool(summary.get("found"))
+        deprecated = found and (
+            summary.get("category") == 2 or str(summary.get("category_name") or "").lower() == "deprecated"
+        )
+        if found:
+            counts["found"] += 1
+        else:
+            counts["missing"] += 1
+        if deprecated:
+            counts["deprecated"] += 1
+        rows.append(
+            {
+                "tag": tag,
+                "raw": source.get("raw") or tag,
+                "raw_variants": source.get("raw_variants") or [],
+                "sections": source.get("sections") or [],
+                "found": found,
+                "deprecated": deprecated,
+                "category": summary.get("category"),
+                "category_name": summary.get("category_name") or "unknown",
+                "post_count": summary.get("post_count") or 0,
+                "error": errors.get(tag) or "",
+            }
+        )
+
+    truncated = len(tag_sources) > len(tags)
+    warnings = []
+    if truncated:
+        warnings.append(f"Checked the first {len(tags)} unique tags out of {len(tag_sources)}.")
+    if errors:
+        warnings.append("Some Danbooru lookups failed; retry the check if the network is unstable.")
+    return jsonify(
+        {
+            "ok": True,
+            "rel": parsed.get("rel") or payload.get("prompt_file") or "prompt.txt",
+            "trigger": parsed.get("trigger") or "",
+            "total_tags": len(tag_sources),
+            "checked_tags": len(tags),
+            "truncated": truncated,
+            "counts": counts,
+            "tags": {row["tag"]: row for row in rows},
+            "rows": rows,
+            "errors": errors,
+            "warnings": warnings,
+            "info": [],
+            "normalized_root": str(paths["project_root"]),
+        }
+    )
+
+
 @app.post("/api/tagging-quiz/recommendations/build")
 def api_tagging_quiz_recommendations_build():
     payload = request.get_json(silent=True) or {}
@@ -1357,6 +1721,7 @@ def api_tagging_quiz_session_start():
             mapping_rows=payload.get("mapping_rows") or [],
             session_defaults=payload.get("session_defaults") or {},
             recommendations=payload.get("recommendations") if isinstance(payload.get("recommendations"), dict) else None,
+            recommendation_sources=payload.get("recommendation_sources") if isinstance(payload.get("recommendation_sources"), dict) else None,
             settings=_review_quiz_tagging_settings(),
             replace=True,
         )
@@ -1433,7 +1798,8 @@ def api_tags_project_state():
     if not folder:
         return _json_error("folder is required", 400)
     exts = _parse_exts(payload.get("exts"))
-    result = tag_editor.inspect_project_layout(readable_path(folder), exts)
+    multi_trigger_mode = _parse_bool(payload.get("multi_trigger_mode"), False)
+    result = tag_editor.inspect_project_layout(readable_path(folder), exts, multi_trigger_mode=multi_trigger_mode)
     code = 200 if result.get("ok") else 400
     result.setdefault("normalized_root", result.get("project_root", ""))
     result.setdefault("warnings", [])
@@ -1449,9 +1815,10 @@ def api_tags_project_init():
     if not folder:
         return _json_error("folder is required", 400)
     exts = _parse_exts(payload.get("exts"))
+    multi_trigger_mode = _parse_bool(payload.get("multi_trigger_mode"), False)
     apply_changes = _parse_bool(payload.get("apply"))
     if not apply_changes:
-        result = tag_editor.inspect_project_layout(readable_path(folder), exts)
+        result = tag_editor.inspect_project_layout(readable_path(folder), exts, multi_trigger_mode=multi_trigger_mode)
         code = 200 if result.get("ok") else 400
         result.setdefault("normalized_root", result.get("project_root", ""))
         result.setdefault("warnings", [])
@@ -1463,6 +1830,7 @@ def api_tags_project_init():
         exts,
         create_prompt=True,
         tagging_quiz_settings=tag_editor.load_tagging_quiz_settings(),
+        multi_trigger_mode=multi_trigger_mode,
     )
     code = 200 if result.get("ok") else 400
     result.setdefault("normalized_root", result.get("project_root", ""))
@@ -2160,6 +2528,94 @@ def api_blur_brush_preview():
     return resp
 
 
+
+
+@app.get("/api/color_brush/list-images")
+def api_color_brush_list_images():
+    folder = (request.args.get("folder") or "").strip()
+    recursive = _parse_bool(request.args.get("recursive"), True)
+    exts = _parse_exts(request.args.get("exts"))
+    if not folder:
+        return jsonify({"ok": False, "error": "folder is required"}), 400
+
+    root = readable_path(folder)
+    if not root.exists() or not root.is_dir():
+        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
+
+    images = color_brush.list_images(root, recursive=recursive, exts=exts)
+    return jsonify({"ok": True, "folder": str(root), "total": len(images), "images": images})
+
+
+@app.get("/api/color_brush/image")
+def api_color_brush_image():
+    folder = (request.args.get("folder") or "").strip()
+    rel = (request.args.get("path") or "").strip()
+    if not folder or not rel:
+        return jsonify({"ok": False, "error": "folder and path are required"}), 400
+    if _bad_rel(rel):
+        return jsonify({"ok": False, "error": "Invalid path"}), 400
+
+    root = readable_path(folder)
+    if not root.exists() or not root.is_dir():
+        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
+    target = _safe_child(root, rel)
+    if not target or not target.exists() or not target.is_file():
+        return jsonify({"ok": False, "error": "File not found"}), 404
+    if target.suffix.lower() not in color_brush.IMG_EXTS:
+        return jsonify({"ok": False, "error": "Unsupported image extension"}), 400
+
+    return send_file(target, conditional=True)
+
+
+@app.post("/api/color_brush/apply")
+def api_color_brush_apply():
+    payload = request.get_json(silent=True) or {}
+    folder = (payload.get("folder") or "").strip()
+    rel = (payload.get("rel") or payload.get("rel_image_path") or "").strip()
+    paint_png_base64 = (payload.get("paint_png_base64") or "").strip()
+    backup = _parse_bool(payload.get("backup"), True)
+    output_mode = (payload.get("output_mode") or "copy").strip().lower()
+    action_count = max(0, _parse_int(payload.get("action_count"), 0))
+
+    if not folder or not rel:
+        return jsonify({"ok": False, "error": "folder and rel are required"}), 400
+    if not paint_png_base64:
+        return jsonify({"ok": False, "error": "paint_png_base64 is required"}), 400
+    if _bad_rel(rel):
+        return jsonify({"ok": False, "error": "Invalid path"}), 400
+
+    root = readable_path(folder)
+    if not root.exists() or not root.is_dir():
+        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
+    target = _safe_child(root, rel)
+    if not target or not target.exists() or not target.is_file():
+        return jsonify({"ok": False, "error": "File not found"}), 404
+    if target.suffix.lower() not in color_brush.IMG_EXTS:
+        return jsonify({"ok": False, "error": "Unsupported image extension"}), 400
+
+    result = color_brush.apply_color_paint(
+        image_path=target,
+        paint_png_base64=paint_png_base64,
+        backup=backup,
+        output_mode=output_mode,
+        action_count=action_count,
+    )
+    if not result.get("ok"):
+        return jsonify({"ok": False, "error": result.get("error") or "Apply failed", "log": result.get("log") or []}), 400
+
+    saved_path = result.get("saved_path")
+    backup_path = result.get("backup_path")
+    saved_rel = _rel_to_root(root, saved_path) if isinstance(saved_path, Path) else ""
+    backup_rel = _rel_to_root(root, backup_path) if isinstance(backup_path, Path) else ""
+    return jsonify({
+        "ok": True,
+        "saved": saved_rel,
+        "backup": backup_rel,
+        "output_mode": result.get("output_mode"),
+        "log": result.get("log") or [],
+    })
+
+
 @app.post("/api/tags/upload")
 def api_tags_upload():
     folder = (request.form.get("folder") or "").strip()
@@ -2669,6 +3125,23 @@ def api_pipeline_start():
     return jsonify({"ok": True, "job_id": job_id})
 
 
+@app.post("/api/pipeline/plan")
+def api_pipeline_plan():
+    payload = request.get_json(silent=True) or {}
+    payload["preset_root"] = str(NORMALIZE_PRESET_ROOT)
+    payload["preset_library"] = PRESET_FILES
+    payload["dataset_path"] = (payload.get("dataset_path") or "").strip()
+    payload["working_dir"] = (payload.get("working_dir") or str(WORK_DIR)).strip()
+    payload["output_dir"] = (payload.get("output_dir") or "").strip()
+    payload["image_exts"] = _parse_exts(payload.get("image_exts"))
+    payload["recursive"] = _parse_bool(payload.get("recursive"))
+    payload["copy_mode"] = (payload.get("copy_mode") or "copy")
+    ok, data, err = PIPELINE_MANAGER.plan_workflow(payload)
+    if not ok:
+        return jsonify({"ok": False, "error": err or "plan failed"}), 400
+    return jsonify(data)
+
+
 @app.post("/api/pipeline/pause")
 def api_pipeline_pause():
     payload = request.get_json(silent=True) or {}
@@ -2711,6 +3184,14 @@ def api_pipeline_status():
     return jsonify({"ok": ok, "job": data, "error": err if not ok else ""}), code
 
 
+@app.get("/api/pipeline/review-context")
+def api_pipeline_review_context():
+    job_id = request.args.get("job_id", "")
+    ok, data, err = PIPELINE_MANAGER.get_review_context(job_id)
+    code = 200 if ok else 404
+    return jsonify({"ok": ok, **data, "error": err if not ok else ""}), code
+
+
 @app.post("/api/pipeline/open-path")
 def api_pipeline_open_path():
     payload = request.get_json(silent=True) or {}
@@ -2731,6 +3212,34 @@ def api_pipeline_open_path():
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500
     return jsonify({"ok": True})
+
+
+@app.post("/api/discord-presence/activity")
+def api_discord_presence_activity():
+    payload = request.get_json(silent=True) or {}
+    try:
+        service = get_discord_presence()
+        requested_tool = str(payload.get("tool") or "").strip()
+        if requested_tool:
+            tool_key = requested_tool if requested_tool in ACTIVITY_PAYLOADS else "home"
+            context = {
+                "phase": payload.get("phase"),
+                "current": payload.get("current"),
+                "total": payload.get("total"),
+                "step_key": payload.get("step_key"),
+            }
+            if hasattr(service, "report_activity"):
+                service.report_activity(tool_key, **context)
+            else:
+                service.set_activity(tool_key)
+        else:
+            requested_activity = str(payload.get("activity") or "").strip()
+            activity_key = requested_activity if requested_activity in ACTIVITY_PAYLOADS else normalize_activity_key(requested_activity)
+            service.set_activity(activity_key)
+    except Exception:
+        pass
+    return jsonify({"ok": True})
+
 
 # -------- Main page (dispatch via registry) --------
 @app.route("/", methods=["GET", "POST"])
@@ -2753,6 +3262,7 @@ def index():
                 "presets": PRESET_FILES,
                 "normalize_preset_root": str(NORMALIZE_PRESET_ROOT),
                 "work_dir": str(WORK_DIR),
+                "discord_presence": get_discord_presence(),
             }
             try:
                 raw_result = handler(request.form, ctx)
@@ -2791,4 +3301,4 @@ def index():
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    run_batchbench_server(open_browser=False)

@@ -49,12 +49,9 @@
         "allow_not_applicable": false,
         "queue_mode": "missing_only",
         "tags": [
-          "hair_color",
-          "eye_color",
-          "hairstyle",
-          "long_hair",
-          "short_hair",
-          "bangs"
+          "smile",
+          "blush",
+          "open_mouth"
         ]
       },
       {
@@ -96,12 +93,7 @@
         "allow_not_applicable": true,
         "queue_mode": "missing_only",
         "tags": [
-          "top",
-          "bottom",
-          "footwear",
-          "dress",
-          "shirt",
-          "skirt"
+          "hair_ornament"
         ]
       },
       {
@@ -127,10 +119,7 @@
           "close-up",
           "feet_out_of_frame",
           "foot_out_of_frame",
-          "head_out_of_frame",
-          "standing",
-          "sitting",
-          "clenched_hands"
+          "head_out_of_frame"
         ]
       },
       {
@@ -174,15 +163,21 @@
         "allow_not_applicable": true,
         "queue_mode": "missing_only",
         "tags": [
+          "blurry_background",
+          "white_background",
+          "gradient_background",
           "simple_background",
           "indoors",
-          "outdoors",
           "bedroom",
+          "outdoors",
+          "day",
+          "blue_sky",
+          "cloud",
+          "evening",
+          "night",
           "street",
           "forest",
-          "halftone_background",
-          "white_background",
-          "gradient_background"
+          "halftone_background"
         ]
       }
     ]

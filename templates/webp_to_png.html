@@ -12,7 +12,7 @@
       <div class="col-md-6">
         <label class="form-label">Output Folder</label>
         <div class="input-group">
-          <input id="dst_png" name="dst_png" type="text" class="form-control" placeholder="D:\path\to\output" data-bs-toggle="tooltip" data-bs-title="Converted PNG files will be saved here">
+          <input id="dst_png" name="dst_png" type="text" class="form-control" placeholder="Auto: <source>\output" data-bs-toggle="tooltip" data-bs-title="Converted PNG files will be saved in an output folder inside the source folder">
           <button class="btn btn-outline-light btn-browse" type="button" data-target="dst_png" data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
         </div>
       </div>
@@ -20,3 +20,46 @@
     <div class="mt-3"><button class="btn btn-primary">Convert</button></div>
   </form>
 </div>
+
+<script>
+(() => {
+  const outputFolderName = "output";
+  const trimPath = (value) => (value || "").trim();
+
+  const outputPathForSource = (value) => {
+    const raw = trimPath(value);
+    if(!raw) return "";
+    const separator = raw.includes("\\") ? "\\" : "/";
+    const trimmed = raw.replace(/[\\/]+$/, "");
+    if(!trimmed) return `${separator}${outputFolderName}`;
+    return `${trimmed}${separator}${outputFolderName}`;
+  };
+
+  const init = () => {
+    const source = document.getElementById("src_png");
+    const output = document.getElementById("dst_png");
+    if(!source || !output) return;
+
+    const syncOutput = () => {
+      output.value = outputPathForSource(source.value);
+      if(typeof window.bbNotifyInputChange === "function"){
+        window.bbNotifyInputChange(output);
+      }else{
+        output.dispatchEvent(new Event("input", { bubbles: true }));
+        output.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    };
+
+    source.addEventListener("input", syncOutput);
+    source.addEventListener("change", syncOutput);
+    source.addEventListener("blur", syncOutput);
+    window.setTimeout(syncOutput, 0);
+  };
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", init);
+  }else{
+    init();
+  }
+})();
+</script>

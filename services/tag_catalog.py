@@ -14,14 +14,15 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from . import danbooru_client
+from .paths import user_path
 
 
-CATALOG_ROOT = Path(__file__).resolve().parent.parent / "data" / "tag_catalog"
+CATALOG_ROOT = user_path("data", "tag_catalog")
 CSV_PATH = CATALOG_ROOT / "danbooru_tags.csv"
 DB_PATH = CATALOG_ROOT / "danbooru_tags.sqlite3"
 STATE_PATH = CATALOG_ROOT / "catalog_state.json"
 STAGING_ROOT = CATALOG_ROOT / "_staging"
-SETTINGS_PATH = Path(__file__).resolve().parent.parent / "data" / "settings" / "tag_suggestions.json"
+SETTINGS_PATH = user_path("data", "settings", "tag_suggestions.json")
 
 CSV_FIELDS = ["id", "name", "category", "category_name", "post_count", "is_deprecated", "updated_at"]
 MIN_CATALOG_POST_COUNT = 1

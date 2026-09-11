@@ -7,10 +7,10 @@ browser UI.
 Current feature set:
 
 - **Workflow Guide** generated from this README.
-- **Image Tools**: Image to PNG Converter, Photo Adjust, Brush Blur, Manga Palette Helper.
+- **Image Tools**: Image to PNG Converter, Photo Adjust, Brush Blur, Color Brush, Manga Palette Helper.
 - **Dataset Assembly**: EPUB Image Extractor, Webtoon Panel Splitter, Stitch Groups, Flatten and Renumber, Combine Dataset.
-- **Tag Tools**: Dataset Tag Editor, Dataset Normalization, Offline Tagger (WD v3), CLIP Token Check.
-- **A-to-Z Pipeline** with reorderable step cards and pause/resume controls.
+- **Tag Tools**: Dataset Tag Editor, Dataset Normalization, Auto Tag Assist (WD v3), CLIP Token Check.
+- **Dataset Workflow** with reorderable step cards and pause/resume controls.
 - **Tag Glossary Wiki** with reusable glossary categories and Danbooru reference lookup.
 - **Settings** for Guided Tagging Flow, local Danbooru tag suggestions, and tag catalog sync/import.
 
@@ -72,8 +72,84 @@ Open this URL in your browser:
 
 - <http://127.0.0.1:5000/>
 
-The launch script watches app source files and reloads the local server after
-code changes. Refresh the browser page after updating the app.
+The launch script opens the app in your browser, watches app source files, and
+reloads the local server after code changes. In debug mode, the browser page
+also refreshes itself when app, template, or static files change.
+
+---
+
+## Discord Rich Presence
+
+Discord Rich Presence is optional. BatchBench works normally without Discord.
+No bot token, client secret, OAuth configuration, or public server is needed.
+The activity only reports broad tool categories, never dataset contents, tags,
+paths, prompts, trigger words, or filenames.
+
+Manual setup:
+
+1. Open Discord Developer Portal.
+2. Create an application named `BatchBench`.
+3. In the application's General Information page, upload an application icon.
+   Discord uses this icon in compact activity surfaces; Rich Presence art
+   assets are used inside the expanded profile activity card.
+4. Copy its Application ID.
+5. Run:
+
+```bash
+python scripts/export_discord_asset.py
+```
+
+6. In the application's Rich Presence / Art Assets section, upload:
+
+```text
+static/icons/discord_presence.png
+```
+
+7. Set the uploaded asset key exactly to:
+
+```text
+batchbench
+```
+
+8. Add this to `.env`:
+
+```env
+DISCORD_RICH_PRESENCE_ENABLED=true
+DISCORD_APPLICATION_ID=your_application_id_here
+DISCORD_PRESENCE_ASSET_KEY=batchbench
+```
+
+9. Restart BatchBench.
+10. Keep Discord desktop open and make sure activity sharing is enabled.
+
+The Discord asset must be uploaded manually once because Discord hosts Rich
+Presence art assets.
+
+Packaged Windows builds read writable BatchBench data from the same project
+folder when launched from `dist\BatchBench\BatchBench.exe`. This includes the
+Danbooru CSV/SQLite catalog, tag suggestion settings, Guided Tagging Flow
+settings, and Tag Glossary Wiki data. If you move the EXE elsewhere, set
+`BATCHBENCH_DATA_DIR` in `.env` to the BatchBench source/data folder you want
+both source and EXE launches to share.
+
+When launched through the Windows EXE, BatchBench also creates a system tray
+icon. Use **Open BatchBench** to reopen the browser tab and **Exit BatchBench**
+to stop the local server cleanly.
+
+Windows build:
+
+Double-click `compile_exe.bat`. It creates/uses `.venv`, installs build
+requirements, and writes the executable to:
+
+```text
+dist\BatchBench\BatchBench.exe
+```
+
+Command-line equivalent:
+
+```bat
+compile_exe.bat
+```
 
 ---
 
@@ -127,10 +203,10 @@ This section is also used by the in-app **Workflow Guide**.
 
 #### Image -> PNG Converter
 How to use:
-- Fill **Source Folder** with a folder of images, fill **Output Folder**, then click **Convert**.
+- Fill **Source Folder** with a folder of images; **Output Folder** auto-fills as `<source>\output`. Click **Convert**.
 Parameters:
 - Source Folder: folder containing Pillow-supported image files at the top level.
-- Output Folder: destination for generated `.png` files; it is created if missing.
+- Output Folder: destination for generated `.png` files; defaults to `<source>\output` and is created if missing.
 Watch out:
 - This tool is not recursive.
 - Every supported source image is converted to `.png`.
@@ -162,6 +238,25 @@ Parameters:
 Watch out:
 - Preview before saving.
 - This tool edits one image at a time and is best for local touch-up work.
+
+#### Color Brush
+How to use:
+- Fill Folder, click **Load Images**, select an image, then paint directly on the image.
+- Choose Brush type, Color, Brush size, Opacity, and Paint/Erase/Pick Color tools.
+- Use zoom, pan, Undo, Redo, and Clear Paint while reviewing the edit, then click **Apply & Save**.
+Parameters:
+- Folder: image folder scanned recursively by the Color Brush image list.
+- Image: selected source image to paint.
+- Brush type: Hard Round, Soft Round, Marker, or Airbrush.
+- Color: synced color picker, hex input, and swatch.
+- Brush size: size in source-image pixels.
+- Opacity: paint layer opacity from `1%` to `100%`.
+- Output: `Copy as _paint` writes a separate file; `Overwrite selected image` replaces the source image.
+- Create `.bak` before overwriting: creates a backup only when overwrite mode is used.
+Watch out:
+- Edits stay in the browser until **Apply & Save**.
+- Copy mode avoids changing the source image and never creates a duplicate backup.
+- Very large images can take longer to save because the final paint layer is applied at original resolution.
 
 #### Manga Palette Helper
 How to use:
@@ -210,11 +305,11 @@ Parameters:
 - Output folder: default is `_panels` per folder; if set, output goes under `<output>/<chapter>/_panels`.
 - Filename glob and Extensions filter page files.
 - Width alignment: `match-width` resizes to the largest width; `none` pads only.
-- Stripe detection: Min stripe height, Row white threshold, Row coverage, Tolerance inside stripe, and Min panel height tune panel cuts.
+- Stripe detection: Stripe colors, Color threshold, Row coverage, Tolerance inside stripe, and Min panel height tune panel cuts.
 - Options: save strip, overwrite, dry run.
 Watch out:
-- Pages are stacked vertically and split on white stripes.
-- If noise causes bad splits, lower Row coverage or Row white threshold.
+- Pages are stacked vertically and split on selected-color stripes, such as white gutters, black gutters, or both.
+- If noise causes bad splits, lower Row coverage or Color threshold.
 
 #### Stitch Groups
 How to use:
@@ -281,6 +376,7 @@ Bulk Tag CRUD:
 Guided Tagging Flow:
 - The flow stores session state in `dataset/_temp/tagging_session.json`.
 - Final output remains normal sidecar `.txt` caption files.
+- Recommendation chips can repeat when the same tag comes from different mapped cheat-sheet groups, but selecting any copy adds one caption tag and hides the matching copies for that image.
 - Manual tagging supports caption chips, autocomplete, glossary quick pick, keyboard shortcuts, and optional image preview inside the cheat-sheet overlay.
 - Danbooru-aware autocomplete uses the local catalog under `data/tag_catalog/`; typing does not call Danbooru.
 - Suggestions can show source, category, post count, validation state, alias mapping, glossary source, recent usage, and segment relevance when the local data supports it.
@@ -335,31 +431,23 @@ Watch out:
 - Invalid regex rules are ignored.
 - Add new presets under `presets/<type>/` and click Reload in the UI.
 
-#### Offline Tagger (WD v3)
+#### Auto Tag Assist
 How to use:
-- Fill Dataset folder and start with **Background + pose only (recommended)**.
-- Enable **Preview only**, click **Run tagger**, then review kept and dropped tags before writing files.
-- Choose `append`, `overwrite`, or `skip` only after the preview looks correct.
-Output profile:
-- `Background + pose only (recommended)` keeps scene, place, object, pose, and limb-action tags while dropping clothing, appearance, character names, rating/meta, and unknown tags for cleaner dataset captions.
-- `Standard full tags` restores the broad legacy output behavior and re-enables Tag focus plus character/rating controls.
-- `Custom selective` lets you choose buckets such as background, objects, pose, appearance, clothing, character names, and rating/meta.
+- Fill Dataset Folder, choose a WD model or local model path, configure the trigger tag and policy, then run **Preview** first.
+- Review kept tags, removed tags, policy drops, and final leak counts in the log.
+- Run tagging only after the preview looks correct.
 Parameters:
-- Device: `auto` uses CUDA when available and falls back to CPU.
-- Batch size: larger values can run faster but need more memory.
-- Trigger tag: always written first and not removed.
-- Write mode: `append`, `overwrite`, or `skip`.
-- Preview only and Preview limit show examples and filter summaries without writing files.
-- Image limit: `0` processes all images.
-- Local files only: prevents model download and fails if the model is not cached.
-- Threshold mode: `mcut` is recommended; `fixed` uses static thresholds.
-- Danbooru safe-net can check unknown selective tags online, but it is slower and requires internet access.
-- Suggestion mode stores predictions for Guided Tagging Flow instead of writing caption files.
+- Dataset Folder: folder containing images and optional `.txt` captions.
+- Model ID or local path: Hugging Face repo ID or local folder compatible with `AutoModelForImageClassification`.
+- Trigger tag: inserted first and protected from filtering.
+- Character policy: default is `Character - omit identity`, which removes recurring identity traits while keeping promptable expression, pose, outfit, and scene tags.
+- Threshold mode: `fixed` uses configured confidence thresholds; `mcut` estimates per-image thresholds from score gaps.
+- Replacement mode: replaces selected existing captions after creating a timestamped backup; preview writes nothing.
+- Color sanity: can drop weak color-attribute tags when the image does not support them.
 Watch out:
-- Direct tagger output writes `.txt` captions beside images.
-- Suggestion mode does not write captions; suggestions appear in the manual review tray until explicitly added or ignored.
-- `#optional:` and `#warning:` blocks are preserved when present.
-- Files are processed in sorted path order.
+- The model can only return tags from its known vocabulary.
+- Review preview samples before writing captions, especially after changing thresholds or policy overrides.
+- A normal strict character-policy run should report `Final policy leaks: 0`.
 
 #### CLIP Token Check
 How to use:
@@ -377,7 +465,9 @@ Watch out:
 - Use this as a review signal, not an automatic deletion rule.
 - Run it again after caption cleanup to confirm token counts are reasonable.
 
-### Pipeline (beta)
+### Workflow
+
+#### Dataset Workflow
 How to use:
 - Fill Dataset Source, Working Directory, and Output Directory.
 - Configure Image extensions, Include subfolders, and Working copy mode.
@@ -398,7 +488,9 @@ Watch out:
 - The Dataset Tag Editor pipeline step uses the `_temp` staging workflow for non-manual modes.
 - Pipeline state is stored in `_work/pipeline_jobs/<job_id>/state.json`.
 
-### Tag Glossary Wiki
+### Reference
+
+#### Tag Glossary Wiki
 How to use:
 - Add and categorize reusable tags.
 - Select a tag collection to load wiki text, short guidance, related tags, and a reference image from Danbooru.
@@ -410,7 +502,7 @@ Watch out:
 - Internet access is required for the first Danbooru wiki or reference-image fetch.
 - The glossary syncs with the Dataset Tag Editor quick picker in the same browser session.
 
-### Settings
+#### Settings
 How to use:
 - Configure **Guided Tagging Flow** step cards. Each card is one review question such as Body Composition or Camera Angle.
 - Choose `Single choice` when one answer should replace other tags in the same step.
@@ -427,11 +519,125 @@ Parameters:
 - Global Behavior controls default target area, image fit, thumbnail preload count, keyboard shortcuts, auto-save, current tags, and progress display.
 - Catalog settings control local Danbooru suggestions, deprecated tag inclusion, minimum post count, maximum suggestions, and allowed Danbooru categories.
 - Create steps can build editable draft steps from a `prompt.txt` cheat sheet.
+- The Tagging Flow Setup preview keeps duplicate recommendation chips only when they come from different mapped cheat-sheet groups; defaults and final captions still count each normalized tag once.
 Watch out:
 - Danbooru catalog suggestions are local while typing. The app contacts Danbooru only when you manually sync or fetch wiki/reference data.
 - Export JSON before large flow changes if you want a backup.
 - Change step IDs carefully after review has started because IDs are used by metadata.
 - Cheat sheets are vocabulary references; Guided Tagging Flow is the workflow. Imported steps are not saved until you click Save config.
+
+---
+
+## Offline Autotagger Reference
+
+### What the autotagger does
+
+The Offline Autotagger uses the selected WD model to produce probabilities for known Danbooru tags. It does not generate arbitrary natural-language captions, and it cannot invent tags outside the model vocabulary. Accepted tags are normalized into comma-separated `snake_case` sidecar `.txt` captions.
+
+### Processing order
+
+```text
+WD inference
+-> semantic policy
+-> color sanity
+-> WD category split
+-> MCUT/fixed threshold
+-> tag limits
+-> custom exclusions
+-> final policy safety filter
+-> trigger insertion
+-> leak audit
+-> .txt write
+```
+
+The semantic policy runs before MCUT and tag limits so blocked identity tags do not consume the strongest scores or fill the tag cap before useful controllable tags are considered.
+
+### Character identity policy
+
+`Character - omit identity` is the default policy for new runs.
+
+| Group               | Examples                                  | Default  |
+| ------------------- | ----------------------------------------- | -------- |
+| Character names     | named WD character tags                   | Removed  |
+| Demographic         | `1girl`, `solo`                           | Removed  |
+| Appearance identity | `blue_hair`, `long_hair`, `blue_eyes`     | Removed  |
+| Body identity       | `large_breasts`, `wide_hips`, `dark_skin` | Removed  |
+| Permanent marks     | `tattoo`, `scar`, `mole`                  | Optional |
+| Expression          | `smile`, `closed_eyes`                    | Kept     |
+| Pose/framing        | `sitting`, `cowboy_shot`                  | Kept     |
+| Outfit/accessory    | `red_dress`, `hair_ornament`              | Kept     |
+| Scene               | `indoors`, `window`, `sunset`             | Kept     |
+
+Omitted recurring identity is expected to bind more strongly to the trigger, while captioned variable details remain promptable. Custom keep and block overrides are available in Advanced settings.
+
+### Threshold modes
+
+`fixed` uses static confidence thresholds for general and character tags. `mcut` estimates a per-image threshold from score gaps, with relax values that can lower the threshold for each category. Minimum-tag settings can force MCUT to keep weaker tags; after identity groups are removed this can introduce low-confidence filler, so `Policy MCUT minimum general tags` defaults to `0` for strict character-policy output.
+
+### Existing caption behavior
+
+Replacement is the new default. When replacement is enabled, existing `.txt` captions selected for processing are copied to:
+
+```text
+.batchbench_backup/offline_tagger_YYYYMMDD_HHMMSS/
+```
+
+Then the generated main caption is written atomically. Turning replacement off skips non-empty existing captions and only creates missing or empty captions. Preview mode writes nothing and creates no backup. Legacy `write_mode=append` is still accepted for saved configurations and direct callers, but it is not exposed as the normal default UI behavior.
+
+### Trigger tag
+
+The trigger tag is always pinned first. It is exempt from semantic policy filtering, exact exclusions, regex exclusions, sorting, and the final leak audit.
+
+### Color sanity
+
+Color sanity checks color-attribute tags such as hair, eye, and skin colors against the image. Low-presence color tags can be dropped unless their WD score passes the high-score override. Its ratio, saturation, value, and override parameters are available in Advanced settings.
+
+### Preview and logs
+
+Use Preview only to verify kept and removed tags before writing. Logs show the selected policy, blocked groups, replacement mode, backup path, sample kept tags, sample policy removals, aggregate policy drops, skipped existing captions, and final leak count. A normal character-policy run should report `Final policy leaks: 0`.
+
+### Pipeline behavior
+
+The Dataset Workflow Offline Tagger uses the same `services/offline_tagger.py` and `services/tag_policy.py` implementation as the standalone tool. New workflow configurations default to `Character - omit identity` and replacement with backups, while legacy saved `write_mode` values are still parsed.
+
+### Limitations
+
+- Semantic groups are deterministic rules, not perfect visual understanding.
+- WD can only return tags from its known vocabulary.
+- Low-confidence or visually ambiguous content may still require manual correction.
+- Policy leak audit verifies tags, but you should still review samples.
+- Outfit details that are also permanent character design elements may need custom keep/block overrides depending on the dataset.
+
+### Examples
+
+Example A: identity removed
+
+Input WD candidates:
+
+```text
+1girl, solo, blue_hair, long_hair, blue_eyes, smile,
+looking_at_viewer, red_dress, sitting, indoors, window
+```
+
+Output:
+
+```text
+mytrigger, smile, looking_at_viewer, red_dress, sitting, indoors, window
+```
+
+Example B: expression exception
+
+Input:
+
+```text
+1girl, white_hair, closed_eyes, hair_ornament, smile, upper_body
+```
+
+Output:
+
+```text
+mytrigger, closed_eyes, hair_ornament, smile, upper_body
+```
 
 ---
 

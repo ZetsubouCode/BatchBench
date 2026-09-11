@@ -63,10 +63,15 @@ def _apply_highlights_shadows(arr: np.ndarray, highlights: float, shadows: float
 def _apply_white_balance(arr: np.ndarray, warmth: float, tint: float) -> np.ndarray:
     if warmth == 0 and tint == 0:
         return arr
-    r_gain = 1.0 + 0.2 * warmth - 0.08 * tint
-    g_gain = 1.0 + 0.04 * warmth + 0.2 * tint
-    b_gain = 1.0 - 0.2 * warmth - 0.08 * tint
+    # Use a stronger, continuous opponent-channel curve so small slider moves
+    # remain visible while preserving average brightness.
+    temp = 0.55 * warmth
+    green_magenta = 0.38 * tint
+    r_gain = 1.0 + temp - 0.22 * green_magenta
+    g_gain = 1.0 + green_magenta
+    b_gain = 1.0 - temp - 0.22 * green_magenta
     gains = np.array([r_gain, g_gain, b_gain], dtype=np.float32)
+    gains = np.maximum(gains, 0.25)
     gains /= np.mean(gains)
     return arr * gains
 

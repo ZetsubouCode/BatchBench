@@ -6,11 +6,12 @@
       <button class="nav-link bb-menu-link {{ 'active' if tab=='guide' }}" data-bs-toggle="tab" data-bs-target="#tab-guide" type="button"><i class="bi bi-signpost-split" aria-hidden="true"></i><span>Workflow Guide</span></button>
     </li>
     <li class="nav-item dropdown">
-      <button class="nav-link bb-menu-link dropdown-toggle {{ 'active' if tab in ['webp', 'batch', 'blur_brush', 'palette_helper'] }}" data-bs-toggle="dropdown" type="button" aria-expanded="false"><i class="bi bi-images" aria-hidden="true"></i><span>Image Tools</span></button>
+      <button class="nav-link bb-menu-link dropdown-toggle {{ 'active' if tab in ['webp', 'batch', 'blur_brush', 'color_brush', 'palette_helper'] }}" data-bs-toggle="dropdown" type="button" aria-expanded="false"><i class="bi bi-images" aria-hidden="true"></i><span>Image Tools</span></button>
       <ul class="dropdown-menu">
         <li><button class="dropdown-item {{ 'active' if tab=='webp' }}" data-bs-toggle="tab" data-bs-target="#tab-webp" type="button"><i class="bi bi-images" aria-hidden="true"></i><span>Image -&gt; PNG Converter</span></button></li>
         <li><button class="dropdown-item {{ 'active' if tab=='batch' }}" data-bs-toggle="tab" data-bs-target="#tab-batch" type="button"><i class="bi bi-sliders2" aria-hidden="true"></i><span>Photo Adjust (preset)</span></button></li>
         <li><button class="dropdown-item {{ 'active' if tab=='blur_brush' }}" data-bs-toggle="tab" data-bs-target="#tab-blur-brush" type="button"><i class="bi bi-brush" aria-hidden="true"></i><span>Brush Blur</span></button></li>
+        <li><button class="dropdown-item {{ 'active' if tab=='color_brush' }}" data-bs-toggle="tab" data-bs-target="#tab-color-brush" type="button"><i class="bi bi-palette2" aria-hidden="true"></i><span>Color Brush</span></button></li>
         <li><button class="dropdown-item {{ 'active' if tab=='palette_helper' }}" data-bs-toggle="tab" data-bs-target="#tab-palette-helper" type="button"><i class="bi bi-palette" aria-hidden="true"></i><span>Manga Palette Helper</span></button></li>
       </ul>
     </li>
@@ -29,12 +30,12 @@
       <ul class="dropdown-menu">
         <li><button class="dropdown-item {{ 'active' if tab=='tags' }}" data-bs-toggle="tab" data-bs-target="#tab-tags" type="button"><i class="bi bi-tags" aria-hidden="true"></i><span>Dataset Tag Editor</span></button></li>
         <li><button class="dropdown-item {{ 'active' if tab=='normalize' }}" data-bs-toggle="tab" data-bs-target="#tab-normalize" type="button"><i class="bi bi-funnel" aria-hidden="true"></i><span>Dataset Normalization</span></button></li>
-        <li><button class="dropdown-item {{ 'active' if tab=='offline_tagger' }}" data-bs-toggle="tab" data-bs-target="#tab-offline-tagger" type="button"><i class="bi bi-cpu" aria-hidden="true"></i><span>Offline Tagger (WD v3)</span></button></li>
+        <li><button class="dropdown-item {{ 'active' if tab=='offline_tagger' }}" data-bs-toggle="tab" data-bs-target="#tab-offline-tagger" type="button"><i class="bi bi-cpu" aria-hidden="true"></i><span>Auto Tag Assist</span></button></li>
         <li><button class="dropdown-item {{ 'active' if tab=='clip_tokens' }}" data-bs-toggle="tab" data-bs-target="#tab-clip-tokens" type="button"><i class="bi bi-body-text" aria-hidden="true"></i><span>CLIP Token Check</span></button></li>
       </ul>
     </li>
     <li class="nav-item">
-      <button class="nav-link bb-menu-link {{ 'active' if tab=='pipeline' }}" data-bs-toggle="tab" data-bs-target="#tab-pipeline" type="button"><i class="bi bi-diagram-3" aria-hidden="true"></i><span>Pipeline</span></button>
+      <button class="nav-link bb-menu-link {{ 'active' if tab=='pipeline' }}" data-bs-toggle="tab" data-bs-target="#tab-pipeline" type="button"><i class="bi bi-diagram-3" aria-hidden="true"></i><span>Dataset Workflow</span></button>
     </li>
     <li class="nav-item">
       <button class="nav-link bb-menu-link {{ 'active' if tab=='tag_wiki' }}" data-bs-toggle="tab" data-bs-target="#tab-tag-wiki" type="button"><i class="bi bi-journal-richtext" aria-hidden="true"></i><span>Tag Glossary Wiki</span></button>
@@ -167,6 +168,16 @@
       {% endif %}
     </div>
 
+    <div class="tab-pane fade {{ 'show active' if tab=='color_brush' }}" id="tab-color-brush">
+      {% include "color_brush.html" %}
+      {% if log and tab=='color_brush' %}
+        <div class="card p-3 mt-3">
+          <h5>Log</h5>
+          <pre class="monospace">{{ log }}</pre>
+        </div>
+      {% endif %}
+    </div>
+
     <div class="tab-pane fade {{ 'show active' if tab=='palette_helper' }}" id="tab-palette-helper">
       {% include "palette_helper.html" %}
     </div>
@@ -201,10 +212,58 @@
       const targetToTab = (target) => String(target || '').replace(/^#tab-/, '').replace(/-/g, '_');
       const tabToTarget = (tab) => tab ? `#tab-${String(tab).replace(/_/g, '-')}` : '';
       const validTargets = new Set(Array.from(menu.querySelectorAll('[data-bs-toggle="tab"]')).map(btn => btn.getAttribute('data-bs-target')).filter(Boolean));
+      const presenceKeys = new Set(['home','guide','webp','batch','blur_brush','color_brush','palette_helper','epub_extractor','webtoon','merge','rename','combine','normalize','tags','offline','clip_tokens','pipeline','tag_wiki','settings']);
+      const presenceExplicit = {
+        'tab-tags': 'tags',
+        'tab-clip-tokens': 'clip_tokens',
+        'tab-blur-brush': 'blur_brush',
+        'tab-color-brush': 'color_brush',
+        'tab-epub-extractor': 'epub_extractor',
+        'tab-offline-tagger': 'offline',
+        'tab-palette-helper': 'palette_helper',
+        'tab-tag-wiki': 'tag_wiki'
+      };
+      let presenceTimer = null;
 
       const setInfoVisible = (target) => {
         if(!infoEl) return;
         infoEl.classList.toggle('d-none', target !== '#tab-batch');
+      };
+
+      const presenceActivityForTarget = (target) => {
+        const paneId = String(target || '').replace(/^#/, '');
+        const explicit = presenceExplicit[paneId];
+        const normalized = explicit || paneId.replace(/^tab-/, '').replace(/-/g, '_');
+        return presenceKeys.has(normalized) ? normalized : 'home';
+      };
+
+      const sendPresencePayload = (payload, delay = 500) => {
+        window.clearTimeout(presenceTimer);
+        presenceTimer = window.setTimeout(() => {
+          try {
+            fetch('/api/discord-presence/activity', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload || { activity: 'home' }),
+              keepalive: true
+            }).catch(() => {});
+          } catch(_){}
+        }, delay);
+      };
+
+      const sendPresenceActivity = (target) => {
+        sendPresencePayload({ activity: presenceActivityForTarget(target) });
+      };
+
+      window.bbReportDiscordPresence = (context = {}) => {
+        const payload = {};
+        if(context.tool) payload.tool = String(context.tool);
+        else if(context.activity) payload.activity = String(context.activity);
+        if(context.phase) payload.phase = String(context.phase);
+        if(context.current !== undefined) payload.current = context.current;
+        if(context.total !== undefined) payload.total = context.total;
+        if(context.step_key) payload.step_key = String(context.step_key);
+        sendPresencePayload(payload);
       };
 
       const syncDropdownStates = () => {
@@ -232,6 +291,7 @@
       const activeTab = menu.querySelector('[data-bs-toggle="tab"].active');
       setInfoVisible(activeTab?.getAttribute('data-bs-target') || '');
       syncDropdownStates();
+      sendPresenceActivity(activeTab?.getAttribute('data-bs-target') || '#tab-guide');
       const initialTab = targetToTab(activeTab?.getAttribute('data-bs-target') || '');
       if(initialTab){
         try { localStorage.setItem(tabStorageKey, initialTab); } catch(_){}
@@ -242,6 +302,7 @@
           const target = ev.target?.getAttribute('data-bs-target') || '';
           setInfoVisible(target);
           syncDropdownStates();
+          sendPresenceActivity(target);
           const tab = targetToTab(target);
           if(tab){
             try { localStorage.setItem(tabStorageKey, tab); } catch(_){}

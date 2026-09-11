@@ -9,6 +9,18 @@
   .small-note { color: var(--bb-muted); }
   .code-chip { background:var(--bb-code-bg); border:1px solid var(--bb-border); padding:.15rem .35rem; border-radius:.35rem; }
   .monospace { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace; }
+  .tags-log-summary {
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:.75rem;
+    user-select:none;
+  }
+  .tags-log-summary::marker { color:var(--bb-muted); }
+  .project-init-extra-preview { border:1px solid var(--bb-border); border-radius:.5rem; padding:.65rem .75rem; background:rgba(255,255,255,.03); }
+  .project-init-extra-preview ul { margin:0; padding-left:1rem; }
+  .project-init-extra-preview li { overflow-wrap:anywhere; }
   .tag-explorer { border:1px solid var(--bb-border); background:var(--bb-card); padding:1rem; border-radius:.5rem; }
   .tag-cloud { display:flex; flex-wrap:wrap; gap:.35rem; max-height:240px; overflow:auto; padding:.5rem; border:1px solid var(--bb-border); border-radius:.5rem; background:var(--bb-input-bg); }
   .tag-chip { display:inline-flex; align-items:center; gap:.4rem; border:1px solid var(--bb-border); background:var(--bb-card); color:var(--bb-text); padding:.15rem .5rem; border-radius:999px; font-size:.85rem; cursor:pointer; }
@@ -78,10 +90,10 @@
   .hotkeys-tip-plus { color:#a9bfeb; font-size:.74rem; }
   .left-rail-btn.is-active { border-color:#b9d6ff; box-shadow:0 0 0 1px rgba(185,214,255,.45), 0 10px 24px rgba(0,0,0,.3); }
   .left-rail-btn:disabled { opacity:.45; cursor:not-allowed; }
-  .left-drawer-backdrop { position:fixed; inset:0; background:rgba(5,10,19,.5); opacity:0; pointer-events:none; transition:opacity .16s ease; z-index:92; }
+  .left-drawer-backdrop { position:fixed; inset:0; background:rgba(5,10,19,.5); opacity:0; pointer-events:none; transition:opacity .16s ease; z-index:1040; }
   .left-drawer-backdrop.is-open { opacity:1; pointer-events:auto; }
   .left-drawer-backdrop.is-quiz-overlay { z-index:1060; }
-  .left-drawer { position:fixed; left:var(--bb-left-drawer-left); top:1rem; bottom:1rem; width:min(620px, var(--bb-left-drawer-max)); border:1px solid var(--bb-border); border-radius:.9rem; background:rgba(8,15,28,.98); box-shadow:0 16px 42px rgba(0,0,0,.42); transform:translateX(calc(-100% - 1.25rem)); opacity:0; pointer-events:none; transition:transform .2s ease, opacity .2s ease; z-index:93; display:flex; flex-direction:column; overflow:hidden; }
+  .left-drawer { position:fixed; left:var(--bb-left-drawer-left); top:1rem; bottom:1rem; width:min(620px, var(--bb-left-drawer-max)); border:1px solid var(--bb-border); border-radius:.9rem; background:rgba(8,15,28,.98); box-shadow:0 16px 42px rgba(0,0,0,.42); transform:translateX(calc(-100% - 1.25rem)); opacity:0; pointer-events:none; transition:transform .2s ease, opacity .2s ease; z-index:1045; display:flex; flex-direction:column; overflow:hidden; }
   .left-drawer.is-open { transform:translateX(0); opacity:1; pointer-events:auto; }
   .left-drawer.left-drawer-project-setup { width:min(900px, var(--bb-left-drawer-max)); }
   .left-drawer.is-quiz-overlay { z-index:1070; }
@@ -136,6 +148,7 @@
   .project-inline-host { border:1px solid var(--bb-border); border-radius:.55rem; background:rgba(10,16,28,.8); padding:.35rem; }
   .project-inline-host .project-setup-card { background:transparent; }
   .workspace-lock-banner { border:1px solid #b56a1f; border-radius:.55rem; background:#2a1a0a; color:#ffe0b2; padding:.65rem .8rem; font-size:.84rem; }
+  .pipeline-review-banner { border:1px solid #b56a1f; border-radius:.55rem; background:#241c08; color:#ffe8a8; padding:.7rem .85rem; font-size:.86rem; margin-bottom:1rem; }
   .workspace-locked .workspace-lock-target { pointer-events:none; opacity:.5; filter:saturate(.8); user-select:none; }
   .workspace-locked .tag-composer-stick { position:static; bottom:auto; z-index:auto; background:transparent; }
   .workspace-locked .tag-composer-stick .mode-panel { position:static; }
@@ -143,6 +156,7 @@
   .project-setup-grid > * { min-width:0; }
   .project-setup-grid > [class*="col-"],
   .workflow-top-grid > [class*="col-"] { width:auto; padding:0; }
+  .project-init-switch { max-width:360px; min-width:min(280px, 100%); }
   .project-cue-wrap { display:flex; flex-direction:column; gap:.55rem; }
   .project-cue-list { display:flex; flex-wrap:wrap; gap:.4rem; }
   .project-cue { font-size:.72rem; letter-spacing:.04em; border:1px solid var(--bb-border); border-radius:999px; padding:.2rem .5rem; background:var(--bb-code-bg); color:var(--bb-muted); }
@@ -295,14 +309,29 @@
   .quiz-section-preview-title { font-size:.72rem; letter-spacing:.07em; text-transform:uppercase; color:#9cd9ea; margin-bottom:.32rem; }
   .quiz-section-preview-tags { display:flex; flex-wrap:wrap; gap:.24rem; max-height:150px; overflow:auto; }
   .quiz-section-preview-tag { border:1px solid #315f7a; border-radius:999px; background:#102638; color:#eaf7ff; font-size:.72rem; line-height:1.15; padding:.12rem .42rem; }
+  .quiz-section-preview-tag.is-danbooru-found { border-color:#1f6f4a; background:#0d2d1f; color:#e6fff1; }
+  .quiz-section-preview-tag.is-danbooru-missing { border-color:#8a2630; background:#2b1416; color:#ffe8ea; }
+  .quiz-section-preview-tag.is-danbooru-deprecated { border-color:#b56a1f; background:#2a1a0a; color:#ffe0b2; }
+  .quiz-section-preview-tag.is-danbooru-error { border-color:#7a5f98; background:#231b32; color:#eee8ff; }
   .quiz-section-preview-empty { color:var(--bb-muted); font-size:.78rem; }
   .quiz-section-preview-more { color:#abc2d6; font-size:.75rem; margin-top:.35rem; }
+  .quiz-danbooru-report { border:1px solid #426b8b; border-radius:.45rem; background:#071624; padding:.55rem; font-size:.76rem; color:#dceeff; }
+  .quiz-danbooru-report:empty { display:none; }
+  .quiz-danbooru-stats { display:flex; flex-wrap:wrap; gap:.35rem; margin-bottom:.4rem; }
+  .quiz-danbooru-stat { border:1px solid #365d78; border-radius:999px; background:#102638; color:#d9efff; padding:.1rem .42rem; }
+  .quiz-danbooru-stat.is-found { border-color:#1f6f4a; background:#0d2d1f; color:#e6fff1; }
+  .quiz-danbooru-stat.is-missing { border-color:#8a2630; background:#2b1416; color:#ffe8ea; }
+  .quiz-danbooru-stat.is-deprecated { border-color:#b56a1f; background:#2a1a0a; color:#ffe0b2; }
+  .quiz-danbooru-list { display:flex; flex-wrap:wrap; gap:.25rem; }
+  .quiz-danbooru-list .quiz-section-preview-tag { cursor:default; }
   .quiz-row-tools { display:flex; flex-direction:column; gap:.25rem; }
   .quiz-reco-preview, .quiz-defaults-box { border:1px solid var(--bb-border); border-radius:.5rem; background:rgba(0,0,0,.14); padding:.65rem; min-height:86px; max-height:220px; overflow:auto; }
   .quiz-chip { display:inline-flex; align-items:center; gap:.25rem; border:1px solid #375f78; border-radius:999px; background:#102536; color:#d9efff; padding:.18rem .5rem; margin:.12rem; font-size:.8rem; cursor:pointer; }
   .quiz-chip.selected { border-color:#5ab46f; background:#173322; color:#e8fff0; }
   .quiz-chip.default { border-color:#b78a2d; background:#251c08; color:#ffe8b8; }
   .quiz-chip.segmented { background:var(--quiz-seg-bg, #173322); border-color:var(--quiz-seg-border, #5ab46f); color:var(--quiz-seg-text, #f6fff8); }
+  .quiz-chip.sourced { background:var(--quiz-source-bg, #102536); border-color:var(--quiz-source-border, #375f78); color:var(--quiz-source-text, #d9efff); }
+  .quiz-chip-source-label { border:1px solid var(--quiz-source-border, #8ed8ff); border-radius:999px; background:rgba(0,0,0,.18); color:var(--quiz-source-text, #d9efff); font-size:.62rem; line-height:1; padding:.14rem .32rem; max-width:9rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .quiz-seg-dot { width:.62rem; height:.62rem; border-radius:999px; flex:0 0 auto; background:var(--quiz-seg-border, #8ed8ff); box-shadow:0 0 0 1px rgba(255,255,255,.22), 0 0 0 3px var(--quiz-seg-bg, rgba(142,216,255,.16)); }
   .quiz-chip-remove { display:inline-flex; align-items:center; justify-content:center; width:1rem; height:1rem; border-radius:999px; background:rgba(255,255,255,.12); color:#d7ffe2; font-size:.72rem; line-height:1; margin-left:.12rem; }
   .quiz-fullscreen-dialog { width:min(1780px, calc(100vw - 1rem)); max-width:none; height:calc(100vh - 1rem); height:calc(100dvh - 1rem); margin:.5rem auto; }
@@ -311,12 +340,23 @@
   .quiz-fullscreen-dialog .modal-body { overflow:auto; }
   .quiz-workspace-grid { display:grid; grid-template-columns:minmax(360px,.82fr) minmax(560px,1.18fr); gap:1rem; align-items:start; }
   .quiz-image-stage { min-height:58vh; border:0; border-radius:0; background:transparent; display:flex; align-items:center; justify-content:center; overflow:hidden; position:relative; }
-  .quiz-image-stage img { max-width:100%; max-height:72vh; object-fit:contain; cursor:zoom-in; }
+  .quiz-image-stage img { max-width:100%; max-height:72vh; object-fit:contain; cursor:zoom-in; transform-origin:center; transition:transform .12s ease, filter .12s ease; user-select:none; }
+  .quiz-image-stage.is-quiz-zoomed img { cursor:zoom-out; }
+  .quiz-image-stage.is-quiz-pannable img { cursor:grab; }
+  .quiz-image-stage.is-quiz-panning img { cursor:grabbing; transition:none; }
   .quiz-image-stage:fullscreen { width:100vw; height:100vh; border:0; border-radius:0; background:#020611; }
   .quiz-image-stage:fullscreen img { max-width:100vw; max-height:100vh; }
   .quiz-close-btn { position:absolute; right:1rem; top:50%; transform:translateY(-50%); opacity:.82; }
   .quiz-close-btn:hover { opacity:1; }
-  .quiz-progress-line { display:flex; flex-wrap:wrap; gap:.45rem; color:var(--bb-muted); font-size:.82rem; }
+  .quiz-progress-line { --quiz-progress-pct:0%; --quiz-progress-color:#5a748e; --quiz-progress-soft:rgba(90,116,142,.16); --quiz-progress-glow:rgba(90,116,142,.18); display:flex; flex-wrap:wrap; gap:.45rem; color:var(--bb-muted); font-size:.82rem; }
+  .quiz-progress-line span { display:inline-flex; align-items:center; }
+  .quiz-progress-line span + span::before { content:""; width:.28rem; height:.28rem; border-radius:999px; background:#607991; margin-right:.45rem; }
+  .quiz-progress-line .quiz-progress-meter { flex:1 1 100%; gap:.55rem; color:#dbe8ff; }
+  .quiz-progress-line .quiz-progress-meter::before { display:none; }
+  .quiz-progress-line .quiz-progress-meter span + span::before { display:none; }
+  .quiz-progress-track { position:relative; width:min(280px, 36vw); min-width:150px; height:.42rem; border:1px solid #31445c; border-radius:999px; background:linear-gradient(90deg, rgba(20,31,46,.9), var(--quiz-progress-soft)); overflow:hidden; }
+  .quiz-progress-fill { display:block; width:var(--quiz-progress-pct); height:100%; border-radius:inherit; background:linear-gradient(90deg, rgba(129,157,185,.42), var(--quiz-progress-color)); box-shadow:0 0 14px var(--quiz-progress-glow); transition:width .18s ease, background-color .18s ease, box-shadow .18s ease; }
+  .quiz-progress-percent { min-width:3.3rem; color:#f3f8ff; font-weight:700; }
   .quiz-selected-list, .quiz-recommended-list { display:flex; flex-wrap:wrap; align-content:flex-start; gap:.25rem; max-height:180px; overflow:auto; border:1px solid var(--bb-border); border-radius:.45rem; padding:.45rem; background:rgba(0,0,0,.12); }
   .quiz-recommended-list { min-height:116px; max-height:320px; }
   .quiz-segment-legend { display:flex; flex-wrap:wrap; gap:.35rem .65rem; margin-top:.42rem; color:#d8e6f2; font-size:.75rem; }
@@ -582,6 +622,9 @@
   <form id="tags-form" method="post" data-no-busy="true" data-no-persist="true" data-tool-label="Dataset Tag Editor">
     <input type="hidden" name="tool" value="tags">
     <input type="hidden" name="active_tab" value="tags">
+    <div class="pipeline-review-banner d-none" id="pipeline-review-banner">
+      Pipeline review mode: you are editing an isolated working copy. Your original source dataset is safe. Return to Dataset Workflow and resume when finished.
+    </div>
 
     <div class="row g-3">
       <div class="col-md-4">
@@ -642,7 +685,25 @@
                 <span class="project-status-pill" id="project-trigger-pill">Trigger not detected</span>
               </div>
             </div>
-            <div class="d-flex gap-2 flex-wrap">
+            <div class="d-flex gap-2 flex-wrap align-items-start">
+              <div class="project-init-switch">
+                <div class="form-check form-switch mb-0">
+                  <input
+                    class="form-check-input"
+                    type="checkbox"
+                    id="project-init-multi-trigger"
+                    data-bs-toggle="tooltip"
+                    data-bs-title="Scans direct source folders under Project Root. Each image receives its direct source folder name as the second trigger. database/, dataset/, and folders beginning with _ are ignored."
+                  >
+                  <label class="form-check-label" for="project-init-multi-trigger">
+                    Use source folder as second trigger
+                  </label>
+                </div>
+                <div class="small text-muted mt-1">
+                  Generated captions become: primary_trigger, folder_name.
+                  Folders beginning with "_" are ignored.
+                </div>
+              </div>
               <button type="button" class="btn btn-outline-light btn-sm" id="project-refresh">Refresh status</button>
               <button type="button" class="btn btn-warning btn-sm d-none" id="project-init-preview">Initialize Project</button>
             </div>
@@ -656,6 +717,7 @@
             <div class="col-md-12 d-none" id="project-init-plan-wrap">
               <div class="small text-muted" id="project-init-plan"></div>
             </div>
+            <div class="col-md-12 d-none" id="project-init-multi-preview"></div>
           </div>
         </div>
       </div>
@@ -908,10 +970,13 @@
           <div class="mt-2 d-flex gap-2 flex-wrap" id="tags-warning-actions"></div>
         </div>
         <div class="small text-muted" id="tags-status" style="min-height:1.25rem;"></div>
-        <div id="tags-log" class="card p-3 d-none">
-          <h6 class="mb-2">Log</h6>
-          <pre class="monospace mb-0" id="tags-log-pre"></pre>
-        </div>
+        <details id="tags-log" class="card p-3 d-none tags-log-card">
+          <summary class="tags-log-summary">
+            <span class="fw-semibold">Log</span>
+            <span class="small text-muted" id="tags-log-meta"></span>
+          </summary>
+          <pre class="monospace mb-0 mt-3" id="tags-log-pre"></pre>
+        </details>
       </div>
       <div class="workdir-panel">
         <div class="workdir-head">
@@ -1172,8 +1237,10 @@
               <span class="input-group-text">TXT</span>
               <input class="form-control" id="tagging-quiz-prompt-file" value="prompt.txt">
               <button type="button" class="btn btn-outline-light" id="tagging-quiz-parse">Load/Parse</button>
+              <button type="button" class="btn btn-outline-info" id="tagging-quiz-danbooru-check">Check Danbooru</button>
             </div>
             <div class="tagging-quiz-status mt-2" id="tagging-quiz-setup-status"></div>
+            <div class="quiz-danbooru-report mt-2" id="tagging-quiz-danbooru-report"></div>
             <div class="quiz-reco-preview mt-2" id="tagging-quiz-cheatsheet-list"></div>
             <div id="tagging-quiz-cheatsheet-detail"></div>
           </div>
@@ -1231,16 +1298,32 @@
             <div class="tagging-quiz-hotkeys-title">Guided Tagging Hotkeys</div>
             <div class="tagging-quiz-hotkeys-list">
               <div class="tagging-quiz-hotkey-row">
-                <span class="tagging-quiz-key">Right</span>
+                <span class="tagging-quiz-key-combo"><span class="tagging-quiz-key">Right</span><span class="tagging-quiz-key-plus">/</span><span class="tagging-quiz-key">Shift</span><span class="tagging-quiz-key-plus">+</span><span class="tagging-quiz-key">D</span></span>
                 <span class="tagging-quiz-hotkey-action">Save image and continue, or move to the next available image after completion</span>
               </div>
               <div class="tagging-quiz-hotkey-row">
-                <span class="tagging-quiz-key">Left</span>
+                <span class="tagging-quiz-key-combo"><span class="tagging-quiz-key">Left</span><span class="tagging-quiz-key-plus">/</span><span class="tagging-quiz-key">Shift</span><span class="tagging-quiz-key-plus">+</span><span class="tagging-quiz-key">A</span></span>
                 <span class="tagging-quiz-hotkey-action">Move to the previous available image</span>
               </div>
               <div class="tagging-quiz-hotkey-row">
                 <span class="tagging-quiz-key-combo"><span class="tagging-quiz-key">Ctrl</span><span class="tagging-quiz-key-plus">+</span><span class="tagging-quiz-key">Left</span><span class="tagging-quiz-key-plus">/</span><span class="tagging-quiz-key">Right</span></span>
                 <span class="tagging-quiz-hotkey-action">Previous or next segment</span>
+              </div>
+              <div class="tagging-quiz-hotkey-row">
+                <span class="tagging-quiz-key-combo"><span class="tagging-quiz-key">Ctrl</span><span class="tagging-quiz-key-plus">+</span><span class="tagging-quiz-key">Q</span><span class="tagging-quiz-key-plus">/</span><span class="tagging-quiz-key">E</span></span>
+                <span class="tagging-quiz-hotkey-action">Previous or next segment</span>
+              </div>
+              <div class="tagging-quiz-hotkey-row">
+                <span class="tagging-quiz-key-combo"><span class="tagging-quiz-key">Shift</span><span class="tagging-quiz-key-plus">+</span><span class="tagging-quiz-key">Wheel</span></span>
+                <span class="tagging-quiz-hotkey-action">Previous or next segment</span>
+              </div>
+              <div class="tagging-quiz-hotkey-row">
+                <span class="tagging-quiz-key-combo"><span class="tagging-quiz-key">Ctrl</span><span class="tagging-quiz-key-plus">+</span><span class="tagging-quiz-key">1-9</span></span>
+                <span class="tagging-quiz-hotkey-action">Jump to a segment number, clamped to the last segment</span>
+              </div>
+              <div class="tagging-quiz-hotkey-row">
+                <span class="tagging-quiz-key-combo"><span class="tagging-quiz-key">Wheel</span><span class="tagging-quiz-key-plus">/</span><span class="tagging-quiz-key">Ctrl</span><span class="tagging-quiz-key-plus">+</span><span class="tagging-quiz-key">+/-</span></span>
+                <span class="tagging-quiz-hotkey-action">Zoom the image while it is fullscreen</span>
               </div>
               <div class="tagging-quiz-hotkey-row">
                 <span class="tagging-quiz-key">Enter</span>
@@ -1396,6 +1479,7 @@
     status: 'tags-status',
     logWrap: 'tags-log',
     logPre: 'tags-log-pre',
+    logMeta: 'tags-log-meta',
     effMoveFrom: 'eff-move-from',
     effMoveTo: 'eff-move-to',
     effEditPath: 'eff-edit-path',
@@ -1568,7 +1652,9 @@
     cues: 'project-status-cues',
     infoList: 'project-status-info',
     planWrap: 'project-init-plan-wrap',
-    plan: 'project-init-plan'
+    plan: 'project-init-plan',
+    multiTrigger: 'project-init-multi-trigger',
+    multiPreview: 'project-init-multi-preview'
   };
   const TRIGGER_SAFETY = {
     trigger: 'trigger-safety-trigger',
@@ -1641,7 +1727,8 @@
     info: [],
     normalizedFromLegacy: false,
     triggerWord: '',
-    initPreview: null
+    initPreview: null,
+    multiTriggerPreview: null
   };
   const triggerSafetyState = {
     lastResult: null,
@@ -1663,6 +1750,8 @@
     promptFile: 'tagging-quiz-prompt-file',
     parse: 'tagging-quiz-parse',
     setupStatus: 'tagging-quiz-setup-status',
+    danbooruCheck: 'tagging-quiz-danbooru-check',
+    danbooruReport: 'tagging-quiz-danbooru-report',
     cheatList: 'tagging-quiz-cheatsheet-list',
     cheatDetail: 'tagging-quiz-cheatsheet-detail',
     board: 'tagging-quiz-map-board',
@@ -1726,11 +1815,14 @@
     trigger: '',
     mappingRows: [],
     recommendations: {},
+    recommendationSources: {},
     sessionDefaults: {},
     reviewSteps: [],
     session: null,
     recentManualTags: [],
     recentManualTagsBySegment: {},
+    danbooruValidation: null,
+    danbooruValidationBusy: false,
     glossarySearch: '',
     glossaryFilter: '__all__',
     drag: null,
@@ -1742,6 +1834,13 @@
     saveSeq: 0,
     lastAcceptedSaveSeq: 0,
     sessionVersion: 0,
+    quizImageRel: '',
+    quizImageZoom: 1,
+    quizImagePanX: 0,
+    quizImagePanY: 0,
+    quizImagePanning: null,
+    segmentWheelBusy: false,
+    lastSegmentWheelAt: 0,
     setupModal: null,
     quizModal: null,
     overviewModal: null
@@ -1973,6 +2072,15 @@
     return qReplaceSession(session);
   }
 
+  function qSessionImageEntries(includeMissing = false){
+    const images = quizState.session?.images || {};
+    return Object.entries(images).filter(([, entry]) => includeMissing || (entry && !entry.missing));
+  }
+
+  function qSessionImageKeys(includeMissing = false){
+    return qSessionImageEntries(includeMissing).map(([rel]) => rel);
+  }
+
   async function qLoadSettings(){
     const res = await fetch('/api/tagging-quiz/settings');
     const data = await res.json();
@@ -2082,6 +2190,8 @@
       return null;
     }
     qSetStatus('Loading cheatsheet...', QUIZ.setupStatus);
+    quizState.danbooruValidation = null;
+    qRenderDanbooruValidationReport();
     try{
       const data = await qPost('/api/tagging-quiz/cheatsheet/parse', {
         project_root: root,
@@ -2133,6 +2243,124 @@
     return {base, conditional, all: [...base, ...conditional]};
   }
 
+  function qDanbooruValidationRow(tag){
+    const clean = normalizeDanbooruTag(tag);
+    return clean ? (quizState.danbooruValidation?.tags?.[clean] || null) : null;
+  }
+
+  function qDecorateDanbooruValidationChip(chip, tag){
+    const row = qDanbooruValidationRow(tag);
+    if (!chip || !row) return;
+    if (row.error){
+      chip.classList.add('is-danbooru-error');
+      chip.title = `${row.tag}: lookup failed (${row.error})`;
+      return;
+    }
+    if (row.deprecated){
+      chip.classList.add('is-danbooru-deprecated');
+      chip.title = `${row.tag}: deprecated Danbooru tag`;
+      return;
+    }
+    if (row.found){
+      chip.classList.add('is-danbooru-found');
+      const parts = [];
+      if (row.category_name) parts.push(row.category_name);
+      if (Number.isFinite(Number(row.post_count))) parts.push(`${Number(row.post_count).toLocaleString()} posts`);
+      chip.title = `${row.tag}: found${parts.length ? ` (${parts.join(', ')})` : ''}`;
+      return;
+    }
+    chip.classList.add('is-danbooru-missing');
+    chip.title = `${row.tag}: no Danbooru tag found`;
+  }
+
+  function qDanbooruValidationChip(row){
+    const chip = document.createElement('span');
+    chip.className = 'quiz-section-preview-tag';
+    chip.textContent = row.tag || row.raw || '';
+    qDecorateDanbooruValidationChip(chip, row.tag || row.raw || '');
+    return chip;
+  }
+
+  function qRenderDanbooruValidationReport(){
+    const host = get(QUIZ.danbooruReport);
+    if (!host) return;
+    host.innerHTML = '';
+    const result = quizState.danbooruValidation;
+    if (!result) return;
+    const counts = result.counts || {};
+    const stats = document.createElement('div');
+    stats.className = 'quiz-danbooru-stats';
+    [
+      ['checked', `${counts.checked ?? result.checked_tags ?? 0} checked`, ''],
+      ['found', `${counts.found || 0} found`, 'is-found'],
+      ['missing', `${counts.missing || 0} missing`, 'is-missing'],
+      ['deprecated', `${counts.deprecated || 0} deprecated`, 'is-deprecated']
+    ].forEach(([, label, cls]) => {
+      const item = document.createElement('span');
+      item.className = `quiz-danbooru-stat ${cls}`.trim();
+      item.textContent = label;
+      stats.appendChild(item);
+    });
+    host.appendChild(stats);
+
+    const rows = Array.isArray(result.rows) ? result.rows : [];
+    const flagged = rows.filter(row => row && (!row.found || row.deprecated || row.error)).slice(0, 60);
+    if (flagged.length){
+      const list = document.createElement('div');
+      list.className = 'quiz-danbooru-list';
+      flagged.forEach(row => list.appendChild(qDanbooruValidationChip(row)));
+      host.appendChild(list);
+    }
+    const notes = [];
+    if (result.truncated) notes.push(`Only ${result.checked_tags} of ${result.total_tags} unique tags were checked.`);
+    (result.warnings || []).forEach(warn => notes.push(warn));
+    if (notes.length){
+      const note = document.createElement('div');
+      note.className = 'small text-muted mt-2';
+      note.textContent = notes.join(' ');
+      host.appendChild(note);
+    }
+  }
+
+  function qSetDanbooruCheckBusy(busy){
+    quizState.danbooruValidationBusy = !!busy;
+    const button = get(QUIZ.danbooruCheck);
+    if (!button) return;
+    button.disabled = !!busy;
+    button.textContent = busy ? 'Checking...' : 'Check Danbooru';
+  }
+
+  async function qValidateCheatsheetDanbooru(){
+    const root = qProjectRoot();
+    if (!root) {
+      qSetStatus('Project root is required.', QUIZ.setupStatus);
+      return null;
+    }
+    qSetDanbooruCheckBusy(true);
+    try{
+      const parsed = await qParseCheatsheet();
+      if (!parsed) return null;
+      qSetStatus('Checking prompt.txt tags against Danbooru...', QUIZ.setupStatus);
+      const data = await qPost('/api/tagging-quiz/cheatsheet/validate-danbooru', {
+        project_root: root,
+        prompt_file: get(QUIZ.promptFile)?.value || 'prompt.txt'
+      });
+      quizState.danbooruValidation = data;
+      qRenderDanbooruValidationReport();
+      qRenderCheatsheetList();
+      const counts = data.counts || {};
+      qSetStatus(`Danbooru check: ${counts.found || 0}/${counts.checked || data.checked_tags || 0} found, ${counts.missing || 0} missing, ${counts.deprecated || 0} deprecated.`, QUIZ.setupStatus);
+      return data;
+    }catch(err){
+      quizState.danbooruValidation = null;
+      qRenderDanbooruValidationReport();
+      qSetStatus(`Danbooru check failed: ${err.message}`, QUIZ.setupStatus);
+      return null;
+    }finally{
+      qSetDanbooruCheckBusy(false);
+    }
+  }
+
   function qSectionPreview(section){
     const preview = document.createElement('div');
     preview.className = 'quiz-section-preview';
@@ -2155,6 +2383,7 @@
       const chip = document.createElement('span');
       chip.className = 'quiz-section-preview-tag';
       chip.textContent = tag;
+      qDecorateDanbooruValidationChip(chip, tag);
       list.appendChild(chip);
     });
     preview.appendChild(list);
@@ -2387,6 +2616,7 @@
       mapping_rows: quizState.mappingRows
     });
     quizState.recommendations = data.recommendations || {};
+    quizState.recommendationSources = data.recommendation_sources || {};
     if (Array.isArray(data.mapping_rows)) quizState.mappingRows = data.mapping_rows;
     qSyncSetupToSession(data.segments);
     qSetStatus((data.logs || [`Built recommendations for ${Object.keys(quizState.recommendations).length} segment(s).`]).join(' | '), QUIZ.setupStatus);
@@ -2401,13 +2631,29 @@
     const segId = get(QUIZ.previewSegment)?.value || (qSegments()[0] || {}).id || '';
     const host = get(QUIZ.recoPreview);
     if (!host) return;
+    const segment = qSegments().find(seg => seg.id === segId) || null;
     const connected = quizState.mappingRows.filter(row => row.right_segment === segId).flatMap(row => row.left_sections || []);
-    const tags = quizState.recommendations[segId] || [];
-    host.innerHTML = `<div class="small text-muted mb-2">Connected: ${escapeHtml(connected.join(', ') || 'Nothing')} | ${tags.length} recommendation(s)</div>`;
-    tags.slice(0, 80).forEach(tag => {
+    const rows = qSegmentRecommendationRows(segment);
+    const tagCount = qUniqueRecommendationTagCount(rows);
+    const groupCount = rows.length;
+    const countText = tagCount === groupCount
+      ? `${tagCount} recommendation${tagCount === 1 ? '' : 's'}`
+      : `${tagCount} unique tag${tagCount === 1 ? '' : 's'} across ${groupCount} source group${groupCount === 1 ? '' : 's'}`;
+    host.innerHTML = `<div class="small text-muted mb-2">Connected: ${escapeHtml(connected.join(', ') || 'Nothing')} | ${countText}</div>`;
+    if (!rows.length){
+      host.appendChild(qGhost('No recommendations'));
+      return;
+    }
+    rows.slice(0, 80).forEach(row => {
       const chip = document.createElement('span');
-      chip.className = 'quiz-chip';
-      chip.textContent = tag;
+      chip.className = 'quiz-chip sourced';
+      qApplySourceStyle(chip, row);
+      const label = document.createElement('span');
+      label.textContent = row.tag;
+      const source = document.createElement('span');
+      source.className = 'quiz-chip-source-label';
+      source.textContent = row.source_label || 'Source';
+      chip.append(label, source);
       host.appendChild(chip);
     });
   }
@@ -2460,6 +2706,7 @@
     quizState.session.quiz_segments = JSON.parse(JSON.stringify(segments));
     quizState.session.mapping_rows = JSON.parse(JSON.stringify(quizState.mappingRows || []));
     quizState.session.recommendations = JSON.parse(JSON.stringify(quizState.recommendations || {}));
+    quizState.session.recommendation_sources = JSON.parse(JSON.stringify(quizState.recommendationSources || {}));
     quizState.session.session_defaults = JSON.parse(JSON.stringify(quizState.sessionDefaults || {}));
     Object.values(quizState.session.images || {}).forEach(entry => {
       if (!entry || typeof entry !== 'object') return;
@@ -2491,11 +2738,13 @@
     if (quizState.session){
       quizState.mappingRows = JSON.parse(JSON.stringify(quizState.session.mapping_rows || quizState.mappingRows || []));
       quizState.recommendations = JSON.parse(JSON.stringify(quizState.session.recommendations || {}));
+      quizState.recommendationSources = JSON.parse(JSON.stringify(quizState.session.recommendation_sources || {}));
       quizState.sessionDefaults = JSON.parse(JSON.stringify(quizState.session.session_defaults || {}));
     }
     get(QUIZ.promptFile).value = get(QUIZ.promptFile)?.value || 'prompt.txt';
     qEnsureRows();
     qRenderCheatsheetList();
+    qRenderDanbooruValidationReport();
     qRenderMappingBoard();
     qRenderDefaults();
     qRenderRecommendationPreview();
@@ -2509,7 +2758,7 @@
   async function qOpenQuizEntry(){
     if (!quizState.settings) await qLoadSettings();
     if (quizState.session && !qSessionMatchesCurrentProject()) qReplaceSession(null);
-    if (!quizState.session) await qLoadSession(true);
+    if (qProjectRoot()) await qLoadSession(true);
     if (quizState.session && (quizState.session.mapping_rows || []).length){
       qOpenQuiz();
       return;
@@ -2531,6 +2780,7 @@
       image_exts: qExts(),
       mapping_rows: quizState.mappingRows,
       recommendations: quizState.recommendations,
+      recommendation_sources: quizState.recommendationSources,
       session_defaults: quizState.sessionDefaults
     });
     qAcceptServerSession(data.session);
@@ -2568,6 +2818,7 @@
       if (quizState.session){
         quizState.mappingRows = JSON.parse(JSON.stringify(quizState.session.mapping_rows || []));
         quizState.recommendations = JSON.parse(JSON.stringify(quizState.session.recommendations || {}));
+        quizState.recommendationSources = JSON.parse(JSON.stringify(quizState.session.recommendation_sources || {}));
         quizState.sessionDefaults = JSON.parse(JSON.stringify(quizState.session.session_defaults || {}));
       }
       qUpdateResumeBanner(data.warnings || []);
@@ -2602,14 +2853,16 @@
       banner.textContent = '';
       return;
     }
-    const images = Object.values(session.images || {});
-    const completed = images.filter(it => it && it.status === 'completed').length;
+    const images = qSessionImageEntries(false);
+    const completed = images.filter(([, it]) => it && it.status === 'completed').length;
     const total = images.length;
     const current = session.current || {};
     const seg = qSegments().find(s => s.id === current.segment_id);
     const currentStep = current.free_tagging ? 'Free Tagging' : ((seg && seg.label) || current.segment_id || '-');
     banner.classList.remove('d-none');
-    banner.textContent = `Resume: ${current.image_rel || '-'} / ${currentStep} | ${completed}/${total} done${warnings.length ? ' | ' + warnings.join(' | ') : ''}`;
+    const currentEntry = current.image_rel ? session.images?.[current.image_rel] : null;
+    const tagCount = qImageTagRows(currentEntry).length;
+    banner.textContent = `Resume: ${current.image_rel || '-'} / ${currentStep} | ${tagCount} image tag${tagCount === 1 ? '' : 's'} | ${completed}/${total} done${warnings.length ? ' | ' + warnings.join(' | ') : ''}`;
   }
 
   function qCurrentImageRel(){
@@ -2701,6 +2954,84 @@
     quizState.quizModal?.show();
   }
 
+  function qRenderQuizProgress(){
+    const session = quizState.session;
+    const progress = get(QUIZ.progress);
+    if (!session || !progress) return;
+    const rel = qCurrentImageRel();
+    const segments = qSegments();
+    const seg = qCurrentSegment();
+    const freeMode = qIsFreeTaggingMode();
+    const imageKeys = qSessionImageKeys(false);
+    const storedIndex = Number(session.current?.image_index);
+    const activeIndex = imageKeys.indexOf(rel);
+    const fallbackIndex = Number.isFinite(storedIndex) ? storedIndex : 0;
+    const imageIndex = activeIndex >= 0 ? activeIndex : Math.max(0, fallbackIndex);
+    const displayImageNumber = imageKeys.length ? imageIndex + 1 : 0;
+    const imageTagCount = qCurrentImageTagCount();
+    const percent = qProgressPercent(session, imageKeys, segments, freeMode);
+    qApplyProgressStyle(progress, percent);
+    progress.innerHTML = `
+      <span class="quiz-progress-meter"><span class="quiz-progress-track" aria-hidden="true"><span class="quiz-progress-fill"></span></span><span class="quiz-progress-percent">${percent}%</span></span>
+      <span>Image ${displayImageNumber} / ${imageKeys.length}</span>
+      <span>${freeMode ? 'Free tagging' : `Segment ${(Number(session.current?.segment_index || 0) + 1)} / ${segments.length}`}</span>
+      <span>Image tags: ${imageTagCount}</span>
+      <span>${escapeHtml(freeMode ? 'No segment restrictions' : ((seg && seg.label) || '-'))}</span>
+      <span>${escapeHtml(session.status || 'active')}</span>
+    `;
+    qReportDiscordPresence(displayImageNumber, imageKeys.length, freeMode, seg);
+  }
+
+  function qPresencePhaseForSegment(segment, freeMode){
+    if (freeMode) return 'manual';
+    const raw = `${segment?.id || ''} ${segment?.label || ''}`.toLowerCase();
+    if (raw.includes('appearance') || raw.includes('face') || raw.includes('hair') || raw.includes('eyes')) return 'guided_appearance';
+    if (raw.includes('outfit') || raw.includes('clothing') || raw.includes('clothes') || raw.includes('dress')) return 'guided_outfit';
+    if (raw.includes('camera') || raw.includes('angle') || raw.includes('view')) return 'guided_camera';
+    if (raw.includes('composition') || raw.includes('body') || raw.includes('pose')) return 'guided_composition';
+    if (raw.includes('lighting') || raw.includes('light') || raw.includes('shadow')) return 'guided_lighting';
+    if (raw.includes('background') || raw.includes('environment') || raw.includes('scene')) return 'guided_background';
+    return 'guided_generic';
+  }
+
+  function qReportDiscordPresence(current, total, freeMode, segment){
+    if (!window.bbReportDiscordPresence) return;
+    window.bbReportDiscordPresence({
+      tool: 'tags',
+      phase: qPresencePhaseForSegment(segment, freeMode),
+      current,
+      total,
+    });
+  }
+
+  function qProgressPercent(session, imageKeys, segments, freeMode){
+    if (!session || !imageKeys.length) return 0;
+    if (session.status === 'completed') return 100;
+    const imageEntries = imageKeys.map(rel => session.images?.[rel]).filter(Boolean);
+    const completedImages = imageEntries.filter(entry => entry.status === 'completed').length;
+    const segmentCount = freeMode ? 1 : Math.max(segments.length, 1);
+    const totalUnits = Math.max(imageKeys.length * segmentCount, 1);
+    let completedUnits = completedImages * segmentCount;
+    const currentEntry = qCurrentImageEntry();
+    if (!freeMode && currentEntry && currentEntry.status !== 'completed'){
+      completedUnits += Math.max(0, Math.min(segmentCount - 1, Number(session.current?.segment_index || 0)));
+    }
+    return Math.max(0, Math.min(100, Math.round((completedUnits / totalUnits) * 100)));
+  }
+
+  function qApplyProgressStyle(progress, percent){
+    if (!progress) return;
+    const pct = Math.max(0, Math.min(100, Number(percent) || 0));
+    const t = pct / 100;
+    const hue = Math.round(206 - (66 * t));
+    const saturation = Math.round(34 + (48 * t));
+    const lightness = Math.round(35 + (19 * t));
+    progress.style.setProperty('--quiz-progress-pct', `${pct}%`);
+    progress.style.setProperty('--quiz-progress-color', `hsl(${hue} ${saturation}% ${lightness}%)`);
+    progress.style.setProperty('--quiz-progress-soft', `hsla(${hue} ${Math.max(24, saturation - 18)}% ${Math.max(22, lightness - 16)}% / ${0.18 + (0.22 * t)})`);
+    progress.style.setProperty('--quiz-progress-glow', `hsla(${hue} ${saturation}% ${Math.min(68, lightness + 12)}% / ${0.18 + (0.32 * t)})`);
+  }
+
   function qRenderQuiz(){
     const session = quizState.session;
     if (!session) return;
@@ -2710,15 +3041,7 @@
     const state = qCurrentSegmentState();
     const freeMode = qIsFreeTaggingMode();
     const singleChoiceMode = !freeMode && qIsSingleChoiceSegment(seg);
-    const imageKeys = Object.keys(session.images || {});
-    const storedIndex = Number(session.current?.image_index);
-    const imageIndex = Math.max(0, Number.isFinite(storedIndex) ? storedIndex : imageKeys.indexOf(rel));
-    get(QUIZ.progress).innerHTML = `
-      <span>Image ${imageIndex + 1} / ${imageKeys.length}</span>
-      <span>${freeMode ? 'Free tagging' : `Segment ${(Number(session.current?.segment_index || 0) + 1)} / ${segments.length}`}</span>
-      <span>${escapeHtml(freeMode ? 'No segment restrictions' : ((seg && seg.label) || '-'))}</span>
-      <span>${escapeHtml(session.status || 'active')}</span>
-    `;
+    qRenderQuizProgress();
     get(QUIZ.imageName).textContent = rel || '-';
     get(QUIZ.segmentTitle).textContent = freeMode ? 'Free Tagging' : ((seg && seg.label) || '-');
     const modeBadge = get(QUIZ.segmentMode);
@@ -2771,13 +3094,19 @@
     const stage = get(QUIZ.imageStage);
     if (stage) {
       stage.innerHTML = '';
+      if (rel !== quizState.quizImageRel){
+        quizState.quizImageRel = rel || '';
+        qSetQuizImageZoom(1);
+      }
       if (rel){
         const img = document.createElement('img');
         img.src = qImageUrl(rel);
         img.alt = '';
+        img.draggable = false;
         img.title = 'Click to view fullscreen';
         img.addEventListener('click', qToggleImageFullscreen);
         stage.appendChild(img);
+        qApplyQuizImageZoom();
       } else {
         const empty = document.createElement('span');
         empty.className = 'small text-muted';
@@ -2801,6 +3130,19 @@
     {bg: '#183943', border: '#70d7e8', text: '#effdff'},
   ];
 
+  const QUIZ_SOURCE_COLORS = [
+    {bg: '#123b35', border: '#4cc7a0', text: '#ecfff9'},
+    {bg: '#3a2d10', border: '#e0ad3f', text: '#fff7dd'},
+    {bg: '#2f2449', border: '#b59cff', text: '#f7f1ff'},
+    {bg: '#421f2c', border: '#ff8fb3', text: '#fff0f5'},
+    {bg: '#17345a', border: '#79b9ff', text: '#eef7ff'},
+    {bg: '#29391a', border: '#9ad66e', text: '#f4ffe9'},
+    {bg: '#3b2740', border: '#e49bf3', text: '#fff1ff'},
+    {bg: '#183943', border: '#70d7e8', text: '#effdff'},
+    {bg: '#3e2c1b', border: '#d69a65', text: '#fff3e8'},
+    {bg: '#243646', border: '#91c6df', text: '#f0fbff'},
+  ];
+
   function qSegmentColor(segId){
     if (segId === '__unsorted__') return {bg: '#303844', border: '#a8bacd', text: '#f4f9ff'};
     const idx = qSegments().findIndex(segment => segment.id === segId);
@@ -2821,6 +3163,22 @@
     el.style.setProperty('--quiz-seg-bg', color.bg);
     el.style.setProperty('--quiz-seg-border', color.border);
     el.style.setProperty('--quiz-seg-text', color.text);
+  }
+
+  function qSourceColor(row){
+    const rawIndex = Number(row?.source_index);
+    const key = `${row?.source_type || ''}:${row?.source_id || row?.source_label || ''}`;
+    const index = Number.isFinite(rawIndex)
+      ? rawIndex
+      : Math.abs(String(key).split('').reduce((sum, ch) => sum + ch.charCodeAt(0), 0));
+    return QUIZ_SOURCE_COLORS[index % QUIZ_SOURCE_COLORS.length];
+  }
+
+  function qApplySourceStyle(el, row){
+    const color = qSourceColor(row);
+    el.style.setProperty('--quiz-source-bg', color.bg);
+    el.style.setProperty('--quiz-source-border', color.border);
+    el.style.setProperty('--quiz-source-text', color.text);
   }
 
   function qSelectedChip(tag, segId, onRemove){
@@ -2884,12 +3242,70 @@
 
   function qSegmentRecommendationTags(segment){
     if (!segment) return [];
-    return qCleanSegmentTags(quizState.session?.recommendations?.[segment.id] || quizState.recommendations[segment.id] || []);
+    const direct = qCleanSegmentTags(quizState.session?.recommendations?.[segment.id] || quizState.recommendations[segment.id] || []);
+    if (direct.length) return direct;
+    return qCleanSegmentTags(qRawSegmentRecommendationSourceRows(segment).map(row => row?.tag));
+  }
+
+  function qRawSegmentRecommendationSourceRows(segment){
+    if (!segment) return [];
+    const sessionRows = quizState.session?.recommendation_sources?.[segment.id];
+    if (Array.isArray(sessionRows)) return sessionRows;
+    const setupRows = quizState.recommendationSources?.[segment.id];
+    return Array.isArray(setupRows) ? setupRows : [];
   }
 
   function qSegmentSettingTags(segment){
     if (!segment) return [];
     return qCleanSegmentTags(qReviewStepSuggestionTags(segment).matching.flatMap(({ tags }) => tags || []));
+  }
+
+  function qSegmentRecommendationRows(segment){
+    if (!segment) return [];
+    const rows = [];
+    const seen = new Set();
+    const addRow = (tag, source) => {
+      const clean = normalizeDanbooruTag(tag);
+      if (!clean) return;
+      const sourceType = source?.source_type || 'recommendation';
+      const sourceLabel = source?.source_label || source?.label || 'Recommendation';
+      const sourceId = source?.source_id || sourceLabel;
+      const key = `${sourceType}|${sourceId}|${clean}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      rows.push({
+        tag: clean,
+        source_type: sourceType,
+        source_id: sourceId,
+        source_label: sourceLabel,
+        source_index: source?.source_index,
+      });
+    };
+    const sourceRows = qRawSegmentRecommendationSourceRows(segment);
+    if (Array.isArray(sourceRows) && sourceRows.length){
+      sourceRows.forEach(row => addRow(row?.tag, row));
+    } else {
+      qSegmentRecommendationTags(segment).forEach(tag => addRow(tag, {
+        source_type: 'cheatsheet',
+        source_id: 'cheatsheet',
+        source_label: 'Cheatsheet',
+        source_index: 0,
+      }));
+    }
+    qReviewStepSuggestionTags(segment).matching.forEach(({ step, tags, index }) => {
+      const label = step?.label || step?.id || 'Settings';
+      tags.forEach(tag => addRow(tag, {
+        source_type: 'settings',
+        source_id: step?.id || label,
+        source_label: label,
+        source_index: 100 + Number(index || 0),
+      }));
+    });
+    return rows;
+  }
+
+  function qUniqueRecommendationTagCount(rows){
+    return new Set((rows || []).map(row => normalizeDanbooruTag(row?.tag)).filter(Boolean)).size;
   }
 
   function qSegmentOptionTagSet(segment){
@@ -2911,7 +3327,10 @@
   function qRenderQuizChips(){
     const seg = qCurrentSegment();
     const state = qCurrentSegmentState();
-    if (!state) return;
+    if (!state) {
+      qRenderQuizProgress();
+      return;
+    }
     const selectedHost = get(QUIZ.selected);
     const recHost = get(QUIZ.recommended);
     selectedHost.innerHTML = '';
@@ -2926,6 +3345,7 @@
       });
       qRenderSegmentLegend(rows.map(row => row.segment_id));
       recHost.appendChild(qGhost('Free tagging mode'));
+      qRenderQuizProgress();
       return;
     }
     const unavailable = qImageTagSet(qCurrentImageEntry());
@@ -2936,30 +3356,46 @@
       selectedHost.appendChild(qSelectedChip(tag, seg?.id || '__unsorted__', () => qRemoveSelectedTag(tag)));
     });
     qRenderSegmentLegend(seg ? [seg.id] : []);
-    if (!seg) return;
+    if (!seg) {
+      qRenderQuizProgress();
+      return;
+    }
     if (qIsSingleChoiceSegment(seg) && selectedTags.length >= 1){
       recHost.appendChild(qGhost('Single choice already selected'));
+      qRenderQuizProgress();
       return;
     }
     const filter = (get(QUIZ.search)?.value || '').trim().toLowerCase();
-    const cheatRecommendations = qSegmentRecommendationTags(seg);
+    const sourceRows = qSegmentRecommendationRows(seg);
     const pool = qIsSingleChoiceSegment(seg)
-      ? qSegmentOptionTags(seg)
-      : (cheatRecommendations.length ? cheatRecommendations : qSegmentSettingTags(seg));
-    const filtered = pool.filter(tag => !unavailable.has(normalizeDanbooruTag(tag)) && (!filter || tag.toLowerCase().includes(filter)));
-    if (recTitle) recTitle.textContent = `Recommended (${filtered.length})`;
+      ? sourceRows.filter(row => qSegmentOptionTagSet(seg).has(row.tag))
+      : sourceRows;
+    const filtered = pool.filter(row => !unavailable.has(normalizeDanbooruTag(row.tag)) && (!filter || row.tag.toLowerCase().includes(filter) || String(row.source_label || '').toLowerCase().includes(filter)));
+    if (recTitle) {
+      const tagCount = qUniqueRecommendationTagCount(filtered);
+      recTitle.textContent = filtered.length === tagCount
+        ? `Recommended (${tagCount})`
+        : `Recommended (${tagCount} tags / ${filtered.length} groups)`;
+    }
     if (!filtered.length) recHost.appendChild(qGhost('No recommended tags'));
     const frag = document.createDocumentFragment();
-    filtered.forEach(tag => {
+    filtered.forEach(row => {
       const chip = document.createElement('button');
       chip.type = 'button';
-      chip.className = 'quiz-chip';
-      chip.textContent = tag;
-      chip.title = `Add ${tag}`;
-      chip.addEventListener('click', () => qAddRecommendedTag(tag).catch(err => qSetManualStatus(`Auto advance failed: ${err.message}`)));
+      chip.className = 'quiz-chip sourced';
+      chip.title = `${row.source_label || 'Recommendation'}: add ${row.tag}`;
+      qApplySourceStyle(chip, row);
+      const label = document.createElement('span');
+      label.textContent = row.tag;
+      const source = document.createElement('span');
+      source.className = 'quiz-chip-source-label';
+      source.textContent = row.source_label || 'Source';
+      chip.append(label, source);
+      chip.addEventListener('click', () => qAddRecommendedTag(row.tag).catch(err => qSetManualStatus(`Auto advance failed: ${err.message}`)));
       frag.appendChild(chip);
     });
     recHost.appendChild(frag);
+    qRenderQuizProgress();
   }
 
   async function qMaybeAutoAdvanceAfterSelection(){
@@ -3016,8 +3452,7 @@
     return out;
   }
 
-  function qCurrentFreeTagRows(){
-    const entry = qCurrentImageEntry();
+  function qImageTagRows(entry){
     if (!entry) return [];
     const segments = entry.segments || {};
     const out = [];
@@ -3037,8 +3472,126 @@
     return out;
   }
 
+  function qCurrentFreeTagRows(){
+    return qImageTagRows(qCurrentImageEntry());
+  }
+
   function qCurrentFreeTags(){
     return qCurrentFreeTagRows().map(row => row.tag);
+  }
+
+  function qCurrentImageTagCount(){
+    return qCurrentFreeTags().length;
+  }
+
+  function qQuizImageFullscreenActive(){
+    const stage = get(QUIZ.imageStage);
+    return !!(stage && (document.fullscreenElement === stage || document.webkitFullscreenElement === stage));
+  }
+
+  function qQuizImagePanLimit(stage, img, zoom){
+    if (!stage || !img || !qQuizImageFullscreenActive() || zoom <= 1.01) return {x: 0, y: 0};
+    const width = Number(img.offsetWidth || 0) * zoom;
+    const height = Number(img.offsetHeight || 0) * zoom;
+    return {
+      x: Math.max(0, (width - Number(stage.clientWidth || 0)) / 2),
+      y: Math.max(0, (height - Number(stage.clientHeight || 0)) / 2),
+    };
+  }
+
+  function qClampQuizImagePan(stage, img, zoom){
+    const limit = qQuizImagePanLimit(stage, img, zoom);
+    quizState.quizImagePanX = Math.max(-limit.x, Math.min(limit.x, Number(quizState.quizImagePanX) || 0));
+    quizState.quizImagePanY = Math.max(-limit.y, Math.min(limit.y, Number(quizState.quizImagePanY) || 0));
+    return limit;
+  }
+
+  function qApplyQuizImageZoom(){
+    const stage = get(QUIZ.imageStage);
+    const img = stage?.querySelector?.('img');
+    if (!stage) return;
+    if (!img){
+      stage.classList.remove('is-quiz-zoomed');
+      stage.classList.remove('is-quiz-pannable', 'is-quiz-panning');
+      return;
+    }
+    const zoom = Math.max(1, Math.min(5, Number(quizState.quizImageZoom) || 1));
+    quizState.quizImageZoom = zoom;
+    const limit = qClampQuizImagePan(stage, img, zoom);
+    img.style.transform = `translate3d(${quizState.quizImagePanX}px, ${quizState.quizImagePanY}px, 0) scale(${zoom})`;
+    stage.classList.toggle('is-quiz-zoomed', zoom > 1.01);
+    stage.classList.toggle('is-quiz-pannable', zoom > 1.01 && (limit.x > 0 || limit.y > 0));
+    img.title = qQuizImageFullscreenActive()
+      ? 'Mouse wheel or Ctrl +/- to zoom. Hold right mouse and drag to pan overflow. Esc exits fullscreen.'
+      : 'Click to view fullscreen';
+  }
+
+  function qSetQuizImageZoom(nextZoom){
+    quizState.quizImageZoom = Math.max(1, Math.min(5, Number(nextZoom) || 1));
+    if (quizState.quizImageZoom <= 1.01){
+      quizState.quizImagePanX = 0;
+      quizState.quizImagePanY = 0;
+    }
+    qApplyQuizImageZoom();
+  }
+
+  function qResetQuizImageZoom(){
+    qStopQuizImagePan();
+    quizState.quizImagePanX = 0;
+    quizState.quizImagePanY = 0;
+    qSetQuizImageZoom(1);
+  }
+
+  function qCanPanQuizImage(){
+    const stage = get(QUIZ.imageStage);
+    const img = stage?.querySelector?.('img');
+    if (!stage || !img || !qQuizImageFullscreenActive() || quizState.quizImageZoom <= 1.01) return false;
+    const limit = qQuizImagePanLimit(stage, img, quizState.quizImageZoom);
+    return limit.x > 0 || limit.y > 0;
+  }
+
+  function qStartQuizImagePan(event){
+    if (!event || event.defaultPrevented || event.button !== 2 || !qCanPanQuizImage()) return;
+    const stage = get(QUIZ.imageStage);
+    if (!stage) return;
+    event.preventDefault();
+    event.stopPropagation();
+    qApplyQuizImageZoom();
+    quizState.quizImagePanning = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      panX: quizState.quizImagePanX,
+      panY: quizState.quizImagePanY,
+    };
+    stage.classList.add('is-quiz-panning');
+    try{ stage.setPointerCapture(event.pointerId); }catch(_){}
+  }
+
+  function qMoveQuizImagePan(event){
+    const pan = quizState.quizImagePanning;
+    if (!pan || !event || event.pointerId !== pan.pointerId) return;
+    event.preventDefault();
+    quizState.quizImagePanX = pan.panX + (event.clientX - pan.startX);
+    quizState.quizImagePanY = pan.panY + (event.clientY - pan.startY);
+    qApplyQuizImageZoom();
+  }
+
+  function qStopQuizImagePan(event){
+    const pan = quizState.quizImagePanning;
+    if (!pan) return;
+    const stage = get(QUIZ.imageStage);
+    if (event && event.pointerId !== pan.pointerId) return;
+    quizState.quizImagePanning = null;
+    stage?.classList.remove('is-quiz-panning');
+    if (event && stage){
+      try{ stage.releasePointerCapture(event.pointerId); }catch(_){}
+    }
+  }
+
+  function qHandleQuizImageContextMenu(event){
+    if (!event || !qCanPanQuizImage()) return;
+    event.preventDefault();
   }
 
   function qRemoveFreeTag(rawTag){
@@ -3069,8 +3622,10 @@
         if (exit) await exit.call(document);
         return;
       }
+      qResetQuizImageZoom();
       const request = stage.requestFullscreen || stage.webkitRequestFullscreen;
       if (request) await request.call(stage);
+      qApplyQuizImageZoom();
     }catch(err){
       qSetStatus(`Fullscreen failed: ${err && err.message ? err.message : err}`);
     }
@@ -3218,7 +3773,7 @@
         return;
       }
     }
-    state.manual = qTags(state.manual || []).filter(tag => !tags.includes(tag));
+    state.manual = [];
     const added = qAddTagsToSegmentState(state, tags, {entry, segId: qIsFreeTaggingMode() ? '__unsorted__' : (seg?.id || '')});
     if (entry && (qIsFreeTaggingMode() || added.length)) entry.final_tags_written = false;
     if (added.length) qRememberRecentManualTags(added, seg);
@@ -3255,7 +3810,7 @@
     const ok = await qConfirmManualApplyAll(tags, imageEntries.length);
     if (!ok) return;
     const currentState = qCurrentSegmentState();
-    if (currentState) currentState.manual = qTags(currentState.manual || []).filter(tag => !tags.includes(tag));
+    if (currentState) currentState.manual = [];
     const addedByRel = {};
     const previousWrittenByRel = {};
     imageEntries.forEach(([rel, entry]) => {
@@ -3338,9 +3893,16 @@
       qSetManualStatus(`"${tag}" already exists in another segment for this image.`);
       return;
     }
-    const tags = qTags(input.value || '');
-    if (!tags.includes(tag)) tags.push(tag);
-    input.value = tags.join(', ');
+    const range = glossarySuggestTokenRange(input);
+    const activeToken = normalizeDanbooruTag((input.value || '').slice(range.start, range.end));
+    if (activeToken && activeToken !== tag && (tag.includes(activeToken) || activeToken.includes(tag))){
+      input.setRangeText(tag, range.start, range.end, 'end');
+      input.value = qTags(input.value || '').join(', ');
+    } else {
+      const tags = qTags(input.value || '');
+      if (!tags.includes(tag)) tags.push(tag);
+      input.value = tags.join(', ');
+    }
     input.dispatchEvent(new Event('input', { bubbles: true }));
     input.focus();
     if (!qIsFreeTaggingMode() && qIsSingleChoiceSegment()){
@@ -3545,6 +4107,23 @@
     qRenderQuiz();
   }
 
+  async function qMoveToSegmentNumber(number){
+    if (!quizState.session) return;
+    if (qIsFreeTaggingMode()){
+      qSetStatus('Free tagging mode has no segment steps. Save Image when done.');
+      return;
+    }
+    qUpdateStateFromInputs();
+    const segments = qSegments();
+    if (!segments.length) return;
+    const safeNumber = Math.max(1, Math.min(segments.length, Number(number) || 1));
+    const idx = safeNumber - 1;
+    quizState.session.current.segment_index = idx;
+    quizState.session.current.segment_id = (segments[idx] || {}).id || '';
+    await qSaveSessionNow();
+    qRenderQuiz();
+  }
+
   async function qSkipSegment(){
     const state = qCurrentSegmentState();
     if (state) state.skipped = true;
@@ -3567,7 +4146,7 @@
 
   function qHasFreeModeTarget(delta){
     if (!quizState.session) return false;
-    const images = Object.entries(quizState.session.images || {});
+    const images = qSessionImageEntries(false);
     const currentRel = qCurrentImageRel();
     const currentIndex = Math.max(0, images.findIndex(([rel]) => rel === currentRel));
     let nextIndex = currentIndex + delta;
@@ -3581,7 +4160,7 @@
 
   function qHasNextQuizImageTarget(delta){
     if (!quizState.session) return false;
-    const images = Object.entries(quizState.session.images || {});
+    const images = qSessionImageEntries(false);
     const currentRel = qCurrentImageRel();
     const currentIndex = Math.max(0, images.findIndex(([rel]) => rel === currentRel));
     let nextIndex = currentIndex + delta;
@@ -3596,7 +4175,7 @@
   async function qGoImageFree(delta){
     if (!quizState.session) return;
     qUpdateStateFromInputs();
-    const images = Object.entries(quizState.session.images || {});
+    const images = qSessionImageEntries(false);
     const currentRel = qCurrentImageRel();
     const currentIndex = Math.max(0, images.findIndex(([rel]) => rel === currentRel));
     let nextIndex = currentIndex + delta;
@@ -3625,7 +4204,7 @@
   async function qGoNextImageFromFreeMode(){
     if (!quizState.session || !qIsFreeTaggingMode()) return;
     qUpdateStateFromInputs();
-    const images = Object.entries(quizState.session.images || {});
+    const images = qSessionImageEntries(false);
     const currentRel = qCurrentImageRel();
     const currentIndex = Math.max(0, images.findIndex(([rel]) => rel === currentRel));
     let nextIndex = currentIndex + 1;
@@ -3670,7 +4249,7 @@
       return;
     }
     qUpdateStateFromInputs();
-    const images = Object.keys(quizState.session.images || {});
+    const images = qSessionImageKeys(false);
     const imageIndex = Math.max(0, images.indexOf(rel));
     entry.status = 'in_progress';
     entry.final_tags_written = false;
@@ -3689,11 +4268,126 @@
     await qSaveSessionNow();
   }
 
-  async function qHandleQuizImageArrow(event){
-    if (!event || event.defaultPrevented || event.altKey || event.metaKey || event.shiftKey) return;
-    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+  function qIsGuidedQuizShortcutActive(){
     const modalEl = get(QUIZ.quizModal);
-    if (!modalEl?.classList.contains('show')) return;
+    if (!modalEl?.classList.contains('show')) return false;
+    const openModals = Array.from(document.querySelectorAll('.modal.show'));
+    return !openModals.length || openModals[openModals.length - 1] === modalEl;
+  }
+
+  function qSegmentShortcutDigit(event){
+    const key = String(event?.key || '');
+    if (/^[1-9]$/.test(key)) return Number(key);
+    const code = String(event?.code || '');
+    const match = code.match(/^Numpad([1-9])$/);
+    return match ? Number(match[1]) : 0;
+  }
+
+  function qQuizZoomKeyDelta(event){
+    if (!event?.ctrlKey || event.shiftKey || event.altKey || event.metaKey || !qQuizImageFullscreenActive()) return 0;
+    const key = String(event.key || '');
+    const code = String(event.code || '');
+    if (key === '+' || key === '=' || code === 'Equal' || code === 'NumpadAdd') return 1;
+    if (key === '-' || key === '_' || code === 'Minus' || code === 'NumpadSubtract') return -1;
+    return 0;
+  }
+
+  function qHandleQuizFullscreenZoomKey(event){
+    const delta = qQuizZoomKeyDelta(event);
+    if (!delta) return false;
+    event.preventDefault();
+    event.stopPropagation();
+    qSetQuizImageZoom(quizState.quizImageZoom + (delta * 0.2));
+    return true;
+  }
+
+  function qQuizWheelDelta(event){
+    const x = Number(event?.deltaX || 0);
+    const y = Number(event?.deltaY || 0);
+    return Math.abs(x) > Math.abs(y) ? x : y;
+  }
+
+  function qHandleQuizImageWheel(event){
+    if (!event || event.defaultPrevented || event.shiftKey || !qIsGuidedQuizShortcutActive() || !qQuizImageFullscreenActive()) return;
+    event.preventDefault();
+    const delta = qQuizWheelDelta(event);
+    if (!delta) return;
+    qSetQuizImageZoom(quizState.quizImageZoom + (delta < 0 ? 0.15 : -0.15));
+  }
+
+  function qHandleQuizSegmentWheel(event){
+    if (!event || event.defaultPrevented || !event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return;
+    if (!qIsGuidedQuizShortcutActive() || qIsFreeTaggingMode()) return;
+    const deltaRaw = qQuizWheelDelta(event);
+    if (!deltaRaw) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const now = Date.now();
+    if (quizState.segmentWheelBusy || now - quizState.lastSegmentWheelAt < 180) return;
+    quizState.segmentWheelBusy = true;
+    quizState.lastSegmentWheelAt = now;
+    qMoveSegment(deltaRaw < 0 ? -1 : 1)
+      .catch(err => qSetStatus(`Segment navigation failed: ${err.message}`))
+      .finally(() => { quizState.segmentWheelBusy = false; });
+  }
+
+  function qHandleQuizFullscreenChange(){
+    if (qQuizImageFullscreenActive()){
+      qApplyQuizImageZoom();
+      return;
+    }
+    qResetQuizImageZoom();
+  }
+
+  function qHandleQuizHotkeysOutsidePointer(event){
+    const details = get(QUIZ.hotkeys);
+    if (!details?.hasAttribute('open')) return;
+    if (details.contains(event.target)) return;
+    details.removeAttribute('open');
+  }
+
+  async function qHandleQuizImageArrow(event){
+    if (!event || event.defaultPrevented || event.altKey || event.metaKey) return;
+    if (!qIsGuidedQuizShortcutActive()) return;
+    if (qHandleQuizFullscreenZoomKey(event)) return;
+    const shiftImageDelta = event.shiftKey && !event.ctrlKey
+      ? (keyMatches(event, 'a') ? -1 : (keyMatches(event, 'd') ? 1 : 0))
+      : 0;
+    if (shiftImageDelta){
+      if (!qCanUseImageArrowNavigation(shiftImageDelta)) return;
+      if (isEditableTarget(event.target) && !qIsFreeTaggingMode()) return;
+      event.preventDefault();
+      if (shiftImageDelta < 0){
+        await qGoImageFree(-1);
+        return;
+      }
+      if (qIsFreeTaggingMode()){
+        await qGoNextImageFromFreeMode();
+        return;
+      }
+      if (qCurrentImageEntry()?.status === 'completed'){
+        await qGoImageFree(1);
+        return;
+      }
+      await qSaveImage();
+      return;
+    }
+    if (event.ctrlKey && !event.shiftKey){
+      if (keyMatches(event, 'q') || keyMatches(event, 'e')){
+        if (qIsFreeTaggingMode()) return;
+        event.preventDefault();
+        await qMoveSegment(keyMatches(event, 'q') ? -1 : 1);
+        return;
+      }
+      const segmentNumber = qSegmentShortcutDigit(event);
+      if (segmentNumber > 0){
+        event.preventDefault();
+        await qMoveToSegmentNumber(segmentNumber);
+        return;
+      }
+    }
+    if (event.shiftKey) return;
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
     if (event.ctrlKey){
       if (qIsFreeTaggingMode()) return;
       event.preventDefault();
@@ -3788,13 +4482,13 @@
 
   async function qDeleteSession(){
     if (!qSessionRequestRoot()) return;
-    const ok = await showConfirm('Delete the active guided tagging session JSON? Caption .txt files are not deleted.', 'Delete session');
+    const ok = await showConfirm('Reset Guided Flow progress by deleting the active session JSON? Caption .txt files are not deleted.', 'Reset Guided Flow progress');
     if (!ok) return;
     await qPost('/api/tagging-quiz/session/delete', {project_root: qSessionRequestRoot(), confirm: true});
     qAcceptServerSession(null);
     qUpdateResumeBanner();
     qRenderOverview();
-    qSetStatus('Deleted tagging session.');
+    qSetStatus('Reset Guided Flow progress.');
   }
 
   async function qArchiveSession(){
@@ -3813,9 +4507,10 @@
     document.querySelectorAll('[data-tagging-quiz-open="1"]').forEach(button => button.addEventListener('click', qOpenQuizEntry));
     get(QUIZ.setup)?.addEventListener('click', qOpenSetup);
     get(QUIZ.start)?.addEventListener('click', qOpenQuizEntry);
-    get(QUIZ.cont)?.addEventListener('click', qOpenQuiz);
+    get(QUIZ.cont)?.addEventListener('click', qOpenQuizEntry);
     get(QUIZ.overview)?.addEventListener('click', () => { qRenderOverview(); qModal(QUIZ.overviewModal)?.show(); });
     get(QUIZ.parse)?.addEventListener('click', qParseCheatsheet);
+    get(QUIZ.danbooruCheck)?.addEventListener('click', qValidateCheatsheetDanbooru);
     get(QUIZ.addRow)?.addEventListener('click', () => { quizState.mappingRows.push({left_sections: [], right_segment: null}); qRenderMappingBoard(); });
     get(QUIZ.autoArrange)?.addEventListener('click', qAutoArrange);
     get(QUIZ.clearMapping)?.addEventListener('click', () => { quizState.mappingRows = qBaseSegments().map(seg => ({left_sections: [], right_segment: seg.id})); qRenderMappingBoard(); });
@@ -3826,6 +4521,8 @@
     get(QUIZ.search)?.addEventListener('input', qRenderQuizChips);
     get(QUIZ.manual)?.addEventListener('input', () => {
       qCancelManualConfirm(false);
+      qUpdateStateFromInputs();
+      qRenderQuizProgress();
       qScheduleSessionSave();
     });
     get(QUIZ.manualApplyAll)?.addEventListener('change', e => {
@@ -3863,6 +4560,17 @@
     get(QUIZ.saveImage)?.addEventListener('click', () => qSaveImage().catch(err => qSetStatus(`Save image failed: ${err.message}`)));
     document.addEventListener('keydown', event => qHandleQuizImageArrow(event).catch(err => qSetStatus(`Image navigation failed: ${err.message}`)));
     document.addEventListener('keydown', qHandleQuizModalEscape);
+    document.addEventListener('fullscreenchange', qHandleQuizFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', qHandleQuizFullscreenChange);
+    document.addEventListener('pointerdown', qHandleQuizHotkeysOutsidePointer, true);
+    get(QUIZ.imageStage)?.addEventListener('wheel', qHandleQuizImageWheel, {passive: false});
+    get(QUIZ.imageStage)?.addEventListener('contextmenu', qHandleQuizImageContextMenu);
+    get(QUIZ.imageStage)?.addEventListener('pointerdown', qStartQuizImagePan);
+    get(QUIZ.imageStage)?.addEventListener('pointermove', qMoveQuizImagePan);
+    get(QUIZ.imageStage)?.addEventListener('pointerup', qStopQuizImagePan);
+    get(QUIZ.imageStage)?.addEventListener('pointercancel', qStopQuizImagePan);
+    get(QUIZ.imageStage)?.addEventListener('lostpointercapture', qStopQuizImagePan);
+    get(QUIZ.quizModal)?.addEventListener('wheel', qHandleQuizSegmentWheel, {passive: false});
     get(QUIZ.later)?.addEventListener('click', async () => { await qSaveSessionNow(); quizState.quizModal?.hide(); qSetStatus('Session saved. Continue later is ready.'); });
     get(QUIZ.openOverview)?.addEventListener('click', () => { qRenderOverview(); qModal(QUIZ.overviewModal)?.show(); });
     get(QUIZ.deleteSession)?.addEventListener('click', qDeleteSession);
@@ -3870,6 +4578,7 @@
     get(QUIZ.setupModal)?.addEventListener('hidden.bs.modal', () => { quizState.setupUsesCurrentSettings = false; });
     get(QUIZ.quizModal)?.addEventListener('hide.bs.modal', () => {
       get(QUIZ.hotkeys)?.removeAttribute('open');
+      qResetQuizImageZoom();
       qScheduleSessionSave(true);
     });
   }
@@ -4018,7 +4727,8 @@
     trigger.setAttribute('data-bs-title', html);
     let tip = bootstrap.Tooltip.getInstance(trigger);
     if (!tip){
-      tip = new bootstrap.Tooltip(trigger);
+      window.bbInitTooltips?.(trigger);
+      tip = bootstrap.Tooltip.getInstance(trigger);
     } else if (typeof tip.setContent === 'function'){
       tip.setContent({ '.tooltip-inner': html });
     }
@@ -4216,6 +4926,49 @@
     });
   }
 
+  function isProjectMultiTriggerEnabled(){
+    return !!get(PROJECT.multiTrigger)?.checked;
+  }
+
+  function renderProjectMultiTriggerPreview(){
+    const wrap = get(PROJECT.multiPreview);
+    if (!wrap) return;
+    const preview = projectState.multiTriggerPreview || null;
+    if (!isProjectMultiTriggerEnabled() || !preview || !preview.enabled){
+      wrap.classList.add('d-none');
+      wrap.innerHTML = '';
+      return;
+    }
+    const ignored = Array.isArray(preview.ignored_folders) ? preview.ignored_folders : [];
+    const ignoredNested = Array.isArray(preview.ignored_nested_folders) ? preview.ignored_nested_folders : [];
+    const examples = Array.isArray(preview.examples) ? preview.examples.slice(0, 5) : [];
+    const groups = Array.isArray(preview.groups) ? preview.groups : [];
+    const html = [];
+    html.push('<div class="project-init-extra-preview small">');
+    html.push('<div class="fw-semibold mb-1">Multiple Trigger Mode enabled</div>');
+    html.push(`<div>Source folders: ${Number(preview.source_folder_count || 0).toLocaleString()} | scanned images: ${Number(preview.source_image_count || 0).toLocaleString()} | root-level images: ${Number(preview.root_image_count || 0).toLocaleString()}</div>`);
+    if (groups.length){
+      html.push('<div class="mt-2 text-muted">Groups</div><ul>');
+      groups.slice(0, 6).forEach(group => {
+        html.push(`<li>${escapeHtml(group.folder || '')} -> <span class="code-chip">${escapeHtml(group.trigger || '(empty)')}</span> (${Number(group.images || 0).toLocaleString()} images)</li>`);
+      });
+      html.push('</ul>');
+    }
+    if (ignored.length || ignoredNested.length){
+      html.push(`<div class="mt-2 text-muted">Ignored: ${escapeHtml([...ignored, ...ignoredNested].join(', '))}</div>`);
+    }
+    if (examples.length){
+      html.push('<div class="mt-2 text-muted">Caption examples</div><ul>');
+      examples.forEach(example => {
+        html.push(`<li>${escapeHtml(example.source || '')}: <span class="code-chip">${escapeHtml(example.caption || '(empty)')}</span></li>`);
+      });
+      html.push('</ul>');
+    }
+    html.push('</div>');
+    wrap.innerHTML = html.join('');
+    wrap.classList.remove('d-none');
+  }
+
   function syncLeftDrawerQuizOverlay(){
     const reviewQuiz = get('quiz-review-modal');
     const guidedQuiz = get(QUIZ.quizModal);
@@ -4283,6 +5036,7 @@
   }
 
   function setLeftDrawer(panel){
+    window.bbHideTooltips?.();
     const next = (panel === 'cheatsheet' || panel === 'project') ? panel : null;
     const cheat = get(LEFT.cheatPanel);
     const project = get(LEFT.projectPanel);
@@ -4686,11 +5440,7 @@
       </div>
     `;
     const composerInfoTip = editorHeading.querySelector('#composer-info-tip');
-    if (composerInfoTip && typeof bootstrap !== 'undefined' && bootstrap.Tooltip){
-      if (!bootstrap.Tooltip.getInstance(composerInfoTip)){
-        new bootstrap.Tooltip(composerInfoTip);
-      }
-    }
+    if (composerInfoTip) window.bbInitTooltips?.(composerInfoTip);
     const previewLabel = Array.from(editorPanel.querySelectorAll('.form-label'))
       .find(el => /effective paths preview/i.test(el.textContent || ''));
     previewLabel?.closest('div')?.remove();
@@ -4734,11 +5484,8 @@
     hiddenFields.forEach(field=> form.appendChild(field));
     form.append(leftRail, backdrop, cheatDrawer, projectDrawer, shell);
     const hotkeysTipBtn = get(LEFT.hotkeysBtn);
-    if (hotkeysTipBtn && typeof bootstrap !== 'undefined' && bootstrap.Tooltip){
-      if (!bootstrap.Tooltip.getInstance(hotkeysTipBtn)){
-        new bootstrap.Tooltip(hotkeysTipBtn);
-      }
-    }
+    if (hotkeysTipBtn) window.bbInitTooltips?.(hotkeysTipBtn);
+    window.bbInitTooltips?.(form);
     bindLeftDrawerControls();
     setLeftDrawer(null);
     refreshWorkspaceGating();
@@ -4829,6 +5576,7 @@
     if (projectState.ready && !cueItems.length) cueItems.push({ label: 'Ready', tone: 'is-ready' });
     renderProjectCueList(cueItems);
     renderProjectInfoList([...warnings, ...info]);
+    renderProjectMultiTriggerPreview();
 
     if (initBtn) initBtn.classList.toggle('d-none', !projectState.needsInit);
     if (planWrap && plan){
@@ -5042,6 +5790,7 @@
     projectState.normalizedFromLegacy = false;
     projectState.triggerWord = '';
     projectState.initPreview = null;
+    projectState.multiTriggerPreview = null;
     renderProjectState();
     refreshTempHints();
     if (!folder){
@@ -5052,7 +5801,7 @@
       const res = await fetch('/api/tags/project-state', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ folder, exts: get(IDS.exts)?.value || '' })
+        body: JSON.stringify({ folder, exts: get(IDS.exts)?.value || '', multi_trigger_mode: isProjectMultiTriggerEnabled() })
       });
       let data = null;
       try { data = await res.json(); } catch(_) {}
@@ -5074,6 +5823,7 @@
       projectState.normalizedFromLegacy = !!data.normalized_from_legacy;
       projectState.triggerWord = data.trigger_word || '';
       projectState.initPreview = data.init_preview || null;
+      projectState.multiTriggerPreview = data.multi_trigger_preview || null;
       maybeAutofillTriggerSafety(projectState.triggerWord);
       if (projectState.root && projectState.root !== folder){
         const input = get(IDS.folder);
@@ -5101,7 +5851,7 @@
       const previewRes = await fetch('/api/tags/project-init', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ folder, exts: get(IDS.exts)?.value || '', apply: false })
+        body: JSON.stringify({ folder, exts: get(IDS.exts)?.value || '', apply: false, multi_trigger_mode: isProjectMultiTriggerEnabled() })
       });
       try { preview = await previewRes.json(); } catch(_) {}
       if (!previewRes.ok || !preview || !preview.ok){
@@ -5109,6 +5859,7 @@
         return;
       }
       projectState.initPreview = preview.init_preview || null;
+      projectState.multiTriggerPreview = preview.multi_trigger_preview || null;
       projectState.missing = Array.isArray(preview.missing) ? preview.missing : projectState.missing;
       projectState.warnings = Array.isArray(preview.warnings) ? preview.warnings : projectState.warnings;
       projectState.info = Array.isArray(preview.info) ? preview.info : projectState.info;
@@ -5130,10 +5881,11 @@
       const res = await fetch('/api/tags/project-init', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ folder: getProjectRootInput(), exts: get(IDS.exts)?.value || '', apply: true })
+        body: JSON.stringify({ folder: getProjectRootInput(), exts: get(IDS.exts)?.value || '', apply: true, multi_trigger_mode: isProjectMultiTriggerEnabled() })
       });
       let data = null;
       try { data = await res.json(); } catch(_) {}
+      showLog('');
       (data?.logs || []).forEach(line => appendTagsLog(line));
       if (!res.ok || !data || !data.ok){
         showStatus((data && data.error) ? data.error : `Init failed (HTTP ${res.status})`);
@@ -7207,6 +7959,7 @@
     }
     const movedItems = Array.isArray(data.moved) ? data.moved : [];
     const errors = Array.isArray(data.errors) ? data.errors : [];
+    showLog('');
     movedItems.forEach(item=>{
       appendTagsLog(`Moved ${item.src} -> ${item.rel || item.src}`);
       (item.warnings || []).forEach(warn => appendTagsLog(`[WARN] ${warn}`));
@@ -7279,6 +8032,7 @@
       return;
     }
 
+    showLog('');
     movedItems.forEach(item=>{
       appendTagsLog(`Moved ${item.src} -> ${item.rel || item.src}`);
       (item.warnings || []).forEach(warn => appendTagsLog(`[WARN] ${warn}`));
@@ -7323,6 +8077,7 @@
         setWorkdirStatus(`Move all failed: ${err}`);
         return;
       }
+      showLog('');
       (data.logs || []).forEach(line => appendTagsLog(line));
       const movedItems = Array.isArray(data.moved) ? data.moved : [];
       const errors = Array.isArray(data.errors) ? data.errors : [];
@@ -7775,10 +8530,12 @@
     const targetId = tabName === 'glossary' ? DANBOORU.tabGlossary : DANBOORU.tabInfo;
     const btn = get(targetId);
     if (!btn || !window.bootstrap || !bootstrap.Tab) return;
+    window.bbHideTooltips?.();
     bootstrap.Tab.getOrCreateInstance(btn).show();
   }
 
   function openDanbooruOffcanvas(tabName='info', forceOpen=false){
+    window.bbHideTooltips?.();
     setDanbooruTab(tabName);
     const instance = ensureDanbooruOffcanvas();
     const el = get(DANBOORU.offcanvas);
@@ -8178,10 +8935,10 @@
     const steps = Array.isArray(quizState.reviewSteps) ? quizState.reviewSteps : [];
     const matching = [];
     const other = [];
-    steps.forEach(step => {
+    steps.forEach((step, index) => {
       const tags = qTags(step?.tags || []);
       if (!tags.length) return;
-      (qReviewStepMatchesSegment(step, segment) ? matching : other).push({ step, tags });
+      (qReviewStepMatchesSegment(step, segment) ? matching : other).push({ step, tags, index });
     });
     return { matching, other };
   }
@@ -9498,6 +10255,39 @@
     if (savedMode) setMode(savedMode, false);
     else setMode('', false);
   }
+  function getPipelineReviewJobId(){
+    const params = new URLSearchParams(window.location.search || '');
+    const fromQuery = (params.get('pipeline_job_id') || '').trim();
+    if (fromQuery) return fromQuery;
+    try{ return (localStorage.getItem('bb_pipeline_review_job_id') || '').trim(); }catch(_){ return ''; }
+  }
+  async function applyPipelineReviewMode(){
+    const jobId = getPipelineReviewJobId();
+    if(!jobId) return;
+    try{
+      const res = await fetch(`/api/pipeline/review-context?job_id=${encodeURIComponent(jobId)}`);
+      const data = await res.json();
+      if(!res.ok || data.ok === false || !data.review_project_root) return;
+      const folderInput = get(IDS.folder);
+      if(folderInput){
+        folderInput.value = data.review_project_root || '';
+        try{ localStorage.setItem(LSKEY + 'folder', folderInput.value); }catch(_){}
+      }
+      const banner = get('pipeline-review-banner');
+      if(banner) banner.classList.remove('d-none');
+      renderProjectState();
+      await loadProjectState({ silent: false });
+      setGalleryPath(getGalleryRoot());
+      setWorkdirPath(getWorkdirRoot());
+      await qLoadSession(true);
+      await loadCheatsheet();
+      await loadGallery();
+      await loadWorkdirRoot();
+      await scanTagViz();
+    }catch(err){
+      console.warn('Pipeline review handoff failed', err);
+    }
+  }
   function hookSavers(){
     FIELDS.forEach(([k,id])=>{
       const el = get(id); if(!el) return;
@@ -9549,15 +10339,31 @@
     if (moveAllBtn) moveAllBtn.disabled = formBusy;
   }
   function showLog(text){
-    const wrap = get(IDS.logWrap), pre = get(IDS.logPre);
+    const wrap = get(IDS.logWrap), pre = get(IDS.logPre), meta = get(IDS.logMeta);
     if(!wrap||!pre) return;
     if (text && text.trim()){
       wrap.classList.remove('d-none');
+      wrap.open = false;
       pre.textContent = text;
+      updateTagsLogMeta();
     } else {
       wrap.classList.add('d-none');
+      wrap.open = false;
       pre.textContent = '';
+      if (meta) meta.textContent = '';
     }
+  }
+
+  function updateTagsLogMeta(){
+    const pre = get(IDS.logPre), meta = get(IDS.logMeta);
+    if (!pre || !meta) return;
+    const lines = (pre.textContent || '').split(/\r?\n/).filter(line => line.trim());
+    const warnings = lines.filter(line => /\bwarn(?:ing)?\b/i.test(line)).length;
+    const errors = lines.filter(line => /\berror\b/i.test(line)).length;
+    const parts = [`${lines.length} ${lines.length === 1 ? 'line' : 'lines'}`];
+    if (warnings) parts.push(`${warnings} ${warnings === 1 ? 'warning' : 'warnings'}`);
+    if (errors) parts.push(`${errors} ${errors === 1 ? 'error' : 'errors'}`);
+    meta.textContent = lines.length ? parts.join(' | ') : '';
   }
 
   function appendTagsLog(line){
@@ -9566,6 +10372,7 @@
     const current = pre.textContent ? pre.textContent.replace(/\s+$/,'') + '\n' : '';
     wrap.classList.remove('d-none');
     pre.textContent = current + line;
+    updateTagsLogMeta();
   }
   async function postForm(fd){
     const res = await fetch(window.location.href, {
@@ -9824,6 +10631,7 @@
       loadGallery();
       loadWorkdirRoot();
       scanTagViz();
+      applyPipelineReviewMode();
     });
 
     get(TAGVIZ.scan)?.addEventListener('click', scanTagViz);
@@ -9915,6 +10723,11 @@
     });
     get(PROJECT.refresh)?.addEventListener('click', async ()=>{ await loadProjectState({ silent: false }); await loadGallery(); await loadWorkdirRoot(); await scanTagViz(); });
     get(PROJECT.initPreview)?.addEventListener('click', previewProjectInit);
+    get(PROJECT.multiTrigger)?.addEventListener('change', async ()=>{
+      projectState.initPreview = null;
+      projectState.multiTriggerPreview = null;
+      await loadProjectState({ silent: true });
+    });
     get(TRIGGER_SAFETY.check)?.addEventListener('click', checkTriggerSafety);
     get(TRIGGER_SAFETY.add)?.addEventListener('click', addTriggerSafetyBlacklistEntry);
     get(TRIGGER_SAFETY.trigger)?.addEventListener('input', (e)=>{
@@ -10030,6 +10843,7 @@
       }
     });
     document.addEventListener('keydown', (e)=>{
+      if (get(QUIZ.quizModal)?.classList.contains('show')) return;
       const target = e.target;
       const editableTarget = isEditableTarget(target);
       if (!editableTarget){

@@ -5,6 +5,8 @@ BUCKET_BACKGROUND_PLACE = "background_place"
 BUCKET_OBJECT_PROP = "object_prop"
 BUCKET_POSE_ACTION = "pose_action"
 BUCKET_LIMB_ACTION = "limb_action"
+BUCKET_CAMERA_COMPOSITION = "camera_composition"
+BUCKET_LIGHTING_ENVIRONMENT = "lighting_environment"
 BUCKET_APPEARANCE_IDENTITY = "appearance_identity"
 BUCKET_CLOTHING_OUTFIT = "clothing_outfit"
 BUCKET_UNKNOWN = "unknown"
@@ -73,6 +75,36 @@ EXACT_ALLOW_BACKGROUND = {
     "alley",
     "park",
     "garden",
+}
+
+EXACT_ALLOW_CAMERA = {
+    "close_up",
+    "portrait",
+    "upper_body",
+    "cowboy_shot",
+    "full_body",
+    "from_above",
+    "from_below",
+    "dutch_angle",
+    "side_view",
+    "profile",
+    "depth_of_field",
+}
+
+EXACT_ALLOW_LIGHTING = {
+    "day",
+    "night",
+    "sunset",
+    "sunrise",
+    "indoors",
+    "outdoors",
+    "rain",
+    "snow",
+    "dramatic_lighting",
+    "backlighting",
+    "rim_light",
+    "shadow",
+    "cloudy_sky",
 }
 
 EXACT_ALLOW_OBJECT = {
@@ -201,6 +233,34 @@ EXACT_DENY_APPEARANCE = {
     "dark_skin",
     "pale_skin",
     "tan",
+    "breasts",
+    "medium_breasts",
+    "huge_breasts",
+    "flat_chest",
+    "cleavage",
+    "navel",
+    "thighs",
+    "wide_hips",
+    "long_legs",
+    "bare_arms",
+    "bare_legs",
+    "bare_shoulders",
+    "barefoot",
+    "feet",
+    "toes",
+    "fingernails",
+    "lips",
+    "nose",
+    "closed_eyes",
+    "half_closed_eyes",
+    "one_eye_closed",
+    "heterochromia",
+    "animal_ears",
+    "cat_ears",
+    "fox_ears",
+    "elf",
+    "dark_skinned_female",
+    "dark_skinned_male",
     "large_breasts",
     "small_breasts",
 }
@@ -241,6 +301,22 @@ EXACT_DENY_CLOTHING = {
     "tie",
     "scarf",
     "headwear",
+    "short_sleeves",
+    "long_sleeves",
+    "sleeveless",
+    "detached_sleeves",
+    "puffy_sleeves",
+    "collar",
+    "sailor_collar",
+    "hood",
+    "belt",
+    "apron",
+    "glasses",
+    "earrings",
+    "necklace",
+    "bracelet",
+    "wristband",
+    "choker",
 }
 
 REGEX_ALLOW_BACKGROUND = [
@@ -251,6 +327,17 @@ REGEX_ALLOW_BACKGROUND = [
     r"(?:^|_)(sky|cloud|night|day|sunset|sunrise|moon|star)(?:$|_)",
     r"(?:^|_)(tree|grass|flower|river|mountain|beach|sea|ocean|lake)(?:$|_)",
     r"_background$",
+]
+
+REGEX_ALLOW_CAMERA = [
+    r"^(close_up|portrait|upper_body|cowboy_shot|full_body)$",
+    r"^(from_above|from_below|dutch_angle|side_view|profile)$",
+    r"^(depth_of_field)$",
+]
+
+REGEX_ALLOW_LIGHTING = [
+    r"^(day|night|sunset|sunrise|indoors|outdoors)$",
+    r"^(rain|snow|dramatic_lighting|backlighting|rim_light|shadow|cloudy_sky)$",
 ]
 
 REGEX_ALLOW_OBJECT = [
@@ -275,17 +362,23 @@ REGEX_ALLOW_LIMB = [
 
 REGEX_DENY_APPEARANCE = [
     r"(?:^|_)(?:red|blue|green|brown|black|blonde|pink|purple|orange|yellow|gray|white|silver)_(?:hair|eyes|skin)(?:$|_)",
-    r"(?:^|_)(long_hair|short_hair|very_long_hair|twintails|ponytail|braid|ahoge|bangs)(?:$|_)",
-    r"(?:^|_)(1girl|1boy|2girls|2boys|3girls|3boys|multiple_girls|multiple_boys|solo)(?:$|_)",
-    r"(?:^|_)(pointy_ears|fang|freckles|dark_skin|pale_skin|tan|large_breasts|small_breasts)(?:$|_)",
+    r"(?:^|_)(hair|eyes|eye|skin|face|mouth|lips|nose|fang|freckles|ears?)(?:$|_)",
+    r"(?:^|_)(long_hair|short_hair|very_long_hair|medium_hair|twintails|ponytail|braid|braids|single_braid|hair_bun|drill_hair|messy_hair|wavy_hair|straight_hair|ahoge|bangs|hair_between_eyes|hair_over_one_eye|one_eye_covered|hair_ornament)(?:$|_)",
+    r"(?:^|_)(closed_eyes|half_closed_eyes|one_eye_closed|heterochromia)(?:$|_)",
+    r"(?:^|_)(1girl|1boy|2girls|2boys|3girls|3boys|multiple_girls|multiple_boys|solo|girl|boy|male|female|male_focus|female_focus)(?:$|_)",
+    r"(?:^|_)(pointy_ears|animal_ears|cat_ears|fox_ears|elf|dark_skin|dark_skinned|pale_skin|tan|colored_skin)(?:$|_)",
+    r"(?:^|_)(breasts?|large_breasts|small_breasts|medium_breasts|huge_breasts|flat_chest|cleavage|navel|thighs?|wide_hips|long_legs|bare_arms|bare_legs|bare_shoulders|barefoot|feet|toes|fingernails)(?:$|_)",
+    r"_(hair|eyes|skin|ears|breasts|thighs|legs|arms|shoulders|feet)$",
 ]
 
 REGEX_DENY_CLOTHING = [
     r"(?:^|_)(dress|shirt|jacket|coat|hoodie|robe|armor|uniform|school_uniform)(?:$|_)",
-    r"(?:^|_)(skirt|pants|shorts|jeans|kimono|bikini|swimsuit|leotard|lingerie)(?:$|_)",
+    r"(?:^|_)(skirt|pants|shorts|jeans|kimono|bikini|swimsuit|leotard|lingerie|underwear|panties|bra)(?:$|_)",
     r"(?:^|_)(glove|gloves|boot|boots|shoe|shoes|sock|socks|thighhighs|pantyhose|stockings)(?:$|_)",
-    r"(?:^|_)(hat|cap|cape|ribbon|hair_ribbon|neck_ribbon|necktie|tie|scarf)(?:$|_)",
-    r"_(dress|shirt|jacket|coat|hoodie|robe|armor|uniform|skirt|pants|shorts|jeans|kimono|bikini|swimsuit|leotard|lingerie)$",
+    r"(?:^|_)(hat|cap|cape|ribbon|hair_ribbon|neck_ribbon|necktie|tie|scarf|headwear|hood)(?:$|_)",
+    r"(?:^|_)(short_sleeves|long_sleeves|sleeveless|detached_sleeves|puffy_sleeves|collar|sailor_collar|belt|apron)(?:$|_)",
+    r"(?:^|_)(glasses|earrings|necklace|bracelet|wristband|choker)(?:$|_)",
+    r"_(dress|shirt|jacket|coat|hoodie|robe|armor|uniform|skirt|pants|shorts|jeans|kimono|bikini|swimsuit|leotard|lingerie|sleeves|collar|ribbon)$",
 ]
 
 
@@ -294,6 +387,8 @@ def _compile(patterns: List[str]) -> List[Pattern[str]]:
 
 
 COMPILED_REGEX_ALLOW_BACKGROUND = _compile(REGEX_ALLOW_BACKGROUND)
+COMPILED_REGEX_ALLOW_CAMERA = _compile(REGEX_ALLOW_CAMERA)
+COMPILED_REGEX_ALLOW_LIGHTING = _compile(REGEX_ALLOW_LIGHTING)
 COMPILED_REGEX_ALLOW_OBJECT = _compile(REGEX_ALLOW_OBJECT)
 COMPILED_REGEX_ALLOW_POSE = _compile(REGEX_ALLOW_POSE)
 COMPILED_REGEX_ALLOW_LIMB = _compile(REGEX_ALLOW_LIMB)

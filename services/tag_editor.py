@@ -1,4 +1,5 @@
 from collections import Counter, OrderedDict
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -14,6 +15,7 @@ from utils.io import readable_path
 from utils.parse import parse_bool, parse_exts, parse_tag_list
 from utils.text_io import read_text_best_effort
 from utils.tool_result import build_tool_result
+from services.paths import user_path
 
 EDIT_MODES = {"insert", "delete", "replace", "dedup", "move"}
 DEFAULT_PROJECT_PROMPT = """trigger_word
@@ -49,9 +51,10 @@ DEFAULT_TAGGING_QUIZ_SETTINGS = {
         "custom_template": "",
     },
 }
-TAGGING_QUIZ_SETTINGS_PATH = Path(__file__).resolve().parent.parent / "settings" / "tagging_quiz.json"
+TAGGING_QUIZ_SETTINGS_PATH = user_path("settings", "tagging_quiz.json")
 TAGGING_SESSION_REL = Path("dataset") / "_temp" / "tagging_session.json"
 TAGGING_SESSION_STORE_REL = Path("dataset") / "_temp" / "tagging_sessions"
+TAGGING_SESSION_VERSION = 2
 _TXT_TAG_CACHE: "OrderedDict[str, Tuple[Tuple[int, int], List[str]]]" = OrderedDict()
 _TXT_TAG_CACHE_MAX = 4096
 
@@ -127,6 +130,24 @@ def _normalize_exts(exts: List[str]) -> Set[str]:
     return out
 
 
+def _natural_path_key(root: Path, path: Path) -> Tuple[Tuple[Any, ...], ...]:
+    try:
+        rel = path.relative_to(root)
+    except Exception:
+        rel = path
+    key: List[Tuple[Any, ...]] = []
+    for part in rel.parts:
+        for token in re.split(r"(\d+)", part.casefold()):
+            if not token:
+                continue
+            if token.isdigit():
+                key.append((0, int(token), token))
+            else:
+                key.append((1, token))
+        key.append((2, ""))
+    return tuple(key)
+
+
 def _list_images(
     folder_path: Path,
     exts: List[str],
@@ -149,7 +170,7 @@ def _list_images(
                 images.append(p)
     else:
         images = [p for p in folder_path.iterdir() if p.is_file() and p.suffix.lower() in extset]
-    return sorted(images, key=lambda p: str(p).lower())
+    return sorted(images, key=lambda p: _natural_path_key(folder_path, p))
 
 
 def _next_pair_target(folder: Path, stem: str, image_suffix: str) -> Tuple[Path, Path, bool]:
@@ -569,6 +590,150 @@ def _image_name_index(images: List[Path]) -> Set[str]:
     return {img.name.lower() for img in images if img and img.is_file()}
 
 
+@dataclass(frozen=True)
+class InitSourceImage:
+    path: Path
+    source_rel: str
+    secondary_trigger: str = ""
+
+
+def _folder_name_to_trigger(folder_name: str) -> str:
+    raw = str(folder_name or "").strip().lower()
+    raw = re.sub(r"[^a-z0-9]+", "_", raw)
+    raw = re.sub(r"_+", "_", raw).strip("_")
+    return raw
+
+
+def _source_rel(root: Path, path: Path) -> str:
+    try:
+        return path.relative_to(root).as_posix()
+    except Exception:
+        return path.name
+
+
+def _collect_images_under_source_folder(
+    project_root: Path,
+    source_dir: Path,
+    extset: Set[str],
+    secondary_trigger: str,
+    ignored_folder_logs: List[str],
+) -> List[InitSourceImage]:
+    found: List[InitSourceImage] = []
+    for current, dirnames, filenames in os.walk(source_dir, followlinks=False):
+        cur_path = Path(current)
+        kept_dirs: List[str] = []
+        for dirname in sorted(dirnames, key=lambda value: value.lower()):
+            child = cur_path / dirname
+            rel = _source_rel(project_root, child)
+            if dirname.startswith("_"):
+                ignored_folder_logs.append(f'[skip-folder] {rel} | reason: starts with "_"')
+                continue
+            if child.is_symlink():
+                ignored_folder_logs.append(f"[skip-folder] {rel} | reason: symlink")
+                continue
+            kept_dirs.append(dirname)
+        dirnames[:] = kept_dirs
+
+        for filename in sorted(filenames, key=lambda value: value.lower()):
+            path = cur_path / filename
+            if _is_image_file(path, extset):
+                found.append(InitSourceImage(path=path, source_rel=_source_rel(project_root, path), secondary_trigger=secondary_trigger))
+    return found
+
+
+def _collect_init_source_images(
+    project_root: Path,
+    exts: List[str],
+    multi_trigger_mode: bool,
+) -> Tuple[List[InitSourceImage], List[str], List[str]]:
+    extset = _normalize_exts(exts)
+    ignored_folder_logs: List[str] = []
+    warnings: List[str] = []
+    if not project_root.exists() or not project_root.is_dir() or not extset:
+        if project_root.exists() and project_root.is_dir() and not extset:
+            warnings.append("No valid image extensions supplied; source image scan skipped.")
+        return [], ignored_folder_logs, warnings
+
+    if not multi_trigger_mode:
+        images = [
+            InitSourceImage(path=path, source_rel=path.name, secondary_trigger="")
+            for path in sorted(project_root.iterdir(), key=lambda p: p.name.lower())
+            if _is_image_file(path, extset)
+        ]
+        return images, ignored_folder_logs, warnings
+
+    images: List[InitSourceImage] = []
+    managed = {"database", "dataset"}
+    for path in sorted(project_root.iterdir(), key=lambda p: p.name.lower()):
+        if _is_image_file(path, extset):
+            images.append(InitSourceImage(path=path, source_rel=path.name, secondary_trigger=""))
+            continue
+        if not path.is_dir():
+            continue
+        name = path.name
+        clean_name = name.lower()
+        if path.is_symlink():
+            ignored_folder_logs.append(f"[skip-group] {name} | reason: symlink")
+            continue
+        if clean_name in managed:
+            continue
+        if name.startswith("_"):
+            ignored_folder_logs.append(f'[skip-group] {name} | reason: starts with "_"')
+            continue
+        trigger = _folder_name_to_trigger(name)
+        if not trigger:
+            warnings.append(f'Source folder "{name}" did not produce a valid trigger tag.')
+        images.extend(_collect_images_under_source_folder(project_root, path, extset, trigger, ignored_folder_logs))
+
+    return sorted(images, key=lambda item: item.source_rel.lower()), ignored_folder_logs, warnings
+
+
+def _caption_for_init_source(primary_trigger: str, secondary_trigger: str = "") -> str:
+    primary_tags = parse_tag_list(primary_trigger, dedupe=False)
+    tags = _dedup_tags([*primary_tags, secondary_trigger])
+    return join_tags(tags)
+
+
+def _build_multi_trigger_preview(
+    source_images: List[InitSourceImage],
+    ignored_folder_logs: List[str],
+    primary_trigger: str,
+) -> Dict[str, Any]:
+    groups: "OrderedDict[str, Dict[str, Any]]" = OrderedDict()
+    root_image_count = 0
+    examples: List[Dict[str, str]] = []
+    for item in source_images:
+        if "/" not in item.source_rel:
+            root_image_count += 1
+        else:
+            folder = item.source_rel.split("/", 1)[0]
+            if folder not in groups:
+                groups[folder] = {"folder": folder, "trigger": item.secondary_trigger, "images": 0}
+            groups[folder]["images"] += 1
+        if len(examples) < 5:
+            examples.append({"source": item.source_rel, "caption": _caption_for_init_source(primary_trigger, item.secondary_trigger)})
+
+    def _ignored(prefix: str) -> List[str]:
+        out: List[str] = []
+        for line in ignored_folder_logs:
+            if not line.startswith(prefix):
+                continue
+            body = line.split("] ", 1)[1] if "] " in line else line
+            out.append(body.split(" |", 1)[0])
+        return out
+
+    return {
+        "enabled": True,
+        "source_folder_count": len(groups),
+        "source_image_count": len(source_images),
+        "root_image_count": root_image_count,
+        "ignored_folders": _ignored("[skip-group]"),
+        "ignored_nested_folders": _ignored("[skip-folder]"),
+        "groups": list(groups.values()),
+        "examples": examples,
+    }
+
+
 def resolve_project_paths(raw_folder: Path) -> Dict[str, Any]:
     normalized_input = readable_path(str(raw_folder or "")).expanduser()
     project_root = normalized_input
@@ -614,7 +779,7 @@ def extract_trigger_word(prompt_path: Path) -> str:
     return ""
 
 
-def inspect_project_layout(project_root: Path, exts: List[str]) -> Dict[str, Any]:
+def inspect_project_layout(project_root: Path, exts: List[str], multi_trigger_mode: bool = False) -> Dict[str, Any]:
     paths = resolve_project_paths(project_root)
     root = paths["project_root"]
     extset = _normalize_exts(exts)
@@ -637,6 +802,7 @@ def inspect_project_layout(project_root: Path, exts: List[str]) -> Dict[str, Any
     if not prompt_exists:
         missing.append("prompt.txt")
 
+    source_images, ignored_folder_logs, source_warnings = _collect_init_source_images(root, exts, multi_trigger_mode)
     root_images: List[Path] = []
     root_non_images = 0
     if root.exists() and root.is_dir() and extset:
@@ -682,14 +848,38 @@ def inspect_project_layout(project_root: Path, exts: List[str]) -> Dict[str, Any
         else:
             preview_examples.append({"source": img.name, "image": f"database/{img.name}"})
 
+    multi_trigger_preview = None
+    if multi_trigger_mode:
+        source_missing_database = [
+            item.source_rel for item in source_images if item.path.name.lower() not in database_names
+        ]
+        source_missing_dataset = [
+            item.source_rel for item in source_images if item.path.name.lower() not in dataset_names
+        ]
+        missing = [item for item in missing if not item.startswith("database(root images:") and not item.startswith("dataset(root images:")]
+        if source_missing_database:
+            missing.append(f"database(source images:{len(source_missing_database)})")
+        if source_missing_dataset:
+            missing.append(f"dataset(source images:{len(source_missing_dataset)})")
+        missing_root_in_database = source_missing_database
+        missing_root_in_dataset = source_missing_dataset
+        preview_examples = []
+        for item in source_images:
+            if item.path.name.lower() in database_names:
+                continue
+            preview_examples.append({"source": item.source_rel, "image": f"database/{item.path.name}"})
+        multi_trigger_preview = _build_multi_trigger_preview(source_images, ignored_folder_logs, trigger_word)
+
     ready = root.exists() and root.is_dir() and not missing
-    warnings: List[str] = []
+    warnings: List[str] = list(source_warnings)
     if root.exists() and root.is_dir() and not extset:
         warnings.append("No valid image extensions supplied; root-level image scan skipped.")
     if root.exists() and root.is_dir() and not root_images and not ready:
         warnings.append("No root-level source images detected for initialization preview.")
     if dataset_missing_txt:
         warnings.append(f"Dataset has {dataset_missing_txt} image(s) without paired .txt.")
+    if multi_trigger_mode:
+        warnings = [item for item in warnings if item != "No root-level source images detected for initialization preview."]
     return {
         "ok": True,
         **_make_serializable_path_info(paths),
@@ -738,6 +928,7 @@ def inspect_project_layout(project_root: Path, exts: List[str]) -> Dict[str, Any
                 else ""
             ),
         ),
+        **({"multi_trigger_preview": multi_trigger_preview} if multi_trigger_preview else {}),
     }
 
 
@@ -746,10 +937,11 @@ def initialize_project_layout(
     exts: List[str],
     create_prompt: bool = True,
     tagging_quiz_settings: Optional[Dict[str, Any]] = None,
+    multi_trigger_mode: bool = False,
 ) -> Dict[str, Any]:
     paths = resolve_project_paths(project_root)
     root = paths["project_root"]
-    inspect = inspect_project_layout(root, exts)
+    inspect = inspect_project_layout(root, exts, multi_trigger_mode=multi_trigger_mode)
     if not inspect.get("ok"):
         return inspect
     if root.exists() and not root.is_dir():
@@ -790,6 +982,144 @@ def initialize_project_layout(
             skipped.append("prompt.txt: already exists")
 
     trigger_word = extract_trigger_word(paths["prompt_path"])
+    if multi_trigger_mode:
+        source_images, ignored_folder_logs, source_warnings = _collect_init_source_images(root, exts, multi_trigger_mode=True)
+        warnings: List[str] = list(source_warnings)
+        logs.append("[multi-trigger] enabled")
+        logs.extend(ignored_folder_logs)
+        primary_tags = parse_tag_list(trigger_word, dedupe=False)
+        has_secondary_trigger = any(bool(item.secondary_trigger) for item in source_images)
+        if not primary_tags and has_secondary_trigger:
+            warnings.append("No primary trigger detected; generated captions use folder trigger only where available.")
+            logs.append("[warn] no primary trigger detected; using folder trigger only where available")
+        elif not primary_tags and not has_secondary_trigger:
+            warnings.append("No primary trigger detected; generated empty captions where no folder trigger is available.")
+            logs.append("[warn] no primary trigger or folder trigger detected; empty captions may be generated")
+
+        group_counts: "OrderedDict[Tuple[str, str], int]" = OrderedDict()
+        for item in source_images:
+            if "/" not in item.source_rel:
+                continue
+            folder = item.source_rel.split("/", 1)[0]
+            key = (folder, item.secondary_trigger)
+            group_counts[key] = group_counts.get(key, 0) + 1
+        for (folder, trigger), count in group_counts.items():
+            logs.append(f"[group] {folder} -> {trigger or '(empty)'} | images: {count}")
+
+        dataset_images_before = _list_images(paths["dataset_root"], exts, recursive=True, exclude_dir=paths["temp_root"])
+        existing_dataset_name_index = _image_name_index(dataset_images_before)
+        dataset_ready_source_paths: Set[str] = set()
+        caption_by_rel_txt: Dict[str, str] = {}
+
+        for item in source_images:
+            src_img = item.path
+            src_path_key = str(src_img)
+            if src_img.name.lower() in existing_dataset_name_index:
+                skipped.append(f"dataset/{src_img.name}: image already exists")
+                logs.append(f"[skip] dataset/{src_img.name} image already exists")
+                existing_target = paths["dataset_root"] / src_img.name
+                if existing_target.exists() and existing_target.is_file():
+                    rel_txt = existing_target.with_suffix(".txt").relative_to(paths["dataset_root"]).as_posix()
+                    caption_by_rel_txt.setdefault(rel_txt, _caption_for_init_source(trigger_word, item.secondary_trigger))
+                dataset_ready_source_paths.add(src_path_key)
+                continue
+            dst_img, dst_txt, renamed_flag = _next_pair_target(paths["dataset_root"], src_img.stem, src_img.suffix.lower())
+            if renamed_flag:
+                renamed.append({"source": item.source_rel, "target": dst_img.name, "scope": "dataset"})
+                logs.append(f"[rename][dataset] {item.source_rel} -> {dst_img.name}")
+            ok, error = _copy_image_only(src_img, dst_img)
+            if not ok:
+                errors.append(f"dataset/{item.source_rel}: {error}")
+                logs.append(f"[error] copy dataset/{item.source_rel}: {error}")
+                continue
+            dataset_ready_source_paths.add(src_path_key)
+            rel_img = dst_img.relative_to(paths["dataset_root"]).as_posix()
+            rel_txt = dst_txt.relative_to(paths["dataset_root"]).as_posix()
+            caption_by_rel_txt[rel_txt] = _caption_for_init_source(trigger_word, item.secondary_trigger)
+            copied_dataset.append({"source": item.source_rel, "image": rel_img})
+            logs.append(f"[copy] {item.source_rel} -> dataset/{rel_img}")
+
+        dataset_images = _list_images(paths["dataset_root"], exts, recursive=True, exclude_dir=paths["temp_root"])
+        primary_caption = _caption_for_init_source(trigger_word, "")
+        for img in dataset_images:
+            txt_path = img.with_suffix(".txt")
+            rel_txt = txt_path.relative_to(paths["dataset_root"]).as_posix()
+            if txt_path.exists():
+                skipped.append(f"dataset/{rel_txt}: already exists")
+                logs.append(f"[skip] dataset/{rel_txt} already exists")
+                continue
+            caption = caption_by_rel_txt.get(rel_txt, primary_caption)
+            try:
+                txt_path.write_text(caption, encoding="utf-8")
+                generated_txt.append(rel_txt)
+                logs.append(f"[txt] dataset/{rel_txt} | {caption if caption else '(empty)'}")
+            except Exception as exc:
+                errors.append(f"dataset/{rel_txt}: {exc}")
+                logs.append(f"[error] txt dataset/{rel_txt}: {exc}")
+
+        for item in source_images:
+            src_img = item.path
+            src_path_key = str(src_img)
+            if src_path_key not in dataset_ready_source_paths:
+                skipped.append(f"database/{item.source_rel}: skipped move because dataset copy failed")
+                logs.append(f"[skip] move {item.source_rel} -> database (dataset copy not ready)")
+                continue
+            if not src_img.exists():
+                continue
+            dst_img = paths["database_root"] / src_img.name
+            dst_img, renamed_flag = _next_unique_file(dst_img)
+            if renamed_flag:
+                renamed.append({"source": item.source_rel, "target": dst_img.name, "scope": "database"})
+                logs.append(f"[rename][database] {item.source_rel} -> {dst_img.name}")
+            try:
+                shutil.move(str(src_img), str(dst_img))
+                moved_database.append({"source": item.source_rel, "image": dst_img.name})
+                logs.append(f"[move] {item.source_rel} -> database/{dst_img.name}")
+            except Exception as exc:
+                errors.append(f"database/{item.source_rel}: {exc}")
+                logs.append(f"[error] move {item.source_rel} -> database: {exc}")
+
+        logs.append(f"[multi-trigger] generated captions: {len(generated_txt)}")
+        logs.append(f"copied images count: {len(copied_dataset) + len(moved_database)}")
+        logs.append(f"created txt count: {len(generated_txt)}")
+        logs.append(f"skipped existing count: {len(skipped)}")
+        logs.append(f"conflict renamed count: {len(renamed)}")
+        logs.append(f"error count: {len(errors)}")
+
+        return {
+            "ok": len(errors) == 0,
+            **_make_serializable_path_info(paths),
+            "trigger_word": trigger_word,
+            "created_dirs": created_dirs,
+            "moved_database": moved_database,
+            "copied": moved_database,
+            "copied_dataset": copied_dataset,
+            "generated_txt": generated_txt,
+            "skipped": skipped,
+            "renamed": renamed,
+            "warnings": _clean_messages(
+                f"Trigger word detected: {trigger_word}" if trigger_word else "",
+                "Some files were skipped or renamed during initialization." if skipped or renamed else "",
+                *warnings,
+                *(prompt_result.get("warnings") or []),
+            ),
+            "errors": errors,
+            "logs": logs,
+            "multi_trigger_preview": _build_multi_trigger_preview(source_images, ignored_folder_logs, trigger_word),
+            "summary": {
+                "created_dirs": len(created_dirs),
+                "copied_images": len(moved_database) + len(copied_dataset),
+                "moved_database_images": len(moved_database),
+                "copied_database_images": len(moved_database),
+                "copied_dataset_images": len(copied_dataset),
+                "generated_txt": len(generated_txt),
+                "skipped": len(skipped),
+                "renamed": len(renamed),
+                "errors": len(errors),
+                "prompt_action": prompt_result.get("action") or "skipped",
+            },
+        }
+
     extset = _normalize_exts(exts)
     root_images = [path for path in sorted(root.iterdir(), key=lambda p: p.name.lower()) if _is_image_file(path, extset)]
     txt_content = trigger_word.strip()
@@ -1119,6 +1449,24 @@ def _section_tag_index(parsed: Dict[str, Any]) -> Dict[str, List[str]]:
     return index
 
 
+def _section_tag_source_index(parsed: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    index: Dict[str, Dict[str, Any]] = {}
+    for order, section in enumerate(parsed.get("sections") or []):
+        name = re.sub(r"\s+", " ", str(section.get("name") or section.get("category") or "").strip())
+        if not name:
+            continue
+        tags: List[str] = []
+        tags.extend(section.get("tags") or [])
+        for cond in section.get("conditionals") or []:
+            tags.extend(cond or [])
+        index[name.lower()] = {
+            "label": name,
+            "order": order,
+            "tags": _dedup_tags(tags),
+        }
+    return index
+
+
 def build_tagging_quiz_recommendations(
     project_root: Path,
     mapping_rows: List[Dict[str, Any]],
@@ -1133,8 +1481,10 @@ def build_tagging_quiz_recommendations(
         warnings.append(parsed.get("error") or "Cheatsheet not available; recommendations are empty.")
         parsed = {"sections": [], "trigger": "", "tags": []}
     index = _section_tag_index(parsed)
+    source_index = _section_tag_source_index(parsed)
     segments, materialized_rows = _materialize_mapping_row_segments(settings.get("segments"), mapping_rows)
     recommendations: Dict[str, List[str]] = {segment["id"]: [] for segment in segments}
+    recommendation_sources: Dict[str, List[Dict[str, Any]]] = {segment["id"]: [] for segment in segments}
     for row in materialized_rows:
         segment_id = row.get("right_segment")
         if not segment_id:
@@ -1142,6 +1492,7 @@ def build_tagging_quiz_recommendations(
         if segment_id not in recommendations:
             warnings.append(f"Mapped segment no longer exists: {segment_id}")
             recommendations.setdefault(segment_id, [])
+            recommendation_sources.setdefault(segment_id, [])
         tags: List[str] = []
         for section_name in row.get("left_sections") or []:
             found = index.get(str(section_name).lower())
@@ -1149,6 +1500,22 @@ def build_tagging_quiz_recommendations(
                 warnings.append(f"Mapped cheatsheet section no longer exists: {section_name}")
                 continue
             tags.extend(found)
+            source = source_index.get(str(section_name).lower()) or {}
+            source_label = str(source.get("label") or section_name)
+            source_order = int(source.get("order") or 0)
+            for tag in source.get("tags") or found:
+                clean = _sanitize_tag(tag)
+                if not clean:
+                    continue
+                recommendation_sources[segment_id].append(
+                    {
+                        "tag": clean,
+                        "source_type": "cheatsheet",
+                        "source_id": source_label,
+                        "source_label": source_label,
+                        "source_index": source_order,
+                    }
+                )
         recommendations[segment_id] = _dedup_tags((recommendations.get(segment_id) or []) + tags)
     logs = [f"Built recommendations: {len(recommendations)} segments"]
     for seg_id, tags in recommendations.items():
@@ -1157,6 +1524,7 @@ def build_tagging_quiz_recommendations(
     return {
         "ok": True,
         "recommendations": recommendations,
+        "recommendation_sources": recommendation_sources,
         "segments": segments,
         "mapping_rows": materialized_rows,
         "trigger": parsed.get("trigger") or "",
@@ -1191,6 +1559,40 @@ def _dataset_path_from_image_rel(project_root: Path, image_rel: str) -> Optional
     return target
 
 
+def _hash_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _image_identity(path: Path, image_rel: str, include_hash: bool = False) -> Dict[str, Any]:
+    identity: Dict[str, Any] = {"relative_path": image_rel}
+    try:
+        st = path.stat()
+        identity["size"] = int(st.st_size)
+        identity["mtime_ns"] = int(st.st_mtime_ns)
+    except Exception:
+        identity["size"] = 0
+        identity["mtime_ns"] = 0
+    if include_hash:
+        try:
+            identity["content_hash"] = _hash_file(path)
+        except Exception:
+            identity["content_hash"] = ""
+    return identity
+
+
+def _build_tagging_inventory(paths: Dict[str, Any], exts: List[str]) -> List[Dict[str, Any]]:
+    images = _list_images(paths["dataset_root"], exts, recursive=True, exclude_dir=paths["temp_root"])
+    out: List[Dict[str, Any]] = []
+    for img in images:
+        rel = _image_rel_for_session(paths["dataset_root"], img)
+        out.append({"path": img, "rel": rel, "identity": _image_identity(img, rel, include_hash=False)})
+    return out
+
+
 def _default_segment_state(default_tags: List[str]) -> Dict[str, Any]:
     return {
         "selected": _dedup_tags(default_tags),
@@ -1198,6 +1600,24 @@ def _default_segment_state(default_tags: List[str]) -> Dict[str, Any]:
         "removed_defaults": [],
         "skipped": False,
         "updated_at": _utc_now_iso(),
+    }
+
+
+def _normalize_segment_state(raw: Any, default_tags: Optional[List[str]] = None) -> Dict[str, Any]:
+    state = raw if isinstance(raw, dict) else {}
+    def clean_tags(value: Any, fallback: Optional[List[str]] = None) -> List[str]:
+        if isinstance(value, list):
+            return _dedup_tags(value)
+        if isinstance(value, str):
+            return _dedup_tags(parse_tag_list(value))
+        return _dedup_tags(fallback or [])
+
+    return {
+        "selected": clean_tags(state.get("selected"), default_tags or []),
+        "manual": clean_tags(state.get("manual")),
+        "removed_defaults": clean_tags(state.get("removed_defaults")),
+        "skipped": bool(state.get("skipped")),
+        "updated_at": str(state.get("updated_at") or _utc_now_iso()),
     }
 
 
@@ -1231,6 +1651,33 @@ def _map_existing_tags_to_segments(
     return segment_states
 
 
+def _new_session_image_entry(
+    img: Path,
+    image_rel: str,
+    segments: List[Dict[str, Any]],
+    recommendations: Dict[str, List[str]],
+    session_defaults: Dict[str, List[str]],
+) -> Dict[str, Any]:
+    txt = img.with_suffix(".txt")
+    existing = _read_tags_cached(txt) if txt.exists() else []
+    segment_states = _map_existing_tags_to_segments(existing, segments, recommendations or {}, session_defaults)
+    for segment in segments:
+        seg_id = segment["id"]
+        state = segment_states.setdefault(seg_id, _default_segment_state(session_defaults.get(seg_id, [])))
+        state["selected"] = _dedup_tags((session_defaults.get(seg_id, []) or []) + (state.get("selected") or []))
+    return {
+        "status": "pending",
+        "segments": segment_states,
+        "legacy_segments": {},
+        "pending_segment_ids": [],
+        "final_tags_written": False,
+        "missing": False,
+        "identity": _image_identity(img, image_rel, include_hash=True),
+        "resume_reason": "new image queued",
+        "updated_at": _utc_now_iso(),
+    }
+
+
 def _ensure_session_image_entry(session: Dict[str, Any], image_rel: str) -> Dict[str, Any]:
     images = session.setdefault("images", {})
     entry = images.setdefault(
@@ -1243,76 +1690,604 @@ def _ensure_session_image_entry(session: Dict[str, Any], image_rel: str) -> Dict
     return entry
 
 
+def _normalize_session_image_entry(entry: Any, image_rel: str) -> Dict[str, Any]:
+    raw = entry if isinstance(entry, dict) else {}
+    segments_raw = raw.get("segments") if isinstance(raw.get("segments"), dict) else {}
+    legacy_raw = raw.get("legacy_segments") if isinstance(raw.get("legacy_segments"), dict) else {}
+    segments = {str(seg_id): _normalize_segment_state(state) for seg_id, state in segments_raw.items()}
+    legacy_segments = {str(seg_id): _normalize_segment_state(state) for seg_id, state in legacy_raw.items()}
+    status = str(raw.get("status") or "pending").strip().lower()
+    if status not in {"pending", "in_progress", "completed"}:
+        status = "pending"
+    identity = raw.get("identity") if isinstance(raw.get("identity"), dict) else {}
+    normalized_identity = {
+        "relative_path": str(identity.get("relative_path") or image_rel),
+        "size": int(identity.get("size") or 0),
+        "mtime_ns": int(identity.get("mtime_ns") or 0),
+    }
+    if identity.get("content_hash"):
+        normalized_identity["content_hash"] = str(identity.get("content_hash"))
+    pending_ids = [
+        str(item)
+        for item in (raw.get("pending_segment_ids") if isinstance(raw.get("pending_segment_ids"), list) else [])
+        if str(item or "").strip()
+    ]
+    return {
+        **raw,
+        "status": status,
+        "missing": bool(raw.get("missing")),
+        "final_tags_written": bool(raw.get("final_tags_written")),
+        "segments": segments,
+        "legacy_segments": legacy_segments,
+        "pending_segment_ids": pending_ids,
+        "identity": normalized_identity,
+        "resume_reason": str(raw.get("resume_reason") or ""),
+    }
+
+
+def _normalize_tagging_session_payload(
+    project_root: Path,
+    session: Dict[str, Any],
+    segments: List[Dict[str, Any]],
+    mapping_rows: List[Dict[str, Any]],
+    session_defaults: Dict[str, List[str]],
+    recommendations: Dict[str, List[str]],
+    recommendation_sources: Dict[str, List[Dict[str, Any]]],
+) -> Tuple[Dict[str, Any], bool]:
+    now = _utc_now_iso()
+    raw = session if isinstance(session, dict) else {}
+    migrated = int(raw.get("session_version") or raw.get("version") or 1) < TAGGING_SESSION_VERSION
+    images_raw = raw.get("images") if isinstance(raw.get("images"), dict) else {}
+    images: Dict[str, Any] = {}
+    for rel, entry in images_raw.items():
+        clean_rel = str(rel or "").replace("\\", "/").lstrip("/")
+        if not clean_rel:
+            continue
+        if not clean_rel.lower().startswith("dataset/") and not clean_rel.lower().startswith("database/"):
+            clean_rel = "dataset/" + clean_rel
+        images[clean_rel] = _normalize_session_image_entry(entry, clean_rel)
+    current = raw.get("current") if isinstance(raw.get("current"), dict) else {}
+    normalized = {
+        **raw,
+        "session_version": TAGGING_SESSION_VERSION,
+        "version": TAGGING_SESSION_VERSION,
+        "project_root": str(resolve_project_paths(project_root)["project_root"]),
+        "status": str(raw.get("status") or "active"),
+        "created_at": str(raw.get("created_at") or now),
+        "updated_at": str(raw.get("updated_at") or now),
+        "current": {
+            "image_index": int(current.get("image_index") or 0),
+            "image_rel": str(current.get("image_rel") or "").replace("\\", "/").lstrip("/"),
+            "segment_index": int(current.get("segment_index") or 0),
+            "segment_id": str(current.get("segment_id") or ""),
+            "free_tagging": bool(current.get("free_tagging")),
+        },
+        "quiz_segments": _normalize_quiz_segments(segments or raw.get("quiz_segments")),
+        "mapping_rows": _normalize_mapping_rows(mapping_rows if mapping_rows is not None else raw.get("mapping_rows")),
+        "recommendations": recommendations if isinstance(recommendations, dict) else {},
+        "recommendation_sources": recommendation_sources if isinstance(recommendation_sources, dict) else {},
+        "session_defaults": session_defaults if isinstance(session_defaults, dict) else {},
+        "images": images,
+    }
+    if normalized["status"] not in {"active", "completed"}:
+        normalized["status"] = "active"
+    if normalized["current"]["image_rel"] and not normalized["current"]["image_rel"].lower().startswith("dataset/"):
+        normalized["current"]["image_rel"] = "dataset/" + normalized["current"]["image_rel"]
+    return normalized, migrated
+
+
+def _is_unfinished_session_entry(entry: Any) -> bool:
+    return isinstance(entry, dict) and not entry.get("missing") and entry.get("status") != "completed"
+
+
+def _next_unfinished_session_index(
+    image_rels: List[str],
+    images: Dict[str, Any],
+    current_index: int,
+) -> Optional[int]:
+    if not image_rels:
+        return None
+    start = current_index if current_index >= 0 else -1
+    for offset in range(1, len(image_rels) + 1):
+        idx = (start + offset) % len(image_rels)
+        if _is_unfinished_session_entry(images.get(image_rels[idx])):
+            return idx
+    return None
+
+
+def _order_session_images(
+    images: Dict[str, Any],
+    current_rels: List[str],
+) -> Dict[str, Any]:
+    current_set = set(current_rels)
+    ordered: Dict[str, Any] = {}
+    for rel in current_rels:
+        if rel in images:
+            ordered[rel] = images[rel]
+    for rel, entry in images.items():
+        if rel not in current_set:
+            ordered[rel] = entry
+    return ordered
+
+
+def _entry_content_hash(project_root: Path, rel: str, entry: Dict[str, Any]) -> str:
+    identity = entry.get("identity") if isinstance(entry.get("identity"), dict) else {}
+    content_hash = str(identity.get("content_hash") or "").strip().lower()
+    if content_hash:
+        return content_hash
+    path = _dataset_path_from_image_rel(project_root, rel)
+    if path and path.exists() and path.is_file():
+        try:
+            content_hash = _hash_file(path)
+            identity["content_hash"] = content_hash
+            identity.setdefault("relative_path", rel)
+            entry["identity"] = identity
+        except Exception:
+            content_hash = ""
+    return content_hash
+
+
+def _snapshot_timestamp(path: Path, session: Dict[str, Any]) -> float:
+    raw = str(session.get("updated_at") or session.get("created_at") or "")
+    if raw:
+        try:
+            return datetime.fromisoformat(raw.replace("Z", "+00:00")).timestamp()
+        except Exception:
+            pass
+    try:
+        return path.stat().st_mtime
+    except Exception:
+        return 0.0
+
+
+def _session_progress_score(session: Dict[str, Any], current_rels: Set[str]) -> Tuple[int, int, int]:
+    images = session.get("images") if isinstance(session.get("images"), dict) else {}
+    overlap = 0
+    completed = 0
+    meaningful = 0
+    for rel, entry in images.items():
+        if rel not in current_rels or not isinstance(entry, dict):
+            continue
+        overlap += 1
+        if entry.get("status") == "completed":
+            completed += 1
+            meaningful += 1
+            continue
+        segments = entry.get("segments") if isinstance(entry.get("segments"), dict) else {}
+        if any(
+            state
+            and (
+                state.get("selected")
+                or state.get("manual")
+                or state.get("removed_defaults")
+                or state.get("skipped")
+            )
+            for state in segments.values()
+            if isinstance(state, dict)
+        ):
+            meaningful += 1
+    return overlap, completed, meaningful
+
+
+def _entry_has_meaningful_progress(entry: Dict[str, Any]) -> bool:
+    if entry.get("status") == "completed" or entry.get("final_tags_written"):
+        return True
+    if entry.get("status") == "in_progress":
+        return True
+    segments = entry.get("segments") if isinstance(entry.get("segments"), dict) else {}
+    return any(
+        state
+        and (
+            state.get("selected")
+            or state.get("manual")
+            or state.get("removed_defaults")
+            or state.get("skipped")
+        )
+        for state in segments.values()
+        if isinstance(state, dict)
+    )
+
+
+def _compatible_session_project(project_root: Path, session: Dict[str, Any]) -> bool:
+    raw_root = str(session.get("project_root") or "").strip()
+    if not raw_root:
+        return True
+    try:
+        return resolve_project_paths(Path(raw_root))["project_root"].resolve() == resolve_project_paths(project_root)[
+            "project_root"
+        ].resolve()
+    except Exception:
+        return False
+
+
+def _historical_session_candidates(project_root: Path) -> List[Tuple[Path, Dict[str, Any]]]:
+    store = tagging_session_store_dir(project_root)
+    if not store.exists() or not store.is_dir():
+        return []
+    out: List[Tuple[Path, Dict[str, Any]]] = []
+    for path in store.glob("tagging_session_*.json"):
+        try:
+            session = _read_json_file(path)
+        except Exception:
+            continue
+        if isinstance(session, dict) and _compatible_session_project(project_root, session):
+            out.append((path, session))
+    return out
+
+
+def _choose_historical_recovery_candidate(
+    project_root: Path,
+    active: Optional[Dict[str, Any]],
+    current_rels: Set[str],
+) -> Optional[Tuple[Path, Dict[str, Any]]]:
+    active_score = _session_progress_score(active or {}, current_rels)
+    best: Optional[Tuple[Tuple[int, int, int, float], Path, Dict[str, Any]]] = None
+    for path, session in _historical_session_candidates(project_root):
+        score_base = _session_progress_score(session, current_rels)
+        if score_base[0] <= 0 or score_base[2] <= active_score[2]:
+            continue
+        score = (score_base[0], score_base[1], score_base[2], _snapshot_timestamp(path, session))
+        if best is None or score > best[0]:
+            best = (score, path, session)
+    if best is None:
+        return None
+    best_overlap, best_completed, best_progress, _ = best[0]
+    active_overlap, active_completed, active_progress = active_score
+    if best_overlap < active_overlap:
+        return None
+    if (best_progress, best_completed, best_overlap) <= (active_progress, active_completed, active_overlap):
+        return None
+    return best[1], best[2]
+
+
+def _first_segment_index_for_entry(
+    entry: Dict[str, Any],
+    segments: List[Dict[str, Any]],
+    fallback_index: int = 0,
+) -> Tuple[int, str]:
+    ids = [str(seg.get("id") or "") for seg in segments if str(seg.get("id") or "")]
+    pending = [seg_id for seg_id in (entry.get("pending_segment_ids") or []) if seg_id in ids]
+    if pending:
+        idx = ids.index(pending[0])
+        return idx, pending[0]
+    idx = min(max(0, fallback_index), max(0, len(ids) - 1))
+    return idx, ids[idx] if ids else ""
+
+
+def _make_resume_logs(summary: Dict[str, Any], session: Dict[str, Any]) -> List[str]:
+    current_rel = (session.get("current") or {}).get("image_rel") or ""
+    return [
+        "[resume] active Guided Tagging Flow session reconciled",
+        f"[resume] completed images retained: {summary.get('completed_retained', 0)}",
+        f"[resume] partial images retained: {summary.get('partial_retained', 0)}",
+        f"[resume] new images queued: {summary.get('new_queued', 0)}",
+        f"[resume] renamed images matched safely: {summary.get('renamed_matched', 0)}",
+        f"[resume] missing images retained in history: {summary.get('missing_retained', 0)}",
+        f"[resume] ambiguous renamed images left pending: {summary.get('ambiguous_renames', 0)}",
+        f"[resume] images requeued for new segments: {summary.get('requeued_new_segments', 0)}",
+        f"[resume] next image: {current_rel or '-'}",
+        f"[resume] progress: {summary.get('completed_current', 0)} / {summary.get('current_total', 0)} completed",
+    ]
+
+
+def _reconcile_tagging_session(
+    project_root: Path,
+    session: Dict[str, Any],
+    inventory: List[Dict[str, Any]],
+    segments: List[Dict[str, Any]],
+    mapping_rows: List[Dict[str, Any]],
+    session_defaults: Dict[str, List[str]],
+    recommendations: Dict[str, List[str]],
+    recommendation_sources: Dict[str, List[Dict[str, Any]]],
+) -> Tuple[Dict[str, Any], Dict[str, Any], List[str]]:
+    paths = resolve_project_paths(project_root)
+    session, migrated = _normalize_tagging_session_payload(
+        paths["project_root"],
+        session,
+        segments,
+        mapping_rows,
+        session_defaults,
+        recommendations,
+        recommendation_sources,
+    )
+    now = _utc_now_iso()
+    inventory_by_rel = {item["rel"]: item for item in inventory}
+    current_rels = [item["rel"] for item in inventory]
+    current_set = set(current_rels)
+    old_images = session.get("images") if isinstance(session.get("images"), dict) else {}
+    old_order = list(old_images.keys())
+    current_segment_ids = [str(seg.get("id") or "") for seg in segments if str(seg.get("id") or "")]
+    current_segment_set = set(current_segment_ids)
+    summary = {
+        "completed_retained": 0,
+        "partial_retained": 0,
+        "new_queued": 0,
+        "renamed_matched": 0,
+        "missing_retained": 0,
+        "ambiguous_renames": 0,
+        "requeued_new_segments": 0,
+        "completed_current": 0,
+        "current_total": 0,
+        "migrated": migrated,
+    }
+
+    matched_old: Set[str] = set()
+    matched_current: Set[str] = set()
+    reconciled: Dict[str, Any] = {}
+
+    for rel in old_order:
+        entry = old_images.get(rel)
+        if not isinstance(entry, dict):
+            continue
+        if rel not in current_set:
+            continue
+        item = inventory_by_rel[rel]
+        identity = entry.get("identity") if isinstance(entry.get("identity"), dict) else {}
+        content_hash = identity.get("content_hash")
+        identity.update(item.get("identity") or {})
+        if content_hash:
+            identity["content_hash"] = content_hash
+        entry["identity"] = identity
+        entry["missing"] = False
+        if entry.get("status") == "completed":
+            summary["completed_retained"] += 1
+        elif _is_unfinished_session_entry(entry):
+            summary["partial_retained"] += 1
+        reconciled[rel] = entry
+        matched_old.add(rel)
+        matched_current.add(rel)
+
+    unmatched_old = [rel for rel in old_order if rel not in matched_old]
+    unmatched_current = [rel for rel in current_rels if rel not in matched_current]
+
+    old_by_hash: Dict[str, List[str]] = {}
+    for rel in unmatched_old:
+        entry = old_images.get(rel)
+        if not isinstance(entry, dict):
+            continue
+        if not _entry_has_meaningful_progress(entry):
+            continue
+        content_hash = _entry_content_hash(paths["project_root"], rel, entry)
+        if content_hash:
+            old_by_hash.setdefault(content_hash, []).append(rel)
+    current_by_hash: Dict[str, List[str]] = {}
+    for rel in unmatched_current:
+        item = inventory_by_rel[rel]
+        try:
+            content_hash = _hash_file(item["path"])
+        except Exception:
+            content_hash = ""
+        if content_hash:
+            current_by_hash.setdefault(content_hash, []).append(rel)
+
+    renamed_old: Set[str] = set()
+    renamed_current: Set[str] = set()
+    for content_hash in sorted(set(old_by_hash) & set(current_by_hash)):
+        old_matches = old_by_hash.get(content_hash) or []
+        current_matches = current_by_hash.get(content_hash) or []
+        if len(old_matches) == 1 and len(current_matches) == 1:
+            old_rel = old_matches[0]
+            new_rel = current_matches[0]
+            entry = old_images.get(old_rel)
+            if not isinstance(entry, dict):
+                continue
+            previous = list(entry.get("previous_relative_paths") or [])
+            previous.append(old_rel)
+            seen_previous: Set[str] = set()
+            entry["previous_relative_paths"] = [
+                item for item in previous if isinstance(item, str) and not (item in seen_previous or seen_previous.add(item))
+            ]
+            entry["missing"] = False
+            entry["resume_reason"] = f"renamed from {old_rel}"
+            item = inventory_by_rel[new_rel]
+            entry["identity"] = _image_identity(item["path"], new_rel, include_hash=False)
+            entry["identity"]["content_hash"] = content_hash
+            reconciled[new_rel] = entry
+            renamed_old.add(old_rel)
+            renamed_current.add(new_rel)
+            summary["renamed_matched"] += 1
+        else:
+            summary["ambiguous_renames"] += len(current_matches)
+
+    for rel in unmatched_old:
+        if rel in renamed_old:
+            continue
+        entry = old_images.get(rel)
+        if not isinstance(entry, dict):
+            continue
+        entry["missing"] = True
+        entry["resume_reason"] = "image missing from current dataset"
+        reconciled[rel] = entry
+        summary["missing_retained"] += 1
+
+    for rel in unmatched_current:
+        if rel in renamed_current:
+            continue
+        item = inventory_by_rel[rel]
+        reconciled[rel] = _new_session_image_entry(
+            item["path"],
+            rel,
+            segments,
+            recommendations or {},
+            session_defaults,
+        )
+        summary["new_queued"] += 1
+
+    for rel, entry in reconciled.items():
+        if not isinstance(entry, dict):
+            continue
+        legacy = entry.setdefault("legacy_segments", {})
+        entry_segments = entry.setdefault("segments", {})
+        for seg_id in list(entry_segments.keys()):
+            if seg_id == "__unsorted__" or seg_id in current_segment_set:
+                continue
+            legacy.setdefault(seg_id, entry_segments.pop(seg_id))
+        added_missing_segment = False
+        for seg_id in current_segment_ids:
+            if seg_id in entry_segments:
+                continue
+            entry_segments[seg_id] = _default_segment_state(session_defaults.get(seg_id, []))
+            if not entry.get("missing"):
+                pending = entry.setdefault("pending_segment_ids", [])
+                if seg_id not in pending:
+                    pending.append(seg_id)
+                added_missing_segment = True
+        entry["pending_segment_ids"] = [seg_id for seg_id in (entry.get("pending_segment_ids") or []) if seg_id in current_segment_set]
+        if added_missing_segment and entry.get("status") == "completed":
+            entry["status"] = "in_progress"
+            entry["final_tags_written"] = False
+            entry["free_tagging"] = False
+            entry["resume_reason"] = "new guided segment requires review"
+            summary["requeued_new_segments"] += 1
+        entry["updated_at"] = entry.get("updated_at") or now
+
+    reconciled = _order_session_images(reconciled, current_rels)
+    session["images"] = reconciled
+    session["quiz_segments"] = segments
+    session["mapping_rows"] = mapping_rows
+    session["recommendations"] = recommendations or {}
+    session["recommendation_sources"] = recommendation_sources or {}
+    session["session_defaults"] = session_defaults
+    session["source_fingerprint"] = {
+        "prompt_txt_mtime": _prompt_mtime(paths),
+        "segment_settings_hash": _stable_hash(segments),
+        "image_list_hash": _image_list_hash([item["path"] for item in inventory], paths["dataset_root"]),
+    }
+    session["updated_at"] = now
+
+    current = session.setdefault("current", {})
+    current_rel = str(current.get("image_rel") or "").replace("\\", "/").lstrip("/")
+    current_entry = reconciled.get(current_rel) if current_rel else None
+    first_unfinished_rel = ""
+    for rel in current_rels:
+        if _is_unfinished_session_entry(reconciled.get(rel)):
+            first_unfinished_rel = rel
+            break
+    keep_current = (
+        isinstance(current_entry, dict)
+        and _is_unfinished_session_entry(current_entry)
+        and current_rel in current_set
+        and current_rel == first_unfinished_rel
+    )
+    if keep_current:
+        if current.get("segment_id") not in current_segment_set:
+            idx, seg_id = _first_segment_index_for_entry(current_entry, segments, int(current.get("segment_index") or 0))
+            current["segment_index"] = idx
+            current["segment_id"] = seg_id
+        try:
+            current["image_index"] = list(reconciled.keys()).index(current_rel)
+        except ValueError:
+            current["image_index"] = 0
+        current["free_tagging"] = False
+    else:
+        next_rel = first_unfinished_rel
+        if next_rel:
+            entry = reconciled[next_rel]
+            idx, seg_id = _first_segment_index_for_entry(entry, segments, 0)
+            current["image_rel"] = next_rel
+            current["image_index"] = list(reconciled.keys()).index(next_rel)
+            current["segment_index"] = idx
+            current["segment_id"] = seg_id
+            current["free_tagging"] = False
+            session["status"] = "active"
+        else:
+            current["image_rel"] = ""
+            current["image_index"] = 0
+            current["segment_index"] = 0
+            current["segment_id"] = current_segment_ids[0] if current_segment_ids else ""
+            current["free_tagging"] = False
+            session["status"] = "completed"
+
+    current_total = 0
+    completed_current = 0
+    for rel, entry in reconciled.items():
+        if rel not in current_set or not isinstance(entry, dict) or entry.get("missing"):
+            continue
+        current_total += 1
+        if entry.get("status") == "completed":
+            completed_current += 1
+    summary["current_total"] = current_total
+    summary["completed_current"] = completed_current
+    if current_total and completed_current < current_total:
+        session["status"] = "active"
+    elif current_total == 0 or completed_current == current_total:
+        session["status"] = "completed"
+    logs = _make_resume_logs(summary, session)
+    return session, summary, logs
+
+
 def load_tagging_session(project_root: Path) -> Dict[str, Any]:
     paths = resolve_project_paths(project_root)
     session_path = tagging_session_path(paths["project_root"])
     warnings: List[str] = []
-    exts = [".jpg", ".jpeg", ".png", ".webp"]
-    images = _list_images(paths["dataset_root"], exts, recursive=True, exclude_dir=paths["temp_root"])
-    image_rels = [_image_rel_for_session(paths["dataset_root"], img) for img in images]
-    current_image_hash = _image_list_hash(images, paths["dataset_root"])
+    inventory = _build_tagging_inventory(paths, [".jpg", ".jpeg", ".png", ".webp"])
+    image_rels = [item["rel"] for item in inventory]
     session: Optional[Dict[str, Any]] = None
-    restored_from = ""
     if session_path.exists():
         try:
             session = _read_json_file(session_path)
         except Exception as exc:
             return {"ok": False, "error": f"Could not read tagging session: {exc}", **_make_serializable_path_info(paths)}
-        active_hash = _session_image_list_hash(session)
-        if active_hash and active_hash != current_image_hash:
+        recovery = _choose_historical_recovery_candidate(paths["project_root"], session, set(image_rels))
+        if recovery:
             _save_session_slot(paths["project_root"], session)
-            found = _find_session_slot_by_image_hash(paths["project_root"], current_image_hash)
-            if found:
-                restored_from, session = str(found[0].name), found[1]
-                atomic_write_json(session_path, session)
-                warnings.append(f"Restored saved tagging session for this dataset: {restored_from}")
-            else:
-                warnings.append("Dataset image list changed since this session was saved; loading the active session and updating image entries.")
+            session = recovery[1]
+            warnings.append(f"Recovered stronger Guided Tagging Flow snapshot: {recovery[0].name}")
     else:
-        found = _find_session_slot_by_image_hash(paths["project_root"], current_image_hash)
-        if found:
-            restored_from, session = str(found[0].name), found[1]
-            atomic_write_json(session_path, session)
-            warnings.append(f"Restored saved tagging session for this dataset: {restored_from}")
-        else:
+        recovery = _choose_historical_recovery_candidate(paths["project_root"], None, set(image_rels))
+        if recovery:
+            session = recovery[1]
+            warnings.append(f"Recovered Guided Tagging Flow snapshot: {recovery[0].name}")
+        if not isinstance(session, dict):
             return {"ok": True, "session": None, "exists": False, **_make_serializable_path_info(paths)}
     if not isinstance(session, dict):
         return {"ok": True, "session": None, "exists": False, **_make_serializable_path_info(paths)}
+
+    settings = normalize_tagging_quiz_settings(load_tagging_quiz_settings())
+    saved_segments = session.get("quiz_segments") if isinstance(session.get("quiz_segments"), list) else None
+    segment_source = saved_segments or settings.get("segments")
+    segments, mapping_rows = _materialize_mapping_row_segments(segment_source, session.get("mapping_rows") or [])
+    session_defaults = {
+        str(k): _dedup_tags(v if isinstance(v, list) else parse_tag_list(v))
+        for k, v in (session.get("session_defaults") if isinstance(session.get("session_defaults"), dict) else {}).items()
+    }
+    recommendations = session.get("recommendations") if isinstance(session.get("recommendations"), dict) else {}
+    recommendation_sources = (
+        session.get("recommendation_sources") if isinstance(session.get("recommendation_sources"), dict) else {}
+    )
     fp = session.get("source_fingerprint") if isinstance(session.get("source_fingerprint"), dict) else {}
+    current_image_hash = _image_list_hash([item["path"] for item in inventory], paths["dataset_root"])
+    if _session_image_list_hash(session) and _session_image_list_hash(session) != current_image_hash:
+        warnings.append("Dataset image list changed since this session was saved; loading the active session and reconciling image entries.")
+    previous_current_rel = str((session.get("current") or {}).get("image_rel") or "")
+    previous_status = str(session.get("status") or "")
     current_prompt_mtime = _prompt_mtime(paths)
     if fp.get("prompt_txt_mtime") and int(fp.get("prompt_txt_mtime") or 0) != current_prompt_mtime:
         warnings.append("Cheatsheet changed since this session started.")
-
-    existing_set = set(image_rels)
-    for rel in image_rels:
-        _ensure_session_image_entry(session, rel)
-    for rel, entry in (session.get("images") or {}).items():
-        if rel not in existing_set:
-            if isinstance(entry, dict):
-                entry["missing"] = True
-            warnings.append(f"Image missing: {rel}")
-
-    current = session.setdefault("current", {})
-    current_rel = current.get("image_rel")
-    if current_rel and current_rel not in existing_set:
-        for idx, rel in enumerate(image_rels):
-            entry = session.get("images", {}).get(rel) or {}
-            if entry.get("status") != "completed":
-                current["image_index"] = idx
-                current["image_rel"] = rel
-                current["segment_index"] = 0
-                segments = session.get("quiz_segments") or []
-                current["segment_id"] = segments[0]["id"] if segments else ""
-                warnings.append("Current image was missing; moved to nearest unfinished image.")
-                break
-
-    session["updated_at"] = session.get("updated_at") or _utc_now_iso()
+    session, summary, logs = _reconcile_tagging_session(
+        paths["project_root"],
+        session,
+        inventory,
+        segments,
+        mapping_rows,
+        session_defaults,
+        recommendations,
+        recommendation_sources,
+    )
+    if summary.get("missing_retained"):
+        warnings.append(f"Missing images retained in session history: {summary['missing_retained']}")
+    if summary.get("ambiguous_renames"):
+        warnings.append(f"Ambiguous renamed images left pending: {summary['ambiguous_renames']}")
+    if previous_status == "completed" and (session.get("current") or {}).get("image_rel") != previous_current_rel:
+        warnings.append("Moved current position to an unfinished image.")
+    atomic_write_json(session_path, session)
+    _save_session_slot(paths["project_root"], session)
     return {
         "ok": True,
         "exists": True,
         "session": session,
         "warnings": warnings,
-        "logs": ["Loaded tagging session"],
+        "logs": logs,
         **_make_serializable_path_info(paths),
     }
 
@@ -1333,6 +2308,8 @@ def save_tagging_session(project_root: Path, session: Dict[str, Any]) -> Dict[st
                 }
         except Exception:
             return {"ok": False, "error": "Invalid session project_root", **_make_serializable_path_info(paths)}
+    session["session_version"] = TAGGING_SESSION_VERSION
+    session["version"] = TAGGING_SESSION_VERSION
     session["project_root"] = str(paths["project_root"])
     session["updated_at"] = _utc_now_iso()
     atomic_write_json(tagging_session_path(paths["project_root"]), session)
@@ -1346,6 +2323,7 @@ def start_tagging_session(
     mapping_rows: Optional[List[Dict[str, Any]]] = None,
     session_defaults: Optional[Dict[str, List[str]]] = None,
     recommendations: Optional[Dict[str, List[str]]] = None,
+    recommendation_sources: Optional[Dict[str, List[Dict[str, Any]]]] = None,
     settings: Optional[Dict[str, Any]] = None,
     replace: bool = True,
 ) -> Dict[str, Any]:
@@ -1356,65 +2334,71 @@ def start_tagging_session(
         str(k): _dedup_tags(v if isinstance(v, list) else parse_tag_list(v))
         for k, v in (session_defaults or {}).items()
     }
-    if recommendations is None:
-        recommendations = build_tagging_quiz_recommendations(
+    if recommendations is None or recommendation_sources is None:
+        recommendation_result = build_tagging_quiz_recommendations(
             paths["project_root"],
             mapping_rows,
             settings=settings,
-        ).get("recommendations") or {}
-    images = _list_images(paths["dataset_root"], exts, recursive=True, exclude_dir=paths["temp_root"])
-    image_rels = [_image_rel_for_session(paths["dataset_root"], img) for img in images]
+        )
+        if recommendations is None:
+            recommendations = recommendation_result.get("recommendations") or {}
+        if recommendation_sources is None:
+            recommendation_sources = recommendation_result.get("recommendation_sources") or {}
+    inventory = _build_tagging_inventory(paths, exts)
+    image_rels = [item["rel"] for item in inventory]
     now = _utc_now_iso()
-    session: Dict[str, Any] = {
-        "version": 1,
-        "project_root": str(paths["project_root"]),
-        "status": "active",
-        "created_at": now,
-        "updated_at": now,
-        "current": {
-            "image_index": 0,
-            "image_rel": image_rels[0] if image_rels else "",
-            "segment_index": 0,
-            "segment_id": segments[0]["id"] if segments else "",
-        },
-        "quiz_segments": segments,
-        "mapping_rows": mapping_rows,
-        "recommendations": recommendations or {},
-        "session_defaults": session_defaults,
-        "images": {},
-        "source_fingerprint": {
-            "prompt_txt_mtime": _prompt_mtime(paths),
-            "segment_settings_hash": _stable_hash(segments),
-            "image_list_hash": _image_list_hash(images, paths["dataset_root"]),
-        },
-    }
-    for img, image_rel in zip(images, image_rels):
-        txt = img.with_suffix(".txt")
-        existing = _read_tags_cached(txt) if txt.exists() else []
-        segment_states = _map_existing_tags_to_segments(existing, segments, recommendations or {}, session_defaults)
-        for segment in segments:
-            seg_id = segment["id"]
-            state = segment_states.setdefault(seg_id, _default_segment_state(session_defaults.get(seg_id, [])))
-            state["selected"] = _dedup_tags((session_defaults.get(seg_id, []) or []) + (state.get("selected") or []))
-        session["images"][image_rel] = {
-            "status": "pending",
-            "segments": segment_states,
-            "final_tags_written": False,
-            "missing": False,
+    session: Dict[str, Any] = {}
+    existing_path = tagging_session_path(paths["project_root"])
+    if existing_path.exists():
+        try:
+            session = _read_json_file(existing_path)
+            _save_session_slot(paths["project_root"], session)
+        except Exception:
+            session = {}
+    recovery = _choose_historical_recovery_candidate(paths["project_root"], session or None, set(image_rels))
+    recovered_from = ""
+    if recovery:
+        recovered_from = recovery[0].name
+        session = recovery[1]
+    if not session:
+        session = {
+            "session_version": TAGGING_SESSION_VERSION,
+            "version": TAGGING_SESSION_VERSION,
+            "project_root": str(paths["project_root"]),
+            "status": "active" if image_rels else "completed",
+            "created_at": now,
+            "updated_at": now,
+            "current": {
+                "image_index": 0,
+                "image_rel": image_rels[0] if image_rels else "",
+                "segment_index": 0,
+                "segment_id": segments[0]["id"] if segments else "",
+            },
+            "quiz_segments": segments,
+            "mapping_rows": mapping_rows,
+            "recommendations": recommendations or {},
+            "recommendation_sources": recommendation_sources or {},
+            "session_defaults": session_defaults,
+            "images": {},
         }
+    session, summary, logs = _reconcile_tagging_session(
+        paths["project_root"],
+        session,
+        inventory,
+        segments,
+        mapping_rows,
+        session_defaults,
+        recommendations or {},
+        recommendation_sources or {},
+    )
+    if recovered_from:
+        logs.insert(1, f"[resume] recovered stronger historical snapshot: {recovered_from}")
     if replace:
-        existing_path = tagging_session_path(paths["project_root"])
-        if existing_path.exists():
-            try:
-                existing_session = _read_json_file(existing_path)
-                _save_session_slot(paths["project_root"], existing_session)
-            except Exception:
-                pass
         save_tagging_session(paths["project_root"], session)
     return {
         "ok": True,
         "session": session,
-        "logs": [f"Started tagging flow: {len(images)} images, {len(segments)} segments"],
+        "logs": logs,
         **_make_serializable_path_info(paths),
     }
 
@@ -1488,34 +2472,32 @@ def save_tagging_quiz_image(
     entry["segments"] = segments or {}
     entry["status"] = "completed"
     entry["final_tags_written"] = True
+    entry["pending_segment_ids"] = []
     entry["updated_at"] = _utc_now_iso()
 
-    image_rels = list(session.get("images") or {})
+    session_images = session.get("images") if isinstance(session.get("images"), dict) else {}
+    image_rels = list(session_images)
     completed = 0
-    for rel, item in (session.get("images") or {}).items():
+    for rel, item in session_images.items():
         if isinstance(item, dict) and item.get("status") == "completed":
             completed += 1
-    if image_rels and completed >= len([rel for rel, item in session.get("images", {}).items() if not item.get("missing")]):
+    try:
+        idx = image_rels.index(image_rel_norm)
+    except ValueError:
+        idx = -1
+    unfinished_idx = _next_unfinished_session_index(image_rels, session_images, idx)
+    if unfinished_idx is None:
         session["status"] = "completed"
     else:
-        try:
-            idx = image_rels.index(image_rel_norm)
-        except ValueError:
-            idx = -1
-        next_idx = idx + 1
-        while next_idx < len(image_rels):
-            next_entry = session.get("images", {}).get(image_rels[next_idx]) or {}
-            if next_entry.get("status") != "completed" and not next_entry.get("missing"):
-                break
-            next_idx += 1
-        if next_idx < len(image_rels):
-            first_seg = (session.get("quiz_segments") or [{}])[0].get("id") or ""
-            session["current"] = {
-                "image_index": next_idx,
-                "image_rel": image_rels[next_idx],
-                "segment_index": 0,
-                "segment_id": first_seg,
-            }
+        session["status"] = "active"
+        first_seg = (session.get("quiz_segments") or [{}])[0].get("id") or ""
+        session["current"] = {
+            "image_index": unfinished_idx,
+            "image_rel": image_rels[unfinished_idx],
+            "segment_index": 0,
+            "segment_id": first_seg,
+            "free_tagging": False,
+        }
 
     save_tagging_session(paths["project_root"], session)
     logs = [f"Saved image {img.name}: {len(final_tags)} tags written"]
@@ -1839,6 +2821,37 @@ def remove_tag(txt_path: Path, tag: str, backup: bool = True) -> dict:
     return {"ok": True, "removed": True, "tags": newtags}
 
 
+def _rename_tags_preserving_positions(taglist: List[str], mapping: Dict[str, str]) -> List[str]:
+    clean_mapping = {
+        _sanitize_tag(old): _sanitize_tag(new)
+        for old, new in (mapping or {}).items()
+        if _sanitize_tag(old)
+    }
+    first_renamed_target_index: Dict[str, int] = {}
+    for idx, tag in enumerate(taglist):
+        if tag not in clean_mapping:
+            continue
+        target = clean_mapping.get(tag) or ""
+        if target and target not in first_renamed_target_index:
+            first_renamed_target_index[target] = idx
+
+    out: List[str] = []
+    emitted_renamed_targets: Set[str] = set()
+    for idx, tag in enumerate(taglist):
+        was_renamed = tag in clean_mapping
+        target = clean_mapping.get(tag, tag)
+        if not target:
+            continue
+        keep_idx = first_renamed_target_index.get(target)
+        if keep_idx is not None:
+            if was_renamed and idx == keep_idx and target not in emitted_renamed_targets:
+                out.append(target)
+                emitted_renamed_targets.add(target)
+            continue
+        out.append(target)
+    return out
+
+
 def handle(form, ctx):
     active_tab = "tags"
     raw_folder_text = (form.get("folder", "") or "").strip()
@@ -2051,7 +3064,7 @@ def handle(form, ctx):
             newtags = [t for t in taglist if t not in deltags]
             action_desc = f"delete -> {sorted(deltags)}"
         elif mode == "replace":
-            newtags = [mapping.get(t, t) for t in taglist]
+            newtags = _rename_tags_preserving_positions(taglist, mapping)
             action_desc = f"replace -> {mapping}"
         elif mode == "dedup":
             newtags = _dedup_tags(taglist)
