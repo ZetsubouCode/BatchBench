@@ -71,7 +71,7 @@ class TagEditorLimitTests(unittest.TestCase):
 
             self.assertTrue(result.get("ok"), msg=result)
             self.assertTrue(result.get("created"))
-            self.assertEqual(txt.read_text(encoding="utf-8").strip(), "cat, blue_sky")
+            self.assertEqual(txt.read_text(encoding="utf-8").strip(), "cat, blue sky")
 
 
 if __name__ == "__main__":

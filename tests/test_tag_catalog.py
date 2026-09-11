@@ -66,7 +66,7 @@ class TagCatalogTests(unittest.TestCase):
                 )
                 csv_text = tag_catalog.CSV_PATH.read_text(encoding="utf-8")
 
-            self.assertEqual([row["tag"] for row in rows], ["from_below"])
+            self.assertEqual([row["tag"] for row in rows], ["from below"])
             self.assertEqual(rows[0]["source"], "project")
             self.assertNotIn(",from,", csv_text)
 
@@ -87,7 +87,7 @@ class TagCatalogTests(unittest.TestCase):
                 rows = tag_catalog.search_suggestions("arm", 10, 0, ["general"], False, [], [], [])
 
             self.assertIsNone(lookup)
-            self.assertEqual([row["tag"] for row in rows], ["arm_support"])
+            self.assertEqual([row["tag"] for row in rows], ["arm support"])
 
     def test_rebuild_rewrites_csv_without_zero_post_tags(self):
         with tempfile.TemporaryDirectory() as td:
@@ -108,7 +108,7 @@ class TagCatalogTests(unittest.TestCase):
             self.assertTrue(result["ok"], msg=result)
             self.assertNotIn(",from,", text)
             self.assertIn("from_below", text)
-            self.assertEqual([row["tag"] for row in rows], ["from_below"])
+            self.assertEqual([row["tag"] for row in rows], ["from below"])
 
     def test_import_failure_leaves_existing_catalog_unchanged(self):
         with tempfile.TemporaryDirectory() as td:
@@ -185,10 +185,10 @@ class TagCatalogTests(unittest.TestCase):
                 resolved = tag_catalog.resolve_alias("grey hair")
                 rows = tag_catalog.search_suggestions("grey_hair", 5, 0, ["general"], False, [], [], [])
 
-            self.assertEqual(resolved["canonical"], "gray_hair")
+            self.assertEqual(resolved["canonical"], "gray hair")
             self.assertEqual(resolved["validation_status"], "Alias that resolves to a canonical tag")
-            self.assertEqual(rows[0]["canonical"], "gray_hair")
-            self.assertEqual(rows[0]["alias"], "grey_hair")
+            self.assertEqual(rows[0]["canonical"], "gray hair")
+            self.assertEqual(rows[0]["alias"], "grey hair")
 
     def test_cancelled_sync_leaves_old_catalog(self):
         with tempfile.TemporaryDirectory() as td:

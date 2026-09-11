@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 import re
 from typing import Dict, Iterable, List, Optional, Pattern, Tuple
 
+from utils.tags import tag_compare_key
+
 
 POLICY_NONE = "none"
 POLICY_CHARACTER_IDENTITY_OMITTED = "character_identity_omitted"
@@ -17,8 +19,7 @@ GROUP_PERMANENT_MARK = "permanent_mark"
 
 
 def normalize_tag(tag: str) -> str:
-    text = (tag or "").strip().lower()
-    text = text.replace(" ", "_").replace("-", "_")
+    text = tag_compare_key(tag).replace("-", "_")
     text = re.sub(r"[^a-z0-9_:*]+", "_", text)
     text = re.sub(r"_+", "_", text)
     return text.strip("_")

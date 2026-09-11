@@ -12,6 +12,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
+from utils.tags import tag_compare_key, to_caption_tag, to_danbooru_tag
 
 from . import danbooru_client
 from .paths import user_path
@@ -77,12 +78,20 @@ def _ensure_root() -> None:
 
 
 def normalize_tag_name(raw: Any) -> str:
-    tag = str(raw or "").strip().lower()
-    if not tag:
-        return ""
-    tag = re.sub(r"\s+", "_", tag)
-    tag = re.sub(r"_+", "_", tag)
-    return tag.strip("_")
+    return to_danbooru_tag(raw)
+
+
+def _display_record(record: Dict[str, Any]) -> Dict[str, Any]:
+    out = dict(record)
+    internal = normalize_tag_name(out.get("name") or out.get("canonical") or out.get("tag"))
+    display = to_caption_tag(internal)
+    out.setdefault("name", internal)
+    out["tag"] = display
+    out["canonical"] = display
+    out["display_name"] = display
+    if out.get("alias"):
+        out["alias"] = to_caption_tag(out["alias"])
+    return out
 
 
 def _to_int(value: Any, default: int = 0) -> int:
@@ -721,7 +730,8 @@ def lookup_tag(name: str) -> Optional[Dict[str, Any]]:
         conn.close()
     if not row:
         return None
-    return {
+    return _display_record({
+        "name": row[0],
         "tag": row[0],
         "canonical": row[0],
         "category": row[1],
@@ -729,7 +739,7 @@ def lookup_tag(name: str) -> Optional[Dict[str, Any]]:
         "is_deprecated": bool(row[3]),
         "validation_status": "Deprecated or invalid" if row[3] else "Verified Danbooru tag",
         "source": "danbooru",
-    }
+    })
 
 
 def resolve_alias(name: str, aliases: Optional[Dict[str, str]] = None) -> Optional[Dict[str, Any]]:
@@ -755,7 +765,7 @@ def resolve_alias(name: str, aliases: Optional[Dict[str, str]] = None) -> Option
             "source": "alias",
         }
     )
-    return record
+    return _display_record(record)
 
 
 def validate_tags(tags: Iterable[str], custom_tags: Optional[Iterable[str]] = None) -> List[Dict[str, Any]]:
@@ -772,10 +782,11 @@ def validate_tags(tags: Iterable[str], custom_tags: Optional[Iterable[str]] = No
             continue
         record = lookup_tag(clean)
         if record:
-            out.append(record)
+            out.append(_display_record(record))
             continue
         out.append(
-            {
+            _display_record({
+                "name": clean,
                 "tag": clean,
                 "canonical": clean,
                 "category": "",
@@ -784,7 +795,7 @@ def validate_tags(tags: Iterable[str], custom_tags: Optional[Iterable[str]] = No
                 "validation_status": "Custom / unknown tag",
                 "source": "custom" if clean in custom else "unknown",
                 "whitelisted": clean in custom,
-            }
+            })
         )
     return out
 
@@ -841,7 +852,8 @@ def search_suggestions(
             project_score, glossary_score = _rank_boost(name, project_tags, glossary_tags)
             status = "Deprecated or invalid" if bool(is_deprecated) else "Verified Danbooru tag"
             rows.append(
-                {
+                _display_record({
+                    "name": name,
                     "tag": name,
                     "canonical": name,
                     "category": cat_name,
@@ -857,7 +869,7 @@ def search_suggestions(
                         int(post_count or 0),
                         -len(name),
                     ),
-                }
+                })
             )
     finally:
         conn.close()

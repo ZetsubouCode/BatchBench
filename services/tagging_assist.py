@@ -16,6 +16,7 @@ from PIL import Image
 from utils.dataset import join_tags
 from utils.parse import parse_tag_list
 from utils.text_io import read_text_best_effort
+from utils.tags import normalize_caption_tags, tag_compare_key, to_caption_tag
 
 from . import tag_catalog
 from . import tag_editor
@@ -24,7 +25,7 @@ from . import tag_editor
 ASSIST_REL = Path("database") / "tagging_assist.json"
 VERSION = 1
 IMAGE_EXTS = [".jpg", ".jpeg", ".png", ".webp"]
-MALFORMED_RE = re.compile(r"[^a-z0-9_:+()\\.-]")
+MALFORMED_RE = re.compile(r"[^a-z0-9 :+()\\.-]")
 COLOR_TAG_RE = re.compile(r"(?:^|_)(black|white|red|blue|green|yellow|pink|purple|orange|brown|blonde|grey|gray)(?:_|$)")
 MULTI_PERSON_TAGS = {"2girls", "2boys", "multiple_girls", "multiple_boys", "multiple_persons", "group"}
 
@@ -34,19 +35,21 @@ def _now_iso() -> str:
 
 
 def _normalize_tag(raw: Any) -> str:
+    return to_caption_tag(raw)
+
+
+def _normalize_id(raw: Any) -> str:
     return tag_catalog.normalize_tag_name(raw)
 
 
 def _normalize_tags(raw: Any) -> List[str]:
     chunks = raw if isinstance(raw, list) else parse_tag_list(str(raw or ""))
-    out: List[str] = []
-    seen: Set[str] = set()
-    for item in chunks or []:
-        tag = _normalize_tag(item)
-        if tag and tag not in seen:
-            seen.add(tag)
-            out.append(tag)
-    return out
+    return normalize_caption_tags(chunks or [])
+
+
+def _normalize_literals(raw: Any) -> List[str]:
+    chunks = raw if isinstance(raw, list) else parse_tag_list(str(raw or ""))
+    return normalize_caption_tags(chunks or [], protected_literals=chunks or [])
 
 
 def _assist_path(project_root: Path) -> Path:
@@ -78,7 +81,7 @@ def normalize_state(payload: Any) -> Dict[str, Any]:
     src = payload if isinstance(payload, dict) else {}
     out = default_state()
     out["custom_tags"] = _normalize_tags(src.get("custom_tags") or [])
-    out["required_trigger_tags"] = _normalize_tags(src.get("required_trigger_tags") or [])
+    out["required_trigger_tags"] = _normalize_literals(src.get("required_trigger_tags") or [])
     try:
         out["rare_tag_threshold"] = max(0, int(src.get("rare_tag_threshold", out["rare_tag_threshold"])))
     except Exception:
@@ -93,7 +96,7 @@ def normalize_state(payload: Any) -> Dict[str, Any]:
             {
                 "id": pack_id,
                 "name": name,
-                "segment_id": _normalize_tag(raw.get("segment_id")),
+                "segment_id": _normalize_id(raw.get("segment_id")),
                 "tags": _normalize_tags(raw.get("tags") or []),
                 "pinned": bool(raw.get("pinned", False)),
                 "usage_count": max(0, int(raw.get("usage_count") or 0)),
@@ -157,7 +160,7 @@ def upsert_pack(project_root: Path, payload: Dict[str, Any]) -> Dict[str, Any]:
     pack = {
         "id": raw_id or uuid.uuid4().hex,
         "name": re.sub(r"\s+", " ", str(payload.get("name") or "").strip())[:80] or "Tag pack",
-        "segment_id": _normalize_tag(payload.get("segment_id")),
+        "segment_id": _normalize_id(payload.get("segment_id")),
         "tags": _normalize_tags(payload.get("tags") or []),
         "pinned": bool(payload.get("pinned", False)),
         "usage_count": max(0, int(payload.get("usage_count") or 0)),
@@ -184,7 +187,7 @@ def delete_pack(project_root: Path, pack_id: str) -> Dict[str, Any]:
 
 def list_packs(project_root: Path, segment_id: str = "", show_all: bool = False) -> Dict[str, Any]:
     state = load_state(project_root)
-    segment = _normalize_tag(segment_id)
+    segment = _normalize_id(segment_id)
     packs = []
     for pack in state["packs"]:
         relevant = not pack.get("segment_id") or pack.get("segment_id") == segment
@@ -370,7 +373,14 @@ def lint_captions(project_root: Path, area: str = "temp", severity: str = "", is
     for image in tag_editor._list_images(root, IMAGE_EXTS, recursive=True, exclude_dir=exclude_dir):
         rel = image.relative_to(root).as_posix()
         txt = image.with_suffix(".txt")
-        tags = tag_editor._read_tags_cached(txt) if txt.exists() else []
+        if txt.exists():
+            try:
+                raw_text, _, _ = read_text_best_effort(txt)
+                tags = normalize_caption_tags(parse_tag_list(raw_text, dedupe=False), dedupe=False)
+            except Exception:
+                tags = []
+        else:
+            tags = []
         captions.append((image, rel, tags))
     tag_counts = Counter(tag for _, _, tags in captions for tag in set(tags))
 
@@ -385,9 +395,10 @@ def lint_captions(project_root: Path, area: str = "temp", severity: str = "", is
         seen: Set[str] = set()
         for tag in tags:
             clean = _normalize_tag(tag)
-            if tag in seen:
+            key = tag_compare_key(tag)
+            if key in seen:
                 add("warning", rel, "duplicate", f"Duplicate tag '{tag}'.", [tag], "Remove one duplicate manually.")
-            seen.add(tag)
+            seen.add(key)
             if not clean or clean != tag or MALFORMED_RE.search(tag):
                 add("warning", rel, "malformed", f"Tag '{tag}' has unusual formatting.", [tag], "Normalize spacing/underscores before saving.")
         for missing in sorted(required - set(tags)):
@@ -405,12 +416,14 @@ def lint_captions(project_root: Path, area: str = "temp", severity: str = "", is
             if 0 < int(state.get("rare_tag_threshold") or 0) >= tag_counts[tag]:
                 add("advisory", rel, "rare_one_off", f"'{tag}' appears only {tag_counts[tag]} time(s).", [tag], "Check whether this is intentional.")
         tag_set = set(tags)
-        if "solo" in tag_set and tag_set.intersection(MULTI_PERSON_TAGS):
-            add("warning", rel, "conflict", "solo appears with a multiple-person tag.", ["solo", *sorted(tag_set.intersection(MULTI_PERSON_TAGS))], "Keep the tag that matches the image.")
-        if "from_behind" in tag_set and {"looking_at_viewer", "from_front"}.intersection(tag_set):
-            add("advisory", rel, "composition_conflict", "Back-view and front-facing/viewer-facing tags appear together.", ["from_behind"], "Review camera and face-direction tags.")
-        if any(COLOR_TAG_RE.search(tag) for tag in tag_set) and _is_grayscaleish(image):
-            add("advisory", rel, "grayscale_color", "Color-related tags appear on a mostly greyscale image.", [tag for tag in tag_set if COLOR_TAG_RE.search(tag)], "Keep only if the color is semantically useful.")
+        key_set = {tag_compare_key(tag) for tag in tags}
+        if "solo" in key_set and key_set.intersection(MULTI_PERSON_TAGS):
+            add("warning", rel, "conflict", "solo appears with a multiple-person tag.", ["solo", *sorted(key_set.intersection(MULTI_PERSON_TAGS))], "Keep the tag that matches the image.")
+        if "from_behind" in key_set and {"looking_at_viewer", "from_front"}.intersection(key_set):
+            add("advisory", rel, "composition_conflict", "Back-view and front-facing/viewer-facing tags appear together.", ["from behind"], "Review camera and face-direction tags.")
+        color_tags = [tag for tag in tag_set if COLOR_TAG_RE.search(tag_compare_key(tag))]
+        if color_tags and _is_grayscaleish(image):
+            add("advisory", rel, "grayscale_color", "Color-related tags appear on a mostly greyscale image.", color_tags, "Keep only if the color is semantically useful.")
     return {"ok": True, "area": area, "rows": rows, "summary": {"images": len(captions), "issues": len(rows)}, "warnings": [], "info": []}
 
 

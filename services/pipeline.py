@@ -15,6 +15,7 @@ from uuid import uuid4
 from utils.io import readable_path, readable_path_or_none
 from utils.parse import parse_bool, parse_int, parse_float, parse_optional_int, parse_exts
 from utils.tool_result import unpack_tool_result
+from utils.tags import tag_compare_key
 from services import (
     batch_adjust,
     combine_datasets,
@@ -359,8 +360,8 @@ def _scan_dataset_quality(
         tags = [part.strip() for part in raw_parts if part.strip()]
         if any(part != part.strip() for part in raw_parts if part):
             malformed_tags.append(txt.relative_to(root).as_posix())
-        counts = Counter(tags)
-        dupes = [tag for tag, count in counts.items() if count > 1]
+        counts = Counter(tag_compare_key(tag) for tag in tags)
+        dupes = [key.replace("_", " ") for key, count in counts.items() if count > 1]
         if dupes:
             duplicate_tags.append({"path": txt.relative_to(root).as_posix(), "tags": dupes[:20]})
         if include_token_check and token_warning_limit > 0 and len(tags) > token_warning_limit:
@@ -1612,7 +1613,23 @@ class PipelineManager:
                     stats["skipped"] += 1
                     continue
                 dest.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(path, dest)
+                if path.suffix.lower() == ".txt" and include_txt:
+                    tag_file = normalizer.parse_tag_file(path)
+                    trigger = self._resolve_trigger_tag(job, step_cfg)
+                    if trigger:
+                        trigger_key = tag_compare_key(trigger)
+                        tag_file.main = [
+                            trigger if tag_compare_key(tag) == trigger_key else tag
+                            for tag in tag_file.main
+                        ]
+                        tag_file.optional = [
+                            trigger if tag_compare_key(tag) == trigger_key else tag
+                            for tag in tag_file.optional
+                        ]
+                        tag_file.protected_literals = [trigger]
+                    dest.write_text(normalizer.format_tag_file(tag_file), encoding="utf-8")
+                else:
+                    shutil.copy2(path, dest)
                 stats["files"] += 1
                 if path.suffix.lower() in image_exts:
                     stats["images"] += 1

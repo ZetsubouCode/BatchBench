@@ -9,6 +9,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 from utils.io import readable_path
 from utils.text_io import read_text_best_effort
+from utils.tags import normalize_caption_tags, tag_compare_key, to_caption_tag
 
 # Default image extensions we consider when pairing txt files
 DEFAULT_IMAGE_EXTS = [".jpg", ".jpeg", ".png", ".webp", ".bmp"]
@@ -20,6 +21,8 @@ class TagFile:
     main: List[str] = field(default_factory=list)
     optional: List[str] = field(default_factory=list)
     warning: Optional[str] = None
+    original_text: Optional[str] = None
+    protected_literals: List[str] = field(default_factory=list)
 
     def clone(self) -> "TagFile":
         return TagFile(
@@ -27,6 +30,8 @@ class TagFile:
             main=list(self.main),
             optional=list(self.optional),
             warning=self.warning,
+            original_text=self.original_text,
+            protected_literals=list(self.protected_literals),
         )
 
 
@@ -85,7 +90,7 @@ def clean_input_list(raw: str) -> Set[str]:
             val = token.strip()
             if val:
                 parts.append(val)
-    return set(parts)
+    return {tag_compare_key(tag) for tag in parts if tag_compare_key(tag)}
 
 
 def _resolve_preset_target(preset_root: Path, preset_type: str, preset_file: str) -> Path:
@@ -142,7 +147,7 @@ def parse_tag_file(path: Path) -> TagFile:
     for line in lines:
         lower = line.lower()
         if lower.startswith("#optional:"):
-            optional = [t.strip() for t in line.split(":", 1)[1].split(",") if t.strip()]
+            optional = normalize_caption_tags(line.split(":", 1)[1].split(","))
         elif lower.startswith("#warning:"):
             warning = line.split(":", 1)[1].strip()
         elif not main_line:
@@ -151,21 +156,21 @@ def parse_tag_file(path: Path) -> TagFile:
             # Additional non-block lines are appended to main tags
             main_line = f"{main_line}, {line}"
 
-    main_tags = [t.strip() for t in main_line.split(",") if t.strip()] if main_line else []
+    main_tags = normalize_caption_tags(main_line.split(",")) if main_line else []
     if had_replacement:
         decode_warning = f"Decoded with fallback ({used_encoding})"
         warning = f"{warning} | {decode_warning}" if warning else decode_warning
-    return TagFile(path=path, main=main_tags, optional=optional, warning=warning)
+    return TagFile(path=path, main=main_tags, optional=optional, warning=warning, original_text=text)
 
 
 def format_tag_file(tag_file: TagFile) -> str:
     lines = []
     if tag_file.main:
-        lines.append(", ".join(tag_file.main))
+        lines.append(", ".join(normalize_caption_tags(tag_file.main, protected_literals=tag_file.protected_literals)))
     else:
         lines.append("")
     if tag_file.optional:
-        lines.append("#optional: " + ", ".join(tag_file.optional))
+        lines.append("#optional: " + ", ".join(normalize_caption_tags(tag_file.optional, protected_literals=tag_file.protected_literals)))
     if tag_file.warning:
         lines.append("#warning: " + tag_file.warning)
     return "\n".join(lines).strip() + "\n"
@@ -175,20 +180,24 @@ def _dedup(seq: List[str]) -> List[str]:
     seen: Set[str] = set()
     out: List[str] = []
     for item in seq:
-        if item not in seen:
-            out.append(item)
-            seen.add(item)
+        value = to_caption_tag(item)
+        key = tag_compare_key(value)
+        if key and key not in seen:
+            out.append(value)
+            seen.add(key)
     return out
 
 
 def _sort_tags(tags: List[str], priority_groups: List[List[str]]) -> List[str]:
     ordered: List[str] = []
     remaining = list(tags)
-    for group in priority_groups or []:
-        for tag in group:
-            if tag in remaining:
+    priority_keys = [tag_compare_key(tag) for group in priority_groups or [] for tag in group]
+    for wanted in priority_keys:
+        for tag in list(remaining):
+            if tag_compare_key(tag) == wanted:
                 ordered.append(tag)
                 remaining.remove(tag)
+                break
     ordered.extend(sorted(remaining))
     return ordered
 
@@ -204,7 +213,7 @@ def _compile_regex(patterns: List[str]) -> List[re.Pattern]:
 
 
 def _matches_any(tag: str, patterns: List[re.Pattern]) -> bool:
-    return any(pat.search(tag) for pat in patterns)
+    return any(pat.search(tag_compare_key(tag)) for pat in patterns)
 
 
 def collect_tag_files(root: Path, recursive: bool, image_exts: List[str], create_missing_txt: bool) -> List[Path]:
@@ -345,7 +354,10 @@ def _build_scan_context(
 
     total_files = len(parsed)
     rules = preset.get("rules", {})
-    block_specific = set((rules.get("background_policy") or {}).get("block_specific") or [])
+    block_specific = {
+        tag_compare_key(tag)
+        for tag in (rules.get("background_policy") or {}).get("block_specific") or []
+    }
     threshold = opts.background_threshold
     if threshold is None:
         threshold = (rules.get("background_policy") or {}).get("frequency_threshold")
@@ -388,7 +400,11 @@ def scan_dataset(opts: NormalizeOptions, preset_root: Path, preset_payload: Opti
         "tag_counts": context.tag_counts,
         "top_tags": context.top_tags,
         "rare_tags": context.rare_tags,
-        "block_specific_hits": [tag for tag in context.block_specific if context.tag_counts.get(tag)],
+        "block_specific_hits": [
+            tag.replace("_", " ")
+            for tag in context.block_specific
+            if any(tag_compare_key(counted) == tag for counted in context.tag_counts)
+        ],
         "sample": sample,
     }
 
@@ -408,19 +424,20 @@ def _apply_background_policy(
     if not policy:
         return main, optional, moved
 
-    allow_general = set(policy.get("allow_general") or [])
-    block_specific = set(policy.get("block_specific") or [])
+    allow_general = {tag_compare_key(tag) for tag in policy.get("allow_general") or []}
+    block_specific = {tag_compare_key(tag) for tag in policy.get("block_specific") or []}
     move_specific = bool(policy.get("move_specific_to_optional"))
     threshold = threshold_override if threshold_override is not None else policy.get("frequency_threshold")
     total_files = stats.get("total_files") or 0
     counts: Counter = stats.get("tag_counts") or Counter()
 
     for tag in main:
-        if tag in keep:
+        key = tag_compare_key(tag)
+        if key in keep:
             main_out.append(tag)
             continue
 
-        if tag in block_specific:
+        if key in block_specific:
             if move_specific:
                 optional_out.append(tag)
                 moved.append(tag)
@@ -429,13 +446,13 @@ def _apply_background_policy(
 
         # Frequency-based optional move
         freq = (counts.get(tag, 0) / total_files) if total_files else 1.0
-        if threshold and freq < float(threshold) and tag not in allow_general:
+        if threshold and freq < float(threshold) and key not in allow_general:
             optional_out.append(tag)
             moved.append(tag)
             continue
 
         # Unknown background tag handling
-        if move_unknown_to_optional and tag not in allow_general:
+        if move_unknown_to_optional and key not in allow_general:
             optional_out.append(tag)
             moved.append(tag)
             continue
@@ -452,17 +469,21 @@ def normalize_record(
     stats: Dict,
 ) -> Tuple[TagFile, Dict]:
     rules = preset.get("rules", {})
-    keep_tags = set(rules.get("keep_tags") or [])
-    keep_tags.update(opts.extra_keep)
-    keep_tags.update(opts.identity_tags)
+    keep_tags = {tag_compare_key(tag) for tag in rules.get("keep_tags") or []}
+    keep_tags.update(tag_compare_key(tag) for tag in opts.extra_keep)
+    keep_tags.update(tag_compare_key(tag) for tag in opts.identity_tags)
 
-    remove_tags = set(rules.get("remove_tags") or [])
-    remove_tags.update(opts.extra_remove)
+    remove_tags = {tag_compare_key(tag) for tag in rules.get("remove_tags") or []}
+    remove_tags.update(tag_compare_key(tag) for tag in opts.extra_remove)
     remove_regex = _compile_regex(rules.get("remove_regex") or [])
 
-    replace_map: Dict[str, str] = rules.get("replace_map") or {}
+    replace_map: Dict[str, str] = {
+        tag_compare_key(old): to_caption_tag(new)
+        for old, new in (rules.get("replace_map") or {}).items()
+        if tag_compare_key(old)
+    }
     optional_handling = rules.get("optional_handling") or {}
-    move_opt_tags = set(optional_handling.get("move_to_optional_tags") or [])
+    move_opt_tags = {tag_compare_key(tag) for tag in optional_handling.get("move_to_optional_tags") or []}
     move_opt_regex = _compile_regex(optional_handling.get("move_to_optional_regex") or [])
 
     sort_cfg = rules.get("sort") or {}
@@ -474,16 +495,18 @@ def normalize_record(
 
     actions: Dict[str, int] = {"removed": 0, "replaced": 0, "dedup": 0, "moved_optional": 0, "sorted": 0}
 
-    before_text = format_tag_file(record)
+    before_text = record.original_text if record.original_text is not None else format_tag_file(record)
     main = list(record.main)
     optional = list(record.optional)
     pinned_raw = [t for t in (opts.pinned_tags or []) if t]
-    pinned_order = _dedup(pinned_raw)
-    pinned_present = [t for t in pinned_order if t in main or t in optional]
+    pinned_order = list(dict.fromkeys(pinned_raw))
+    pinned_by_key = {tag_compare_key(tag): tag for tag in pinned_order}
+    present_keys = {tag_compare_key(tag) for tag in main + optional}
+    pinned_present = [tag for tag in pinned_order if tag_compare_key(tag) in present_keys]
     if pinned_present:
-        main = [t for t in main if t not in pinned_present]
-        optional = [t for t in optional if t not in pinned_present]
-        keep_tags.update(pinned_present)
+        main = [t for t in main if tag_compare_key(t) not in pinned_by_key]
+        optional = [t for t in optional if tag_compare_key(t) not in pinned_by_key]
+        keep_tags.update(pinned_by_key)
 
     # 1) trim
     if rules.get("trim"):
@@ -492,8 +515,8 @@ def normalize_record(
 
     # 2) replace map
     if replace_map:
-        new_main = [replace_map.get(t, t) for t in main]
-        new_optional = [replace_map.get(t, t) for t in optional]
+        new_main = [replace_map.get(tag_compare_key(t), t) for t in main]
+        new_optional = [replace_map.get(tag_compare_key(t), t) for t in optional]
         actions["replaced"] = sum(1 for a, b in zip(main, new_main) if a != b) + sum(
             1 for a, b in zip(optional, new_optional) if a != b
         )
@@ -503,18 +526,20 @@ def normalize_record(
     filtered_main: List[str] = []
     filtered_optional: List[str] = []
     for tag in main:
-        if tag in keep_tags:
+        key = tag_compare_key(tag)
+        if key in keep_tags:
             filtered_main.append(tag)
             continue
-        if tag in remove_tags or _matches_any(tag, remove_regex):
+        if key in remove_tags or _matches_any(tag, remove_regex):
             actions["removed"] += 1
             continue
         filtered_main.append(tag)
     for tag in optional:
-        if tag in keep_tags:
+        key = tag_compare_key(tag)
+        if key in keep_tags:
             filtered_optional.append(tag)
             continue
-        if tag in remove_tags or _matches_any(tag, remove_regex):
+        if key in remove_tags or _matches_any(tag, remove_regex):
             actions["removed"] += 1
             continue
         filtered_optional.append(tag)
@@ -532,9 +557,10 @@ def normalize_record(
     moved_now: List[str] = []
     new_main: List[str] = []
     for tag in main:
-        if tag in keep_tags:
+        key = tag_compare_key(tag)
+        if key in keep_tags:
             new_main.append(tag)
-        elif tag in move_opt_tags or _matches_any(tag, move_opt_regex):
+        elif key in move_opt_tags or _matches_any(tag, move_opt_regex):
             optional.append(tag)
             moved_now.append(tag)
         else:
@@ -569,7 +595,13 @@ def normalize_record(
     if pinned_present:
         main = _dedup(pinned_present + main)
 
-    after = TagFile(path=record.path, main=main, optional=optional, warning=record.warning)
+    after = TagFile(
+        path=record.path,
+        main=main,
+        optional=optional,
+        warning=record.warning,
+        protected_literals=pinned_present,
+    )
     after_text = format_tag_file(after)
 
     changed = before_text.strip() != after_text.strip()

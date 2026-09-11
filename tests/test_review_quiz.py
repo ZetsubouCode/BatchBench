@@ -51,7 +51,7 @@ class ReviewQuizTests(unittest.TestCase):
         saved = review_quiz.save_review_quiz_config(config)
         step = saved["quiz_review"]["steps"][0]
         self.assertEqual(step["id"], "camera_angle")
-        self.assertEqual(step["tags"], ["from_side", "from_front"])
+        self.assertEqual(step["tags"], ["from side", "from front"])
         self.assertFalse(step["danbooru_autosuggest"])
 
     def test_danbooru_autosuggest_step_setting_persists(self):
@@ -165,9 +165,9 @@ class ReviewQuizTests(unittest.TestCase):
         result = review_quiz.save_quiz_item(project, "temp", "sample.png", "body", ["cowboy_shot"], backup=True)
 
         self.assertTrue(result["ok"])
-        self.assertEqual(result["removed"], ["upper_body", "full_body"])
-        self.assertEqual(result["added"], ["cowboy_shot"])
-        self.assertEqual((temp / "sample.txt").read_text(encoding="utf-8"), "trigger, cowboy_shot, from_side")
+        self.assertEqual(result["removed"], ["upper body", "full body"])
+        self.assertEqual(result["added"], ["cowboy shot"])
+        self.assertEqual((temp / "sample.txt").read_text(encoding="utf-8"), "trigger, cowboy shot, from side")
         self.assertTrue((temp / "sample.txt.bak").exists())
         metadata = json.loads((temp / ".bb_review.json").read_text(encoding="utf-8"))
         self.assertIn("body", metadata["items"]["sample.png"]["reviewed_steps"])
@@ -272,9 +272,9 @@ class ReviewQuizTests(unittest.TestCase):
             [],
             manual_tags=[" Trigger ", "long hair", "smile"],
         )
-        self.assertEqual(created["tags"], ["trigger", "long_hair", "smile"])
+        self.assertEqual(created["tags"], ["trigger", "long hair", "smile"])
         self.assertFalse(created["backup_created"])
-        self.assertEqual((temp / "sample.txt").read_text(encoding="utf-8"), "trigger, long_hair, smile")
+        self.assertEqual((temp / "sample.txt").read_text(encoding="utf-8"), "trigger, long hair, smile")
         review_quiz.restore_quiz_item(
             project,
             "temp",
@@ -294,7 +294,7 @@ class ReviewQuizTests(unittest.TestCase):
             [],
             manual_tags=["trigger", "closed eyes"],
         )
-        self.assertEqual(saved["tags"], ["trigger", "closed_eyes"])
+        self.assertEqual(saved["tags"], ["trigger", "closed eyes"])
         self.assertTrue(saved["backup_created"])
 
     def test_manual_caption_payload_requires_manual_tagging_mode(self):

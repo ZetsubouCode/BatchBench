@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from utils.dataset import join_tags
 from utils.parse import parse_tag_list
 from utils.text_io import read_text_best_effort
+from utils.tags import normalize_caption_tags, to_caption_tag
 
 from . import tag_editor
 from .paths import user_path
@@ -29,23 +30,12 @@ def _now_iso() -> str:
 
 
 def _normalize_tag(raw: Any) -> str:
-    tag = str(raw or "").strip().lower()
-    tag = re.sub(r"\s+", "_", tag)
-    tag = re.sub(r"_+", "_", tag)
-    return tag.strip("_")
+    return to_caption_tag(raw).lower()
 
 
 def _normalize_tags(raw: Any) -> List[str]:
-    tags: List[str] = []
-    seen: Set[str] = set()
     chunks = raw if isinstance(raw, list) else parse_tag_list(raw)
-    for item in chunks or []:
-        tag = _normalize_tag(item)
-        if not tag or tag in seen:
-            continue
-        seen.add(tag)
-        tags.append(tag)
-    return tags
+    return normalize_caption_tags((_normalize_tag(item) for item in chunks or []))
 
 
 def _slugify(raw: Any) -> str:
@@ -555,6 +545,11 @@ def save_quiz_item(
             raise ValueError("Add at least one manual tag before saving a missing caption.")
     else:
         next_tags = _replacement_tags(previous_tags, set(step["tags"]), selected)
+    trigger = tag_editor.extract_trigger_word(tag_editor.resolve_project_paths(project_root)["prompt_path"])
+    if trigger:
+        trigger_key = tag_editor.tag_compare_key(trigger)
+        next_tags = [trigger if tag_editor.tag_compare_key(tag) == trigger_key else tag for tag in next_tags]
+        next_tags = normalize_caption_tags(next_tags, protected_literals=[trigger])
     next_text = join_tags(next_tags)
     changed = (not had_txt) or next_text.strip() != source_text.strip()
     backup_created = False

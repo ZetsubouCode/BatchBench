@@ -42,6 +42,7 @@ from services.offline_tagger_rules import (
 from services import tag_policy
 from utils.io import readable_path
 from utils.dataset import split_tags, join_tags
+from utils.tags import normalize_caption_tags, tag_compare_key, to_caption_tag
 from utils.parse import (
     parse_bool,
     parse_exts,
@@ -1961,20 +1962,20 @@ def merge_caption_tags(
         if not norm or norm in seen:
             continue
         seen.add(norm)
-        merged.append(norm)
+        merged.append(str(tag or "").strip())
     for tag in existing_tags or []:
         value = (tag or "").strip()
         norm = _normalize_user_tag(value)
         if not value or not norm or norm in seen:
             continue
         seen.add(norm)
-        merged.append(value)
+        merged.append(to_caption_tag(value))
     for tag in auto_tags or []:
         norm = _normalize_user_tag(tag)
         if not norm or norm in seen:
             continue
         seen.add(norm)
-        merged.append(norm)
+        merged.append(to_caption_tag(tag))
     return merged
 
 
@@ -2352,11 +2353,18 @@ def _format_tag_file(
     warning: Optional[str],
     newline_end: bool,
     strip_whitespace: bool,
+    protected_literals: Optional[List[str]] = None,
 ) -> str:
     try:
         from services import normalizer
 
-        tf = normalizer.TagFile(path=Path(""), main=main, optional=optional, warning=warning)
+        tf = normalizer.TagFile(
+            path=Path(""),
+            main=main,
+            optional=optional,
+            warning=warning,
+            protected_literals=list(protected_literals or []),
+        )
         text = normalizer.format_tag_file(tf)
     except Exception:
         text = join_tags(main)
@@ -2994,6 +3002,15 @@ def run_tagger(
                     merged_main = sorted(merged_main)
                 merged_main = _apply_trigger_tag(merged_main, opts.trigger_tag)
 
+            protected_literals = [opts.trigger_tag] if opts.trigger_tag else []
+            if opts.simple_mode:
+                protected_literals.extend(opts.prefix_tags or [])
+            auto_tags = normalize_caption_tags(auto_tags)
+            merged_main = normalize_caption_tags(
+                merged_main,
+                protected_literals=protected_literals,
+            )
+
             audit_trigger = opts.trigger_tag or (opts.prefix_tags[0] if opts.prefix_tags else "")
             leaks = tag_policy.audit_tags(merged_main, compiled_policy, trigger_tag=audit_trigger)
             if leaks:
@@ -3068,6 +3085,7 @@ def run_tagger(
                     existing_warning if opts.write_mode in {"append", "overwrite"} else None,
                     opts.newline_end,
                     opts.strip_whitespace,
+                    protected_literals=protected_literals,
                 )
                 existed_before = txt_path.exists()
                 try:

@@ -182,7 +182,7 @@ class TagEditorTransactionTests(unittest.TestCase):
             )
 
             self.assertTrue(meta.get("ok"), msg=meta)
-            self.assertEqual((temp / "sample.txt").read_text(encoding="utf-8").strip(), "long_hair, cat")
+            self.assertEqual((temp / "sample.txt").read_text(encoding="utf-8").strip(), "long hair, cat")
 
     def test_replace_sanitizes_space_tags_in_input_and_file(self):
         with tempfile.TemporaryDirectory() as td:
@@ -205,7 +205,7 @@ class TagEditorTransactionTests(unittest.TestCase):
             self.assertTrue(meta.get("ok"), msg=meta)
             self.assertEqual(
                 (temp / "sample.txt").read_text(encoding="utf-8").strip(),
-                "legs_crossed, brick_wall",
+                "legs crossed, brick wall",
             )
 
     def test_replace_keeps_single_renamed_tag_at_original_position(self):
@@ -229,7 +229,7 @@ class TagEditorTransactionTests(unittest.TestCase):
             self.assertTrue(meta.get("ok"), msg=meta)
             self.assertEqual(
                 (temp / "sample.txt").read_text(encoding="utf-8").strip(),
-                "character_name, solo, high_ponytail, blue_eyes",
+                "character name, solo, high ponytail, blue eyes",
             )
 
     def test_replace_keeps_multiple_renamed_tags_at_their_positions(self):
@@ -253,7 +253,7 @@ class TagEditorTransactionTests(unittest.TestCase):
             self.assertTrue(meta.get("ok"), msg=meta)
             self.assertEqual(
                 (temp / "sample.txt").read_text(encoding="utf-8").strip(),
-                "character_name, 1girl, long_hair, green_eyes",
+                "character name, 1girl, long hair, green eyes",
             )
 
     def test_replace_existing_target_duplicate_keeps_source_position(self):
@@ -280,7 +280,7 @@ class TagEditorTransactionTests(unittest.TestCase):
             self.assertTrue(meta.get("ok"), msg=meta)
             self.assertEqual(
                 (temp / "sample.txt").read_text(encoding="utf-8").strip(),
-                "character_name, high_ponytail, blue_eyes, outdoors",
+                "character name, high ponytail, blue eyes, outdoors",
             )
 
     def test_replace_multiple_sources_to_one_target_keeps_earliest_source_position(self):
@@ -307,7 +307,7 @@ class TagEditorTransactionTests(unittest.TestCase):
             self.assertTrue(meta.get("ok"), msg=meta)
             self.assertEqual(
                 (temp / "sample.txt").read_text(encoding="utf-8").strip(),
-                "character_name, hair_up, blue_eyes, outdoors",
+                "character name, hair up, blue eyes, outdoors",
             )
 
     def test_replace_unaffected_tags_retain_original_order(self):
@@ -334,7 +334,7 @@ class TagEditorTransactionTests(unittest.TestCase):
             self.assertTrue(meta.get("ok"), msg=meta)
             self.assertEqual(
                 (temp / "sample.txt").read_text(encoding="utf-8").strip(),
-                "alpha_tag, beta_tag, high_ponytail, gamma_tag, delta_tag",
+                "alpha tag, beta tag, high ponytail, gamma tag, delta tag",
             )
 
     def test_delete_sanitizes_space_tags(self):

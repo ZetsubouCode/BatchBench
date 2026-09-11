@@ -33,8 +33,8 @@ class TagEditorFileApiTests(unittest.TestCase):
             data = resp.get_json()
             self.assertTrue(data.get("ok"), msg=data)
             self.assertTrue(data.get("created"))
-            self.assertEqual(data.get("added"), ["cat", "blue_sky"])
-            self.assertEqual((temp / "sample.txt").read_text(encoding="utf-8").strip(), "cat, blue_sky")
+            self.assertEqual(data.get("added"), ["cat", "blue sky"])
+            self.assertEqual((temp / "sample.txt").read_text(encoding="utf-8").strip(), "cat, blue sky")
 
     def test_move_file_moves_image_and_txt_between_root_and_temp(self):
         with tempfile.TemporaryDirectory() as td:
@@ -182,12 +182,12 @@ class TagEditorFileApiTests(unittest.TestCase):
             self.assertTrue(data.get("ok"), msg=data)
             self.assertEqual(data.get("rel"), "main_tags.txt")
             self.assertEqual(data.get("trigger"), "trigger_word")
-            self.assertEqual(data.get("tags"), ["blue_sky", "long_hair", "smiling", "looking_at_viewer", "jacket", "skirt"])
+            self.assertEqual(data.get("tags"), ["blue sky", "long hair", "smiling", "looking at viewer", "jacket", "skirt"])
             sections = data.get("sections") or []
             self.assertEqual(len(sections), 2)
             self.assertEqual(sections[0]["category"], "appearance")
-            self.assertEqual(sections[0]["tags"], ["blue_sky", "long_hair"])
-            self.assertEqual(sections[0]["conditionals"], [["smiling", "looking_at_viewer"]])
+            self.assertEqual(sections[0]["tags"], ["blue sky", "long hair"])
+            self.assertEqual(sections[0]["conditionals"], [["smiling", "looking at viewer"]])
             self.assertEqual(sections[1]["category"], "outfit")
 
     def test_dataset_zip_excludes_temp_and_writes_next_to_dataset(self):

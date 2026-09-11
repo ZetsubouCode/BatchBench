@@ -205,7 +205,7 @@
   const q = (id) => document.getElementById(id);
   const state = { config: null, selected: -1, idDirty: false, draggingIndex: -1, suppressCardClick: false, catalogSettings: null, catalogPoll: null };
   const slug = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]+/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
-  const normalizeTag = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+  const normalizeTag = (value) => String(value || '').trim().toLowerCase().replace(/_+/g, ' ').replace(/\s+/g, ' ');
   const tagsFrom = (value) => {
     const seen = new Set();
     return String(value || '').replace(/\r/g, '\n').split(/[\n,]+/).map(normalizeTag).filter(tag => tag && !seen.has(tag) && seen.add(tag));

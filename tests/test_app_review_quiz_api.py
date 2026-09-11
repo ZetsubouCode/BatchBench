@@ -46,7 +46,7 @@ class ReviewQuizApiTests(unittest.TestCase):
         self.assertEqual(post_response.status_code, 200)
         step = post_response.get_json()["config"]["quiz_review"]["steps"][0]
         self.assertEqual(step["id"], "pose_type")
-        self.assertEqual(step["tags"], ["standing_pose", "sitting"])
+        self.assertEqual(step["tags"], ["standing pose", "sitting"])
         self.assertTrue(step["autosuggest_segment_only"])
 
     def test_quiz_list_save_and_restore_routes(self):
@@ -77,7 +77,7 @@ class ReviewQuizApiTests(unittest.TestCase):
         )
         self.assertEqual(save_response.status_code, 200)
         saved = save_response.get_json()
-        self.assertEqual(saved["tags"], ["trigger", "cowboy_shot", "from_side"])
+        self.assertEqual(saved["tags"], ["trigger", "cowboy shot", "from side"])
 
         restore_response = self.client.post(
             "/api/tags/quiz/restore",
@@ -90,7 +90,7 @@ class ReviewQuizApiTests(unittest.TestCase):
             },
         )
         self.assertEqual(restore_response.status_code, 200)
-        self.assertEqual((temp / "sample.txt").read_text(encoding="utf-8"), "trigger, upper_body, from_side")
+        self.assertEqual((temp / "sample.txt").read_text(encoding="utf-8"), "trigger, upper body, from side")
 
     def test_cheatsheet_conversion_returns_editable_steps_without_saving(self):
         project, _ = self._project()
@@ -109,7 +109,7 @@ class ReviewQuizApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.get_json()
         self.assertEqual([step["id"] for step in data["steps"]], ["camera_angle", "background"])
-        self.assertEqual(data["steps"][0]["tags"], ["from_front", "from_side", "from_above"])
+        self.assertEqual(data["steps"][0]["tags"], ["from front", "from side", "from above"])
         self.assertEqual(self.config_path.read_text(encoding="utf-8"), original)
 
     def test_tagging_quiz_starter_uses_review_quiz_settings_steps(self):
@@ -178,7 +178,7 @@ class ReviewQuizApiTests(unittest.TestCase):
         segment = next(seg for seg in session["quiz_segments"] if seg["id"] == "accessory")
         self.assertEqual(segment["label"], "Accessory")
         self.assertEqual(session["mapping_rows"][0], {"left_sections": ["accessory"], "right_segment": "accessory"})
-        self.assertEqual(session["recommendations"]["accessory"], ["hair_ornament", "necklace"])
+        self.assertEqual(session["recommendations"]["accessory"], ["hair ornament", "necklace"])
 
     def test_tagging_quiz_recommendation_sources_keep_duplicate_parts(self):
         project, _ = self._project()
@@ -402,8 +402,8 @@ class ReviewQuizApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         saved = response.get_json()
-        self.assertEqual(saved["tags"], ["trigger", "long_hair"])
-        self.assertEqual((temp / "sample.txt").read_text(encoding="utf-8"), "trigger, long_hair")
+        self.assertEqual(saved["tags"], ["trigger", "long hair"])
+        self.assertEqual((temp / "sample.txt").read_text(encoding="utf-8"), "trigger, long hair")
 
         restore = self.client.post(
             "/api/tags/quiz/restore",

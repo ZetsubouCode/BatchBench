@@ -532,7 +532,7 @@ Watch out:
 
 ### What the autotagger does
 
-The Offline Autotagger uses the selected WD model to produce probabilities for known Danbooru tags. It does not generate arbitrary natural-language captions, and it cannot invent tags outside the model vocabulary. Accepted tags are normalized into comma-separated `snake_case` sidecar `.txt` captions.
+The Offline Autotagger uses the selected WD model to produce probabilities for known Danbooru tags. It does not generate arbitrary natural-language captions, and it cannot invent tags outside the model vocabulary. Accepted tags are written as comma-separated sidecar `.txt` captions with spaces (`long hair`). Danbooru lookups and policy matching continue to use underscore keys internally (`long_hair`).
 
 ### Processing order
 
@@ -560,12 +560,12 @@ The semantic policy runs before MCUT and tag limits so blocked identity tags do 
 | ------------------- | ----------------------------------------- | -------- |
 | Character names     | named WD character tags                   | Removed  |
 | Demographic         | `1girl`, `solo`                           | Removed  |
-| Appearance identity | `blue_hair`, `long_hair`, `blue_eyes`     | Removed  |
-| Body identity       | `large_breasts`, `wide_hips`, `dark_skin` | Removed  |
+| Appearance identity | `blue hair`, `long hair`, `blue eyes`     | Removed  |
+| Body identity       | `large breasts`, `wide hips`, `dark skin` | Removed  |
 | Permanent marks     | `tattoo`, `scar`, `mole`                  | Optional |
-| Expression          | `smile`, `closed_eyes`                    | Kept     |
-| Pose/framing        | `sitting`, `cowboy_shot`                  | Kept     |
-| Outfit/accessory    | `red_dress`, `hair_ornament`              | Kept     |
+| Expression          | `smile`, `closed eyes`                    | Kept     |
+| Pose/framing        | `sitting`, `cowboy shot`                  | Kept     |
+| Outfit/accessory    | `red dress`, `hair ornament`              | Kept     |
 | Scene               | `indoors`, `window`, `sunset`             | Kept     |
 
 Omitted recurring identity is expected to bind more strongly to the trigger, while captioned variable details remain promptable. Custom keep and block overrides are available in Advanced settings.
@@ -615,14 +615,14 @@ Example A: identity removed
 Input WD candidates:
 
 ```text
-1girl, solo, blue_hair, long_hair, blue_eyes, smile,
-looking_at_viewer, red_dress, sitting, indoors, window
+1girl, solo, blue hair, long hair, blue eyes, smile,
+looking at viewer, red dress, sitting, indoors, window
 ```
 
 Output:
 
 ```text
-mytrigger, smile, looking_at_viewer, red_dress, sitting, indoors, window
+mytrigger, smile, looking at viewer, red dress, sitting, indoors, window
 ```
 
 Example B: expression exception
@@ -630,13 +630,13 @@ Example B: expression exception
 Input:
 
 ```text
-1girl, white_hair, closed_eyes, hair_ornament, smile, upper_body
+1girl, white hair, closed eyes, hair ornament, smile, upper body
 ```
 
 Output:
 
 ```text
-mytrigger, closed_eyes, hair_ornament, smile, upper_body
+mytrigger, closed eyes, hair ornament, smile, upper body
 ```
 
 ---

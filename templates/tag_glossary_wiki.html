@@ -212,7 +212,7 @@
   };
 
   function normalizeTag(raw){
-    return String(raw || '').trim().toLowerCase().replace(/\s+/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+    return String(raw || '').trim().toLowerCase().replace(/_+/g, ' ').replace(/\s+/g, ' ');
   }
 
   function normalizeCategory(raw){

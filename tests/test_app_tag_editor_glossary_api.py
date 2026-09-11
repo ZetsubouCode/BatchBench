@@ -54,13 +54,13 @@ class TagEditorGlossaryApiTests(unittest.TestCase):
                 self.assertTrue(data.get("ok"))
                 self.assertEqual(
                     data["glossary"]["categories"]["Favorites"],
-                    ["long_hair", "cat_girl"],
+                    ["long hair", "cat girl"],
                 )
-                self.assertEqual(data["glossary"]["categories"]["Other"], ["solo_tag"])
+                self.assertEqual(data["glossary"]["categories"]["Other"], ["solo tag"])
                 self.assertIn("Unsorted", data["glossary"]["categories"])
                 self.assertEqual(data["glossary"]["categories"]["Unsorted"], ["ignored"])
                 self.assertEqual(data["glossary"]["version"], 2)
-                self.assertEqual(data["glossary"]["tag_meta"]["long_hair"]["post_count"], 1234)
+                self.assertEqual(data["glossary"]["tag_meta"]["long hair"]["post_count"], 1234)
                 self.assertNotIn("not_in_glossary", data["glossary"]["tag_meta"])
 
                 on_disk = json.loads(glossary_path.read_text(encoding="utf-8"))
@@ -94,7 +94,7 @@ class TagEditorGlossaryApiTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         data = resp.get_json()
         self.assertTrue(data.get("ok"))
-        self.assertEqual(data["glossary"]["categories"]["Unsorted"], ["newer_tag"])
+        self.assertEqual(data["glossary"]["categories"]["Unsorted"], ["newer tag"])
 
 
 if __name__ == "__main__":

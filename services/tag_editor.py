@@ -15,16 +15,17 @@ from utils.io import readable_path
 from utils.parse import parse_bool, parse_exts, parse_tag_list
 from utils.text_io import read_text_best_effort
 from utils.tool_result import build_tool_result
+from utils.tags import normalize_caption_tags, tag_compare_key, to_caption_tag
 from services.paths import user_path
 
 EDIT_MODES = {"insert", "delete", "replace", "dedup", "move"}
 DEFAULT_PROJECT_PROMPT = """trigger_word
 
 appearance:
-hair_color, eye_color, hairstyle
+hair color, eye color, hairstyle
 
 accessory:
-hair_ornament, necklace, earrings
+hair ornament, necklace, earrings
 
 outfit:
 top, bottom, footwear
@@ -60,10 +61,7 @@ _TXT_TAG_CACHE_MAX = 4096
 
 
 def _sanitize_tag(t: str) -> str:
-    t = (t or "").strip()
-    if not t:
-        return ""
-    return re.sub(r"\s+", "_", t)
+    return to_caption_tag(t)
 
 
 def _dedup_tags(tags: List[str]) -> List[str]:
@@ -71,16 +69,16 @@ def _dedup_tags(tags: List[str]) -> List[str]:
     seen: Set[str] = set()
     for raw in tags:
         tag = _sanitize_tag(raw)
-        if not tag or tag in seen:
+        key = tag_compare_key(tag)
+        if not tag or key in seen:
             continue
-        seen.add(tag)
+        seen.add(key)
         out.append(tag)
     return out
 
 
 def _normalize_tags(raw_tags: List[str], dedupe: bool = False) -> List[str]:
-    tags = [tag for tag in (_sanitize_tag(x) for x in raw_tags) if tag]
-    return _dedup_tags(tags) if dedupe else tags
+    return normalize_caption_tags(raw_tags, dedupe=dedupe)
 
 
 def _cache_put(key: str, value: Tuple[Tuple[int, int], List[str]]):
@@ -95,7 +93,7 @@ def _read_text_tags(path: Path) -> List[str]:
         text, _, _ = read_text_best_effort(path)
     except Exception:
         return []
-    return _normalize_tags(parse_tag_list(text, dedupe=False), dedupe=False)
+    return _normalize_tags(parse_tag_list(text, dedupe=False), dedupe=True)
 
 
 def _read_tags_cached(txt_path: Path) -> List[str]:
@@ -414,15 +412,15 @@ def _prompt_section_name(label: str) -> str:
 
 def _quiz_segment_prompt_tags(seg_id: str) -> List[str]:
     defaults = {
-        "identity_appearance": ["hair_color", "eye_color", "hairstyle"],
+        "identity_appearance": ["hair color", "eye color", "hairstyle"],
         "outfit": ["top", "bottom", "footwear"],
         "expression": ["smile", "serious", "angry"],
-        "body_composition": ["standing", "sitting", "cowboy_shot", "full_body"],
-        "camera_angle": ["looking_at_viewer", "from_above", "from_below"],
-        "lighting": ["soft_lighting", "backlighting", "dim_lighting"],
+        "body_composition": ["standing", "sitting", "cowboy shot", "full body"],
+        "camera_angle": ["looking at viewer", "from above", "from below"],
+        "lighting": ["soft lighting", "backlighting", "dim lighting"],
         "background": ["indoors", "outdoors", "classroom"],
     }
-    return defaults.get(seg_id, ["tag_a", "tag_b", "tag_c"])
+    return defaults.get(seg_id, ["tag a", "tag b", "tag c"])
 
 
 def _build_quiz_segment_prompt(segments: List[Dict[str, Any]]) -> str:
@@ -690,7 +688,8 @@ def _collect_init_source_images(
 
 def _caption_for_init_source(primary_trigger: str, secondary_trigger: str = "") -> str:
     primary_tags = parse_tag_list(primary_trigger, dedupe=False)
-    tags = _dedup_tags([*primary_tags, secondary_trigger])
+    triggers = [*primary_tags, secondary_trigger]
+    tags = normalize_caption_tags(triggers, protected_literals=triggers)
     return join_tags(tags)
 
 
@@ -2443,6 +2442,11 @@ def save_tagging_quiz_image(
         return {"ok": False, "error": "No tagging session loaded", **_make_serializable_path_info(paths)}
     quiz_segments = session.get("quiz_segments") or load_tagging_quiz_settings().get("segments") or []
     final_tags = final_tags_from_segments(segments or {}, quiz_segments)
+    trigger = extract_trigger_word(paths["prompt_path"])
+    if trigger:
+        trigger_key = tag_compare_key(trigger)
+        final_tags = [trigger if tag_compare_key(tag) == trigger_key else tag for tag in final_tags]
+        final_tags = normalize_caption_tags(final_tags, protected_literals=[trigger])
     txt_path = img.with_suffix(".txt")
     old_text = ""
     had_txt = txt_path.exists()
@@ -2755,8 +2759,16 @@ def list_images_with_tags(folder: Path, exts: List[str], recursive: bool = False
     return {"ok": True, "folder": str(folder), "total": total, "images": items}
 
 
-def add_tags(txt_path: Path, raw_tags: List[str], backup: bool = True, create_missing_txt: bool = False) -> dict:
-    tags_to_add = _dedup_tags(raw_tags or [])
+def add_tags(
+    txt_path: Path,
+    raw_tags: List[str],
+    backup: bool = True,
+    create_missing_txt: bool = False,
+    protected_literals: Optional[List[str]] = None,
+) -> dict:
+    tags_to_add = normalize_caption_tags(
+        raw_tags or [], dedupe=True, protected_literals=protected_literals
+    )
     if not tags_to_add:
         return {"ok": False, "error": "No tags provided"}
     had_txt = txt_path.exists()
@@ -2767,15 +2779,22 @@ def add_tags(txt_path: Path, raw_tags: List[str], backup: bool = True, create_mi
             src, _, _ = read_text_best_effort(txt_path)
         except Exception as exc:
             return {"ok": False, "error": str(exc)}
-        current_tags = _normalize_tags(parse_tag_list(src, dedupe=False), dedupe=False)
+        current_tags = normalize_caption_tags(
+            parse_tag_list(src, dedupe=False),
+            dedupe=True,
+            protected_literals=protected_literals,
+        )
     elif not create_missing_txt:
         return {"ok": False, "error": "Missing .txt"}
     next_tags = list(current_tags)
+    existing_keys = {tag_compare_key(tag) for tag in next_tags}
     added: List[str] = []
     for tag in tags_to_add:
-        if tag in next_tags:
+        key = tag_compare_key(tag)
+        if key in existing_keys:
             continue
         next_tags.append(tag)
+        existing_keys.add(key)
         added.append(tag)
     if not had_txt and not next_tags:
         return {"ok": False, "error": "No tags to write"}
@@ -2795,7 +2814,12 @@ def add_tags(txt_path: Path, raw_tags: List[str], backup: bool = True, create_mi
     return {"ok": True, "created": not had_txt, "changed": changed, "added": added, "tags": next_tags}
 
 
-def remove_tag(txt_path: Path, tag: str, backup: bool = True) -> dict:
+def remove_tag(
+    txt_path: Path,
+    tag: str,
+    backup: bool = True,
+    protected_literals: Optional[List[str]] = None,
+) -> dict:
     if not txt_path or not txt_path.exists() or not txt_path.is_file():
         return {"ok": False, "error": "Missing .txt"}
     try:
@@ -2803,8 +2827,13 @@ def remove_tag(txt_path: Path, tag: str, backup: bool = True) -> dict:
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
     tag = _sanitize_tag(tag)
-    taglist = _normalize_tags(parse_tag_list(src, dedupe=False), dedupe=False)
-    newtags = [t for t in taglist if t != tag]
+    taglist = normalize_caption_tags(
+        parse_tag_list(src, dedupe=False),
+        dedupe=True,
+        protected_literals=protected_literals,
+    )
+    remove_key = tag_compare_key(tag)
+    newtags = [t for t in taglist if tag_compare_key(t) != remove_key]
     removed = len(newtags) != len(taglist)
     if not removed:
         return {"ok": True, "removed": False, "tags": taglist}
@@ -2823,23 +2852,25 @@ def remove_tag(txt_path: Path, tag: str, backup: bool = True) -> dict:
 
 def _rename_tags_preserving_positions(taglist: List[str], mapping: Dict[str, str]) -> List[str]:
     clean_mapping = {
-        _sanitize_tag(old): _sanitize_tag(new)
+        tag_compare_key(old): _sanitize_tag(new)
         for old, new in (mapping or {}).items()
-        if _sanitize_tag(old)
+        if tag_compare_key(old)
     }
     first_renamed_target_index: Dict[str, int] = {}
     for idx, tag in enumerate(taglist):
-        if tag not in clean_mapping:
+        key = tag_compare_key(tag)
+        if key not in clean_mapping:
             continue
-        target = clean_mapping.get(tag) or ""
+        target = clean_mapping.get(key) or ""
         if target and target not in first_renamed_target_index:
             first_renamed_target_index[target] = idx
 
     out: List[str] = []
     emitted_renamed_targets: Set[str] = set()
     for idx, tag in enumerate(taglist):
-        was_renamed = tag in clean_mapping
-        target = clean_mapping.get(tag, tag)
+        key = tag_compare_key(tag)
+        was_renamed = key in clean_mapping
+        target = clean_mapping.get(key, tag)
         if not target:
             continue
         keep_idx = first_renamed_target_index.get(target)
@@ -2916,17 +2947,19 @@ def handle(form, ctx):
             lines.append(f"Project initialization required: {missing_msg}")
             return _done(False, "Project initialization required. Use Initialize Project first.")
 
+    configured_trigger = extract_trigger_word(paths["prompt_path"])
+    protected_literals = [configured_trigger] if configured_trigger else []
+
     def _parse_tag_input(raw: str) -> List[str]:
-        out: List[str] = []
-        seen: Set[str] = set()
+        values: List[str] = []
         for line in (raw or "").replace("\r", "\n").split("\n"):
             for token in line.split(","):
-                tag = _sanitize_tag(token)
-                if not tag or tag in seen:
-                    continue
-                out.append(tag)
-                seen.add(tag)
-        return out
+                values.append(token)
+        return normalize_caption_tags(
+            values,
+            dedupe=True,
+            protected_literals=protected_literals,
+        )
 
     def _parse_replace_mapping(raw: str) -> dict:
         mapping = {}
@@ -2942,7 +2975,7 @@ def handle(form, ctx):
         return mapping
 
     if mode == "move":
-        move_tags = set(_parse_tag_input(tags_field))
+        move_tags = {tag_compare_key(tag) for tag in _parse_tag_input(tags_field)}
         images = _list_images(dataset_root, exts, recursive=True, exclude_dir=temp_folder)
         if not images:
             lines.append(f"No image files with {exts} found in {dataset_root}.")
@@ -2954,7 +2987,7 @@ def handle(form, ctx):
             if move_tags:
                 if not txt.exists():
                     continue
-                current_tags = set(_read_tags_cached(txt))
+                current_tags = {tag_compare_key(tag) for tag in _read_tags_cached(txt)}
                 if not move_tags.intersection(current_tags):
                     continue
             rel_parent = img.parent.relative_to(dataset_root)
@@ -3007,7 +3040,7 @@ def handle(form, ctx):
     if mode == "insert":
         add = _parse_tag_input(tags_field)
     elif mode == "delete":
-        deltags = set(_parse_tag_input(tags_field))
+        deltags = {tag_compare_key(tag) for tag in _parse_tag_input(tags_field)}
     elif mode == "replace":
         mapping = _parse_replace_mapping(tags_field)
 
@@ -3052,16 +3085,22 @@ def handle(form, ctx):
             lines.append(f"[ERROR] reading {txt.name}: {exc}")
             errors += 1
             continue
-        taglist = _normalize_tags(parse_tag_list(src, dedupe=False), dedupe=False)
+        taglist = normalize_caption_tags(
+            parse_tag_list(src, dedupe=False),
+            dedupe=True,
+            protected_literals=protected_literals,
+        )
         newtags = list(taglist)
         action_desc = ""
         if mode == "insert":
+            existing_keys = {tag_compare_key(tag) for tag in newtags}
             for t in add:
-                if t not in newtags:
+                if tag_compare_key(t) not in existing_keys:
                     newtags.append(t)
+                    existing_keys.add(tag_compare_key(t))
             action_desc = f"insert -> {add}"
         elif mode == "delete":
-            newtags = [t for t in taglist if t not in deltags]
+            newtags = [t for t in taglist if tag_compare_key(t) not in deltags]
             action_desc = f"delete -> {sorted(deltags)}"
         elif mode == "replace":
             newtags = _rename_tags_preserving_positions(taglist, mapping)

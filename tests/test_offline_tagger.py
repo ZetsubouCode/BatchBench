@@ -359,7 +359,7 @@ class OfflineTaggerTests(unittest.TestCase):
         )
         self.assertEqual(
             merged,
-            ["character_trigger", "greyscale", "manual_tag", "skirt", "standing", "forest"],
+            ["character_trigger", "greyscale", "manual tag", "skirt", "standing", "forest"],
         )
 
         merged = offline_tagger.merge_caption_tags(
@@ -367,7 +367,7 @@ class OfflineTaggerTests(unittest.TestCase):
             ["manual_tag", "forest"],
             ["standing", "manual_tag", "forest"],
         )
-        self.assertEqual(merged, ["forest", "character_trigger", "manual_tag", "standing"])
+        self.assertEqual(merged, ["forest", "character_trigger", "manual tag", "standing"])
 
     def test_blacklist_only_removes_auto_tags(self):
         auto, blocked = offline_tagger._apply_blocked_auto_tags(
@@ -377,7 +377,7 @@ class OfflineTaggerTests(unittest.TestCase):
         merged = offline_tagger.merge_caption_tags(["trigger"], ["forest", "manual_tag"], auto)
         self.assertEqual(auto, ["standing"])
         self.assertEqual(blocked, ["forest", "simple_background"])
-        self.assertEqual(merged, ["trigger", "forest", "manual_tag", "standing"])
+        self.assertEqual(merged, ["trigger", "forest", "manual tag", "standing"])
 
     def test_blacklist_supports_wildcards(self):
         auto, blocked = offline_tagger._apply_blocked_auto_tags(
@@ -500,7 +500,7 @@ class OfflineTaggerTests(unittest.TestCase):
             ["manual_tag"],
             [],
         )
-        self.assertEqual(final_tags, ["character_trigger", "manual_tag"])
+        self.assertEqual(final_tags, ["character_trigger", "manual tag"])
 
     def test_tag_focus_mode_character_vs_non_character(self):
         labels = ["1girl", "school uniform", "classroom", "window", "char_a"]
@@ -935,7 +935,7 @@ class OfflineTaggerTests(unittest.TestCase):
             self.assertTrue(ok)
             self.assertEqual(
                 caption_path.read_text(encoding="utf-8"),
-                "character_trigger, manual_tag, forest, standing\n",
+                "character_trigger, manual tag, forest, standing\n",
             )
             backups = list((root / ".batchbench_backup").rglob("offline_tagger_*/nested/image.txt"))
             self.assertEqual(len(backups), 1)

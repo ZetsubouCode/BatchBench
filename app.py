@@ -17,6 +17,7 @@ from utils.io import readable_path, readable_path_or_none, windows_drives, defau
 from utils.image_ops import apply_preset
 from utils.parse import parse_bool, parse_int, parse_float, parse_exts, parse_tag_list
 from utils.tool_result import unpack_tool_result
+from utils.tags import normalize_caption_tags, tag_compare_key, to_caption_tag
 
 from services.registry import TOOL_REGISTRY
 from services import normalizer
@@ -666,7 +667,7 @@ def _parse_cheatsheet_content(content: str) -> Dict[str, Any]:
             left, right = line.split(":", 1)
             category = left.strip()
             if category:
-                base_tags = parse_tag_list(right or "")
+                base_tags = normalize_caption_tags(parse_tag_list(right or "", dedupe=False))
                 current = {
                     "category": category,
                     "tags": base_tags,
@@ -675,7 +676,7 @@ def _parse_cheatsheet_content(content: str) -> Dict[str, Any]:
                 sections.append(current)
                 _extend_unique(base_tags)
                 continue
-        conditional_tags = parse_tag_list(line)
+        conditional_tags = normalize_caption_tags(parse_tag_list(line, dedupe=False))
         if current and conditional_tags:
             current["conditionals"].append(conditional_tags)
             _extend_unique(conditional_tags)
@@ -824,6 +825,7 @@ def _bad_rel(rel: str) -> bool:
 
 
 def _parse_tag_list(raw: Any) -> List[str]:
+    # Used for pinned/trigger literals; preserve exact spelling here.
     return parse_tag_list(raw, dedupe=True)
 
 
@@ -841,11 +843,11 @@ def _normalize_glossary_payload(payload: Any) -> Dict[str, Any]:
         tags = normalized_categories.setdefault(name, [])
         if isinstance(raw_tags, list):
             for raw_tag in raw_tags:
-                tag = str(raw_tag or "").strip().lower()
-                tag = re.sub(r"_+", "_", re.sub(r"\s+", "_", tag)).strip("_")
-                if not tag or tag in seen_tags:
+                tag = to_caption_tag(raw_tag).lower()
+                key = tag_compare_key(tag)
+                if not tag or key in seen_tags:
                     continue
-                seen_tags.add(tag)
+                seen_tags.add(key)
                 tags.append(tag)
     if "Unsorted" not in normalized_categories:
         normalized_categories["Unsorted"] = []
@@ -856,33 +858,35 @@ def _normalize_glossary_payload(payload: Any) -> Dict[str, Any]:
         updated_at = 0
     raw_tag_meta = src.get("tag_meta") if isinstance(src.get("tag_meta"), dict) else {}
     normalized_tag_meta: Dict[str, Dict[str, Any]] = {}
-    for tag in seen_tags:
-        raw_meta = raw_tag_meta.get(tag)
-        if not isinstance(raw_meta, dict):
-            continue
-        post_count = raw_meta.get("post_count")
-        try:
-            post_count = max(0, int(post_count))
-        except Exception:
-            post_count = None
-        category = raw_meta.get("category")
-        try:
-            category = int(category)
-        except Exception:
-            category = None
-        fetched_at = raw_meta.get("fetched_at", 0)
-        try:
-            fetched_at = max(0, int(fetched_at))
-        except Exception:
-            fetched_at = 0
-        meta: Dict[str, Any] = {
-            "found": bool(raw_meta.get("found", post_count is not None)),
-            "post_count": post_count,
-            "category": category,
-            "category_name": str(raw_meta.get("category_name") or "unknown")[:40],
-            "fetched_at": fetched_at,
-        }
-        normalized_tag_meta[tag] = meta
+    raw_meta_by_key = {tag_compare_key(key): value for key, value in raw_tag_meta.items()}
+    for category_tags in normalized_categories.values():
+        for tag in category_tags:
+            raw_meta = raw_meta_by_key.get(tag_compare_key(tag))
+            if not isinstance(raw_meta, dict):
+                continue
+            post_count = raw_meta.get("post_count")
+            try:
+                post_count = max(0, int(post_count))
+            except Exception:
+                post_count = None
+            category = raw_meta.get("category")
+            try:
+                category = int(category)
+            except Exception:
+                category = None
+            fetched_at = raw_meta.get("fetched_at", 0)
+            try:
+                fetched_at = max(0, int(fetched_at))
+            except Exception:
+                fetched_at = 0
+            meta: Dict[str, Any] = {
+                "found": bool(raw_meta.get("found", post_count is not None)),
+                "post_count": post_count,
+                "category": category,
+                "category_name": str(raw_meta.get("category_name") or "unknown")[:40],
+                "fetched_at": fetched_at,
+            }
+            normalized_tag_meta[tag] = meta
     return {
         "version": 2,
         "categories": normalized_categories,
@@ -2151,7 +2155,13 @@ def api_tags_tag_remove():
     txt_path = target if target.suffix.lower() == ".txt" else target.with_suffix(".txt")
     if not txt_path.exists():
         return _json_error("Missing .txt", 400, normalized_root=str(paths["project_root"]))
-    result = tag_editor.remove_tag(txt_path, tag, backup=backup)
+    trigger = tag_editor.extract_trigger_word(paths["prompt_path"])
+    result = tag_editor.remove_tag(
+        txt_path,
+        tag,
+        backup=backup,
+        protected_literals=[trigger] if trigger else [],
+    )
     if not result.get("ok"):
         return _json_error(result.get("error") or "Remove failed", 400, normalized_root=str(paths["project_root"]))
     return jsonify(
@@ -2193,11 +2203,13 @@ def api_tags_tag_add():
     txt_path = target if target.suffix.lower() == ".txt" else target.with_suffix(".txt")
 
     tags = parse_tag_list(raw_tags) if raw_tags is not None else []
+    trigger = tag_editor.extract_trigger_word(paths["prompt_path"])
     result = tag_editor.add_tags(
         txt_path,
         tags,
         backup=backup,
         create_missing_txt=create_missing_txt,
+        protected_literals=[trigger] if trigger else [],
     )
     if not result.get("ok"):
         return _json_error(result.get("error") or "Add failed", 400, normalized_root=str(paths["project_root"]))

@@ -1964,7 +1964,7 @@
     const seen = new Set();
     const chunks = Array.isArray(raw) ? raw : String(raw || '').replace(/\r/g, '\n').split('\n');
     chunks.forEach(chunk => String(chunk || '').split(',').forEach(part => {
-      const tag = part.trim().replace(/\s+/g, '_');
+      const tag = part.trim().replace(/_+/g, ' ').replace(/\s+/g, ' ');
       if (!tag || seen.has(tag)) return;
       seen.add(tag);
       out.push(tag);
@@ -8494,8 +8494,7 @@
   function normalizeDanbooruTag(raw){
     let tag = String(raw || '').trim().toLowerCase();
     if (!tag) return '';
-    tag = tag.replace(/\s+/g, '_').replace(/^_+|_+$/g, '');
-    while (tag.includes('__')) tag = tag.replace(/__+/g, '_');
+    tag = tag.replace(/_+/g, ' ').replace(/\s+/g, ' ').trim();
     return tag;
   }
 

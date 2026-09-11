@@ -48,7 +48,7 @@ class TagCatalogApiTests(unittest.TestCase):
         data = resp.get_json()
         self.assertTrue(data["ok"])
         self.assertTrue(data["enabled"])
-        self.assertEqual([row["tag"] for row in data["suggestions"]], ["from_below"])
+        self.assertEqual([row["tag"] for row in data["suggestions"]], ["from below"])
 
     def test_suggest_disabled_section_returns_no_rows(self):
         with tempfile.TemporaryDirectory() as td:
@@ -87,7 +87,7 @@ class TagCatalogApiTests(unittest.TestCase):
 
         self.assertFalse(disabled.get_json()["enabled"])
         self.assertTrue(enabled.get_json()["enabled"])
-        self.assertEqual(enabled.get_json()["suggestions"][0]["tag"], "from_below")
+        self.assertEqual(enabled.get_json()["suggestions"][0]["tag"], "from below")
 
     def test_guided_step_autosuggest_works_when_global_catalog_switch_is_off(self):
         with tempfile.TemporaryDirectory() as td:
@@ -112,7 +112,7 @@ class TagCatalogApiTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         data = resp.get_json()
         self.assertTrue(data["enabled"])
-        self.assertEqual(data["suggestions"][0]["tag"], "from_below")
+        self.assertEqual(data["suggestions"][0]["tag"], "from below")
 
     def test_suggest_rejects_oversized_query(self):
         with tempfile.TemporaryDirectory() as td:

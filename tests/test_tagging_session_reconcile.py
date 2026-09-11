@@ -110,7 +110,7 @@ class TaggingSessionReconcileTests(unittest.TestCase):
             self.assertTrue(result.get("ok"), msg=result)
             loaded = result["session"]
             self.assertEqual(loaded["images"][rels[0]]["status"], "completed")
-            self.assertEqual(loaded["images"][rels[1]]["segments"]["outfit"]["manual"], ["red_dress"])
+            self.assertEqual(loaded["images"][rels[1]]["segments"]["outfit"]["manual"], ["red dress"])
             self.assertEqual(loaded["current"]["image_rel"], rels[1])
             self.assertEqual(loaded["current"]["segment_id"], "outfit")
 
@@ -242,7 +242,7 @@ class TaggingSessionReconcileTests(unittest.TestCase):
             result = _start(project, "appearance", "outfit")
             loaded = result["session"]
             first = loaded["images"][rels[0]]
-            self.assertEqual(first["segments"]["appearance"]["selected"], ["done_image_000"])
+            self.assertEqual(first["segments"]["appearance"]["selected"], ["done image 000"])
             self.assertIn("outfit", first["segments"])
             self.assertEqual(first["pending_segment_ids"], ["outfit"])
             self.assertEqual(first["status"], "in_progress")
@@ -265,7 +265,7 @@ class TaggingSessionReconcileTests(unittest.TestCase):
             result = tag_editor.load_tagging_session(project)
             loaded = result["session"]
             self.assertIn("dataset/renamed_000.png", loaded["images"])
-            self.assertEqual(loaded["images"]["dataset/renamed_000.png"]["segments"]["appearance"]["selected"], ["done_image_000"])
+            self.assertEqual(loaded["images"]["dataset/renamed_000.png"]["segments"]["appearance"]["selected"], ["done image 000"])
             self.assertTrue(any("renamed images matched safely: 1" in line for line in result.get("logs") or []))
 
     def test_duplicate_content_rename_ambiguity_leaves_new_files_pending(self):
@@ -320,7 +320,7 @@ class TaggingSessionReconcileTests(unittest.TestCase):
             loaded = result["session"]
             self.assertEqual(loaded["session_version"], 2)
             self.assertEqual(loaded["images"]["dataset/image_000.png"]["status"], "completed")
-            self.assertEqual(loaded["images"]["dataset/image_000.png"]["segments"]["appearance"]["selected"], ["keep_me"])
+            self.assertEqual(loaded["images"]["dataset/image_000.png"]["segments"]["appearance"]["selected"], ["keep me"])
             self.assertTrue(loaded["images"]["dataset/gone.png"]["missing"])
             saved = json.loads(session_path.read_text(encoding="utf-8"))
             self.assertEqual(saved["session_version"], 2)

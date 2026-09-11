@@ -27,8 +27,8 @@ class TaggingAssistTests(unittest.TestCase):
             after_delete = tagging_assist.list_packs(root, "outfit")
 
             self.assertEqual(len(listed["packs"]), 1)
-            self.assertEqual(applied["tags"], ["solo", "shirt", "blue_shirt"])
-            self.assertEqual(applied["added"], ["blue_shirt"])
+            self.assertEqual(applied["tags"], ["solo", "shirt", "blue shirt"])
+            self.assertEqual(applied["added"], ["blue shirt"])
             self.assertEqual(after_delete["packs"], [])
 
     def test_sibling_preview_does_not_write_and_append_apply_is_append_only(self):
@@ -47,8 +47,8 @@ class TaggingAssistTests(unittest.TestCase):
 
             self.assertTrue(preview["changes"][0]["changed"])
             self.assertEqual(before_apply, "solo, close-up")
-            self.assertEqual(after_apply, "solo, close-up, blue_hair")
-            self.assertEqual(applied["applied"][0]["added"], ["blue_hair"])
+            self.assertEqual(after_apply, "solo, close-up, blue hair")
+            self.assertEqual(applied["applied"][0]["added"], ["blue hair"])
 
     def test_lint_reports_issues_without_changing_caption(self):
         with tempfile.TemporaryDirectory() as td:

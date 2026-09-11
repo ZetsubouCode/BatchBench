@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+from utils.tags import to_danbooru_tag
 
 
 _DEFAULT_BASE_URL = "https://danbooru.donmai.us"
@@ -125,13 +126,7 @@ def _auth_params() -> Dict[str, str]:
 
 
 def normalize_tag(raw_tag: Any) -> str:
-    val = str(raw_tag or "").strip().lower()
-    if not val:
-        return ""
-    val = val.replace(" ", "_")
-    while "__" in val:
-        val = val.replace("__", "_")
-    return val.strip("_")
+    return to_danbooru_tag(raw_tag)
 
 
 def _to_int(value: Any) -> Optional[int]:
