@@ -1,0 +1,943 @@
+<style>
+  .palette-tool{
+    display:grid;
+    grid-template-columns:minmax(320px, 420px) minmax(0, 1fr);
+    gap:1rem;
+  }
+  .palette-panel{
+    background:var(--bb-card);
+    border:1px solid var(--bb-border);
+    border-radius:.5rem;
+    padding:1rem;
+  }
+  .palette-panel-title{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:.75rem;
+    margin-bottom:.75rem;
+  }
+  .palette-panel-title h5{margin:0;font-size:1rem;}
+  .palette-wheel-wrap{
+    display:flex;
+    justify-content:center;
+    margin:.75rem 0 1rem;
+  }
+  #palette-wheel{
+    width:min(100%, 340px);
+    aspect-ratio:1;
+    border-radius:50%;
+    cursor:crosshair;
+    background:#101826;
+    border:1px solid var(--bb-border);
+  }
+  .palette-preview-chip{
+    min-height:3rem;
+    border-radius:.5rem;
+    border:1px solid var(--bb-border);
+    background:#3b82f6;
+  }
+  .palette-meter{
+    display:grid;
+    grid-template-columns:4rem minmax(0, 1fr) 3.2rem;
+    gap:.6rem;
+    align-items:center;
+  }
+  .palette-meter + .palette-meter{margin-top:.55rem;}
+  .palette-meter label{margin:0;font-size:.84rem;color:var(--bb-muted);}
+  .palette-meter output{font-variant-numeric:tabular-nums;color:var(--bb-text);font-size:.84rem;text-align:right;}
+  .palette-output-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));
+    gap:.8rem;
+  }
+  .palette-role{
+    border:1px solid var(--bb-border);
+    border-radius:.5rem;
+    overflow:hidden;
+    background:rgba(11,18,32,.56);
+  }
+  .palette-role-head{
+    padding:.65rem .75rem;
+    display:grid;
+    gap:.12rem;
+    border-bottom:1px solid var(--bb-border);
+  }
+  .palette-role-head strong{font-size:.9rem;}
+  .palette-role-head span{color:var(--bb-muted);font-size:.78rem;}
+  .palette-swatches{
+    display:grid;
+    grid-template-columns:repeat(4, minmax(0, 1fr));
+  }
+  .palette-swatch{
+    min-height:4.3rem;
+    border:0;
+    border-right:1px solid rgba(255,255,255,.1);
+    color:#fff;
+    text-shadow:0 1px 2px rgba(0,0,0,.52);
+    font-size:.72rem;
+    line-height:1.15;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:.18rem;
+  }
+  .palette-swatch:last-child{border-right:0;}
+  .palette-swatch code{
+    color:inherit;
+    background:rgba(0,0,0,.28);
+    border-radius:.25rem;
+    padding:.08rem .22rem;
+  }
+  .palette-image-grid{
+    display:grid;
+    grid-template-columns:minmax(0, 1fr) 280px;
+    gap:1rem;
+  }
+  .palette-drop-zone{
+    border:1px dashed var(--bb-border);
+    border-radius:.5rem;
+    min-height:96px;
+    background:rgba(12,18,36,.58);
+    color:var(--bb-text);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    padding:.9rem;
+    cursor:pointer;
+    transition:border-color .15s ease, background .15s ease, transform .15s ease;
+  }
+  .palette-drop-zone:hover,
+  .palette-drop-zone:focus-visible,
+  .palette-drop-zone.is-dragging{
+    border-color:var(--bb-link);
+    background:rgba(18,30,56,.86);
+    transform:translateY(-1px);
+    outline:0;
+  }
+  .palette-drop-zone i{
+    display:block;
+    font-size:1.55rem;
+    color:var(--bb-link);
+    margin-bottom:.2rem;
+  }
+  .palette-drop-zone strong{display:block;font-size:.92rem;}
+  .palette-drop-zone span{display:block;color:var(--bb-muted);font-size:.78rem;}
+  .palette-source-wrap{
+    position:relative;
+    display:inline-block;
+    max-width:100%;
+    margin-bottom:.75rem;
+    border:1px solid var(--bb-border);
+    border-radius:.5rem;
+    overflow:hidden;
+    background:#0b1220;
+    cursor:crosshair;
+  }
+  .palette-source-wrap.d-none{display:none !important;}
+  .palette-source-wrap img{
+    display:block;
+    max-width:100%;
+    max-height:420px;
+    width:auto;
+    height:auto;
+    user-select:none;
+  }
+  .palette-source-marker{
+    position:absolute;
+    width:14px;
+    height:14px;
+    border:2px solid #fff;
+    border-radius:50%;
+    box-shadow:0 0 0 1px rgba(0,0,0,.75), 0 1px 4px rgba(0,0,0,.65);
+    pointer-events:none;
+    transform:translate(-50%, -50%);
+    display:none;
+  }
+  .palette-source-wrap.has-pick .palette-source-marker{display:block;}
+  .palette-svg-preview{
+    min-height:360px;
+    max-height:680px;
+    overflow:auto;
+    border:1px solid var(--bb-border);
+    border-radius:.5rem;
+    background:
+      linear-gradient(45deg, rgba(255,255,255,.035) 25%, transparent 25%),
+      linear-gradient(-45deg, rgba(255,255,255,.035) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, rgba(255,255,255,.035) 75%),
+      linear-gradient(-45deg, transparent 75%, rgba(255,255,255,.035) 75%);
+    background-size:24px 24px;
+    background-position:0 0, 0 12px, 12px -12px, -12px 0;
+    padding:.75rem;
+  }
+  .palette-svg-preview svg{
+    display:block;
+    max-width:100%;
+    height:auto;
+    margin:auto;
+  }
+  .palette-empty{
+    min-height:330px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color:var(--bb-muted);
+    text-align:center;
+    padding:1rem;
+  }
+  .palette-chip-list{
+    display:flex;
+    flex-wrap:wrap;
+    gap:.45rem;
+  }
+  .palette-dominant{
+    border:1px solid var(--bb-border);
+    border-radius:.4rem;
+    padding:.35rem .45rem;
+    min-width:4.9rem;
+    background:var(--bb-bg);
+    color:var(--bb-text);
+    font-size:.72rem;
+  }
+  .palette-dominant span{
+    display:block;
+    width:100%;
+    height:1.35rem;
+    border-radius:.25rem;
+    border:1px solid rgba(255,255,255,.18);
+    margin-bottom:.25rem;
+  }
+  .palette-status{
+    min-height:1.2rem;
+    color:var(--bb-muted);
+    font-size:.82rem;
+  }
+  @media (max-width: 1199.98px){
+    .palette-tool,.palette-image-grid{grid-template-columns:1fr;}
+  }
+  @media (max-width: 575.98px){
+    .palette-panel{padding:.8rem;}
+    .palette-output-grid{grid-template-columns:1fr;}
+    .palette-swatches{grid-template-columns:repeat(2, minmax(0, 1fr));}
+    .palette-meter{grid-template-columns:3.6rem minmax(0, 1fr) 2.8rem;}
+  }
+</style>
+
+<div class="palette-tool" id="palette-helper">
+  <section class="palette-panel" aria-labelledby="palette-wheel-title">
+    <div class="palette-panel-title">
+      <h5 id="palette-wheel-title">Manga Palette Helper</h5>
+      <div class="btn-group btn-group-sm" role="group" aria-label="Wheel display">
+        <input type="radio" class="btn-check" name="palette-wheel-mode" id="palette-wheel-color" value="color" checked>
+        <label class="btn btn-outline-light" for="palette-wheel-color" data-bs-toggle="tooltip" data-bs-title="Show chroma wheel"><i class="bi bi-palette"></i></label>
+        <input type="radio" class="btn-check" name="palette-wheel-mode" id="palette-wheel-gray" value="gray">
+        <label class="btn btn-outline-light" for="palette-wheel-gray" data-bs-toggle="tooltip" data-bs-title="Show grayscale value map in the same hue positions"><i class="bi bi-circle-half"></i></label>
+      </div>
+    </div>
+
+    <div class="palette-wheel-wrap">
+      <canvas id="palette-wheel" width="340" height="340" aria-label="Color wheel"></canvas>
+    </div>
+
+    <div class="row g-2 align-items-end mb-3">
+      <div class="col-5">
+        <label for="palette-color" class="form-label">Picker</label>
+        <input id="palette-color" type="color" class="form-control form-control-color w-100" value="#3b82f6" data-bs-toggle="tooltip" data-bs-title="Native color picker">
+      </div>
+      <div class="col-7">
+        <label for="palette-hex" class="form-label">Hex</label>
+        <div class="input-group">
+          <span class="input-group-text">#</span>
+          <input id="palette-hex" class="form-control text-uppercase" value="3B82F6" maxlength="7" spellcheck="false" autocomplete="off">
+          <button id="palette-copy" type="button" class="btn btn-outline-light" aria-label="Copy hex" data-bs-toggle="tooltip" data-bs-title="Copy selected hex"><i class="bi bi-copy"></i></button>
+        </div>
+      </div>
+    </div>
+
+    <div class="palette-meter">
+      <label for="palette-saturation">Sat</label>
+      <input id="palette-saturation" type="range" class="form-range" min="0" max="100" value="90">
+      <output id="palette-saturation-out">90%</output>
+    </div>
+    <div class="palette-meter">
+      <label for="palette-lightness">Light</label>
+      <input id="palette-lightness" type="range" class="form-range" min="8" max="92" value="60">
+      <output id="palette-lightness-out">60%</output>
+    </div>
+
+    <div class="row g-2 align-items-stretch mt-3">
+      <div class="col-5">
+        <div id="palette-preview-chip" class="palette-preview-chip"></div>
+      </div>
+      <div class="col-7">
+        <div id="palette-readout" class="small text-muted"></div>
+        <div class="d-flex gap-2 mt-2">
+          <button id="palette-eyedropper" type="button" class="btn btn-sm btn-outline-info" data-bs-toggle="tooltip" data-bs-title="Pick any screen color when supported"><i class="bi bi-eyedropper"></i></button>
+          <button id="palette-randomize" type="button" class="btn btn-sm btn-outline-light" data-bs-toggle="tooltip" data-bs-title="Generate a balanced starting hue"><i class="bi bi-shuffle"></i></button>
+        </div>
+      </div>
+    </div>
+
+    <div id="palette-status" class="palette-status mt-3" aria-live="polite"></div>
+  </section>
+
+  <section class="palette-panel" aria-labelledby="palette-triad-title">
+    <div class="palette-panel-title">
+      <h5 id="palette-triad-title">Triadic Scheme</h5>
+      <span class="badge text-bg-dark border border-secondary">120 deg harmony</span>
+    </div>
+    <div id="palette-output" class="palette-output-grid"></div>
+  </section>
+</div>
+
+<section id="palette-image-panel" class="palette-panel mt-3" aria-labelledby="palette-image-title">
+  <div class="palette-panel-title">
+    <h5 id="palette-image-title">Image to Pixel SVG Sampler</h5>
+    <div class="d-flex gap-2">
+      <button id="palette-download-svg" type="button" class="btn btn-sm btn-outline-light" disabled data-bs-toggle="tooltip" data-bs-title="Download generated SVG"><i class="bi bi-download"></i></button>
+      <button id="palette-clear-image" type="button" class="btn btn-sm btn-outline-danger" disabled data-bs-toggle="tooltip" data-bs-title="Clear image"><i class="bi bi-x-lg"></i></button>
+    </div>
+  </div>
+
+  <div class="palette-image-grid">
+    <div>
+      <div id="palette-drop-zone" class="palette-drop-zone mb-3" role="button" tabindex="0" aria-label="Upload image by drag and drop or file picker">
+        <div>
+          <i class="bi bi-cloud-arrow-up" aria-hidden="true"></i>
+          <strong>Drop an image here</strong>
+          <span id="palette-drop-name">or click to browse PNG, JPG, WEBP, GIF, or SVG</span>
+        </div>
+        <input id="palette-image-input" class="d-none" type="file" accept="image/*">
+      </div>
+      <div id="palette-source-wrap" class="palette-source-wrap d-none" aria-label="Uploaded image color picker">
+        <img id="palette-source-image" alt="Uploaded palette source" draggable="false">
+        <span id="palette-source-marker" class="palette-source-marker" aria-hidden="true"></span>
+      </div>
+      <div id="palette-svg-preview" class="palette-svg-preview">
+        <div class="palette-empty">Load a manga image to generate separated SVG color cells.</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="row g-2">
+        <div class="col-6">
+          <label for="palette-svg-width" class="form-label">SVG pixels</label>
+          <input id="palette-svg-width" class="form-control" type="number" min="24" max="220" value="96">
+        </div>
+        <div class="col-6">
+          <label for="palette-cell-size" class="form-label">Cell</label>
+          <input id="palette-cell-size" class="form-control" type="number" min="3" max="16" value="7">
+        </div>
+        <div class="col-6">
+          <label for="palette-cell-gap" class="form-label">Gap</label>
+          <input id="palette-cell-gap" class="form-control" type="number" min="0" max="4" value="1">
+        </div>
+        <div class="col-6">
+          <label for="palette-quantize" class="form-label">Levels</label>
+          <input id="palette-quantize" class="form-control" type="number" min="2" max="32" value="10">
+        </div>
+      </div>
+
+      <label class="form-check mt-3">
+        <input id="palette-ignore-white" class="form-check-input" type="checkbox" checked>
+        <span class="form-check-label">Ignore white paper</span>
+      </label>
+
+      <button id="palette-rebuild-svg" type="button" class="btn btn-outline-info w-100 mt-3" disabled>
+        <i class="bi bi-vector-pen"></i> Build SVG
+      </button>
+
+      <hr>
+      <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
+        <h6 class="mb-0">Dominant colors</h6>
+        <span id="palette-image-size" class="small text-muted"></span>
+      </div>
+      <div id="palette-dominants" class="palette-chip-list"></div>
+    </div>
+  </div>
+</section>
+
+<script>
+(() => {
+  const root = document.getElementById('palette-helper');
+  if(!root) return;
+
+  const wheel = document.getElementById('palette-wheel');
+  const wheelCtx = wheel.getContext('2d', { willReadFrequently: true });
+  const colorInput = document.getElementById('palette-color');
+  const hexInput = document.getElementById('palette-hex');
+  const copyBtn = document.getElementById('palette-copy');
+  const saturationInput = document.getElementById('palette-saturation');
+  const saturationOut = document.getElementById('palette-saturation-out');
+  const lightnessInput = document.getElementById('palette-lightness');
+  const lightnessOut = document.getElementById('palette-lightness-out');
+  const previewChip = document.getElementById('palette-preview-chip');
+  const readout = document.getElementById('palette-readout');
+  const output = document.getElementById('palette-output');
+  const status = document.getElementById('palette-status');
+  const imagePanel = document.getElementById('palette-image-panel');
+  const dropZone = document.getElementById('palette-drop-zone');
+  const dropName = document.getElementById('palette-drop-name');
+  const imageInput = document.getElementById('palette-image-input');
+  const sourceWrap = document.getElementById('palette-source-wrap');
+  const sourceImage = document.getElementById('palette-source-image');
+  const sourceMarker = document.getElementById('palette-source-marker');
+  const svgPreview = document.getElementById('palette-svg-preview');
+  const svgWidthInput = document.getElementById('palette-svg-width');
+  const cellSizeInput = document.getElementById('palette-cell-size');
+  const cellGapInput = document.getElementById('palette-cell-gap');
+  const quantizeInput = document.getElementById('palette-quantize');
+  const ignoreWhiteInput = document.getElementById('palette-ignore-white');
+  const rebuildSvgBtn = document.getElementById('palette-rebuild-svg');
+  const downloadSvgBtn = document.getElementById('palette-download-svg');
+  const clearImageBtn = document.getElementById('palette-clear-image');
+  const dominantsEl = document.getElementById('palette-dominants');
+  const imageSizeEl = document.getElementById('palette-image-size');
+  const imgCanvas = document.createElement('canvas');
+  const imgCtx = imgCanvas.getContext('2d', { willReadFrequently: true });
+  const pickCanvas = document.createElement('canvas');
+  const pickCtx = pickCanvas.getContext('2d', { willReadFrequently: true });
+  pickCanvas.width = 1;
+  pickCanvas.height = 1;
+  pickCtx.imageSmoothingEnabled = false;
+
+  const state = {
+    h: 216,
+    s: 90,
+    l: 60,
+    wheelMode: 'color',
+    image: null,
+    imageUrl: '',
+    imageName: 'palette',
+    svgText: ''
+  };
+
+  const roles = [
+    ['Base', 'Hair or main outfit'],
+    ['Triad +120', 'Eyes or key accent'],
+    ['Triad +240', 'Trim or contrast detail']
+  ];
+  const variants = [
+    ['Shadow', -20, 1],
+    ['Mid', 0, 1],
+    ['Light', 18, .92],
+    ['Muted', 2, .52]
+  ];
+
+  function clamp(n, min, max){ return Math.max(min, Math.min(max, Number(n) || 0)); }
+  function wrapHue(h){ return ((Number(h) % 360) + 360) % 360; }
+  function componentToHex(c){ return Math.round(clamp(c, 0, 255)).toString(16).padStart(2, '0').toUpperCase(); }
+  function rgbToHex(r, g, b){ return `#${componentToHex(r)}${componentToHex(g)}${componentToHex(b)}`; }
+  function normalizeHex(value){
+    let v = String(value || '').trim().replace(/^#/, '');
+    if(/^[0-9a-fA-F]{3}$/.test(v)) v = v.split('').map(ch => ch + ch).join('');
+    if(!/^[0-9a-fA-F]{6}$/.test(v)) return '';
+    return `#${v.toUpperCase()}`;
+  }
+  function hexToRgb(hex){
+    const clean = normalizeHex(hex);
+    if(!clean) return null;
+    const n = parseInt(clean.slice(1), 16);
+    return { r:(n >> 16) & 255, g:(n >> 8) & 255, b:n & 255 };
+  }
+  function hslToRgb(h, s, l){
+    h = wrapHue(h) / 360;
+    s = clamp(s, 0, 100) / 100;
+    l = clamp(l, 0, 100) / 100;
+    if(s === 0){
+      const v = l * 255;
+      return { r:v, g:v, b:v };
+    }
+    const hue2rgb = (p, q, t) => {
+      if(t < 0) t += 1;
+      if(t > 1) t -= 1;
+      if(t < 1 / 6) return p + (q - p) * 6 * t;
+      if(t < 1 / 2) return q;
+      if(t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+      return p;
+    };
+    const q = l < .5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    return {
+      r: hue2rgb(p, q, h + 1 / 3) * 255,
+      g: hue2rgb(p, q, h) * 255,
+      b: hue2rgb(p, q, h - 1 / 3) * 255
+    };
+  }
+  function rgbToHsl(r, g, b){
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h = 0, s = 0;
+    const l = (max + min) / 2;
+    if(max !== min){
+      const d = max - min;
+      s = l > .5 ? d / (2 - max - min) : d / (max + min);
+      switch(max){
+        case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+        case g: h = (b - r) / d + 2; break;
+        default: h = (r - g) / d + 4; break;
+      }
+      h *= 60;
+    }
+    return { h:wrapHue(h), s:s * 100, l:l * 100 };
+  }
+  function readableTextColor(hex){
+    const rgb = hexToRgb(hex);
+    if(!rgb) return '#fff';
+    const lum = (0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b) / 255;
+    return lum > .62 ? '#0b1220' : '#fff';
+  }
+  function colorAt(h, s, l){
+    const rgb = hslToRgb(h, s, l);
+    return rgbToHex(rgb.r, rgb.g, rgb.b);
+  }
+  function setStatus(text){ status.textContent = text || ''; }
+
+  function drawWheel(){
+    const w = wheel.width;
+    const h = wheel.height;
+    const cx = w / 2;
+    const cy = h / 2;
+    const radius = Math.min(cx, cy) - 9;
+    const image = wheelCtx.createImageData(w, h);
+    for(let y = 0; y < h; y++){
+      for(let x = 0; x < w; x++){
+        const dx = x - cx;
+        const dy = y - cy;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const idx = (y * w + x) * 4;
+        if(dist > radius){
+          image.data[idx + 3] = 0;
+          continue;
+        }
+        const hue = wrapHue(Math.atan2(dy, dx) * 180 / Math.PI);
+        const sat = clamp(dist / radius * 100, 0, 100);
+        const rgb = hslToRgb(hue, sat, state.l);
+        if(state.wheelMode === 'gray'){
+          const lum = Math.round(.2126 * rgb.r + .7152 * rgb.g + .0722 * rgb.b);
+          image.data[idx] = lum;
+          image.data[idx + 1] = lum;
+          image.data[idx + 2] = lum;
+        }else{
+          image.data[idx] = Math.round(rgb.r);
+          image.data[idx + 1] = Math.round(rgb.g);
+          image.data[idx + 2] = Math.round(rgb.b);
+        }
+        image.data[idx + 3] = 255;
+      }
+    }
+    wheelCtx.putImageData(image, 0, 0);
+    wheelCtx.save();
+    wheelCtx.translate(cx, cy);
+    [0, 120, 240].forEach((offset, idx) => {
+      const hue = wrapHue(state.h + offset);
+      const angle = hue * Math.PI / 180;
+      const markerRadius = Math.max(28, state.s / 100 * radius);
+      const x = Math.cos(angle) * markerRadius;
+      const y = Math.sin(angle) * markerRadius;
+      wheelCtx.beginPath();
+      wheelCtx.arc(x, y, idx === 0 ? 8 : 6, 0, Math.PI * 2);
+      wheelCtx.fillStyle = colorAt(hue, state.s, state.l);
+      wheelCtx.fill();
+      wheelCtx.lineWidth = idx === 0 ? 3 : 2;
+      wheelCtx.strokeStyle = '#fff';
+      wheelCtx.stroke();
+      wheelCtx.beginPath();
+      wheelCtx.arc(x, y, idx === 0 ? 11 : 9, 0, Math.PI * 2);
+      wheelCtx.strokeStyle = 'rgba(0,0,0,.55)';
+      wheelCtx.stroke();
+    });
+    wheelCtx.restore();
+  }
+
+  function updateUi(skipWheel){
+    state.h = wrapHue(state.h);
+    state.s = clamp(state.s, 0, 100);
+    state.l = clamp(state.l, 8, 92);
+    const hex = colorAt(state.h, state.s, state.l);
+    colorInput.value = hex;
+    hexInput.value = hex.slice(1);
+    saturationInput.value = Math.round(state.s);
+    lightnessInput.value = Math.round(state.l);
+    saturationOut.value = `${Math.round(state.s)}%`;
+    lightnessOut.value = `${Math.round(state.l)}%`;
+    previewChip.style.background = hex;
+    readout.innerHTML = `<div><strong>${hex}</strong></div><div>HSL ${Math.round(state.h)} ${Math.round(state.s)}% ${Math.round(state.l)}%</div>`;
+    renderTriad();
+    if(!skipWheel) drawWheel();
+  }
+
+  function renderTriad(){
+    output.innerHTML = '';
+    roles.forEach((role, idx) => {
+      const hue = wrapHue(state.h + idx * 120);
+      const roleEl = document.createElement('div');
+      roleEl.className = 'palette-role';
+      const head = document.createElement('div');
+      head.className = 'palette-role-head';
+      head.innerHTML = `<strong>${role[0]}</strong><span>${role[1]} - hue ${Math.round(hue)} deg</span>`;
+      const swatches = document.createElement('div');
+      swatches.className = 'palette-swatches';
+      variants.forEach(variant => {
+        const hex = colorAt(hue, state.s * variant[2], clamp(state.l + variant[1], 4, 96));
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'palette-swatch';
+        btn.style.background = hex;
+        btn.style.color = readableTextColor(hex);
+        btn.dataset.hex = hex;
+        btn.setAttribute('data-bs-toggle', 'tooltip');
+        btn.setAttribute('data-bs-title', `Copy ${hex}`);
+        btn.innerHTML = `<span>${variant[0]}</span><code>${hex}</code>`;
+        btn.addEventListener('click', () => copyHex(hex));
+        swatches.appendChild(btn);
+      });
+      roleEl.appendChild(head);
+      roleEl.appendChild(swatches);
+      output.appendChild(roleEl);
+    });
+  }
+
+  function setFromHex(value){
+    const rgb = hexToRgb(value);
+    if(!rgb) return false;
+    const hsl = rgbToHsl(rgb.r, rgb.g, rgb.b);
+    state.h = hsl.h;
+    state.s = hsl.s;
+    state.l = clamp(hsl.l, 8, 92);
+    updateUi();
+    return true;
+  }
+
+  async function copyHex(hex){
+    const clean = normalizeHex(hex);
+    if(!clean) return;
+    try{
+      await navigator.clipboard.writeText(clean);
+      setStatus(`Copied ${clean}`);
+    }catch(_){
+      setStatus(clean);
+    }
+  }
+
+  function setWheelFromEvent(ev){
+    const rect = wheel.getBoundingClientRect();
+    const x = (ev.clientX - rect.left) / rect.width * wheel.width;
+    const y = (ev.clientY - rect.top) / rect.height * wheel.height;
+    const cx = wheel.width / 2;
+    const cy = wheel.height / 2;
+    const dx = x - cx;
+    const dy = y - cy;
+    const radius = Math.min(cx, cy) - 9;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if(dist > radius) return;
+    state.h = wrapHue(Math.atan2(dy, dx) * 180 / Math.PI);
+    state.s = clamp(dist / radius * 100, 0, 100);
+    updateUi();
+  }
+
+  let draggingWheel = false;
+  wheel.addEventListener('pointerdown', ev => {
+    draggingWheel = true;
+    wheel.setPointerCapture(ev.pointerId);
+    setWheelFromEvent(ev);
+  });
+  wheel.addEventListener('pointermove', ev => {
+    if(draggingWheel) setWheelFromEvent(ev);
+  });
+  wheel.addEventListener('pointerup', () => { draggingWheel = false; });
+  wheel.addEventListener('pointercancel', () => { draggingWheel = false; });
+
+  document.querySelectorAll('input[name="palette-wheel-mode"]').forEach(input => {
+    input.addEventListener('change', () => {
+      state.wheelMode = input.value;
+      drawWheel();
+    });
+  });
+  saturationInput.addEventListener('input', () => {
+    state.s = Number(saturationInput.value);
+    updateUi();
+  });
+  lightnessInput.addEventListener('input', () => {
+    state.l = Number(lightnessInput.value);
+    updateUi();
+  });
+  colorInput.addEventListener('input', () => setFromHex(colorInput.value));
+  hexInput.addEventListener('input', () => {
+    const clean = normalizeHex(hexInput.value);
+    if(clean) setFromHex(clean);
+  });
+  copyBtn.addEventListener('click', () => copyHex(colorInput.value));
+  document.getElementById('palette-randomize').addEventListener('click', () => {
+    state.h = Math.floor(Math.random() * 360);
+    state.s = 56 + Math.floor(Math.random() * 34);
+    state.l = 44 + Math.floor(Math.random() * 22);
+    updateUi();
+  });
+  document.getElementById('palette-eyedropper').addEventListener('click', async () => {
+    if(!window.EyeDropper){
+      setStatus('EyeDropper is not available in this browser.');
+      return;
+    }
+    try{
+      const result = await new window.EyeDropper().open();
+      setFromHex(result.sRGBHex);
+      setStatus(`Picked ${result.sRGBHex.toUpperCase()}`);
+    }catch(_){}
+  });
+
+  function quantize(v, levels){
+    levels = clamp(levels, 2, 32);
+    const step = 255 / (levels - 1);
+    return Math.round(Math.round(v / step) * step);
+  }
+  function isPaper(r, g, b){
+    return ignoreWhiteInput.checked && r > 238 && g > 238 && b > 238 && Math.max(r, g, b) - Math.min(r, g, b) < 18;
+  }
+  function renderDominants(counts, total){
+    dominantsEl.innerHTML = '';
+    const sorted = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 14);
+    sorted.forEach(([hex, count]) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'palette-dominant';
+      btn.innerHTML = `<span style="background:${hex}"></span><code>${hex}</code><small class="d-block text-muted">${Math.round(count / Math.max(total, 1) * 100)}%</small>`;
+      btn.addEventListener('click', () => {
+        setFromHex(hex);
+        setStatus(`Selected ${hex} from SVG cells`);
+      });
+      dominantsEl.appendChild(btn);
+    });
+  }
+
+  function buildSvg(){
+    if(!state.image) return;
+    const requestedW = clamp(svgWidthInput.value, 24, 220);
+    let sampleW = requestedW;
+    let sampleH = Math.max(1, Math.round(state.image.height / state.image.width * sampleW));
+    const maxCells = 30000;
+    if(sampleW * sampleH > maxCells){
+      const scale = Math.sqrt(maxCells / (sampleW * sampleH));
+      sampleW = Math.max(24, Math.floor(sampleW * scale));
+      sampleH = Math.max(1, Math.floor(sampleH * scale));
+      svgWidthInput.value = sampleW;
+    }
+    const cell = clamp(cellSizeInput.value, 3, 16);
+    const gap = clamp(cellGapInput.value, 0, Math.min(4, cell - 1));
+    const levels = clamp(quantizeInput.value, 2, 32);
+    imgCanvas.width = sampleW;
+    imgCanvas.height = sampleH;
+    imgCtx.clearRect(0, 0, sampleW, sampleH);
+    imgCtx.drawImage(state.image, 0, 0, sampleW, sampleH);
+    const data = imgCtx.getImageData(0, 0, sampleW, sampleH).data;
+    const rectSize = Math.max(1, cell - gap);
+    const counts = new Map();
+    let counted = 0;
+    let rects = '';
+    for(let y = 0; y < sampleH; y++){
+      for(let x = 0; x < sampleW; x++){
+        const idx = (y * sampleW + x) * 4;
+        const alpha = data[idx + 3];
+        if(alpha < 24) continue;
+        let r = quantize(data[idx], levels);
+        let g = quantize(data[idx + 1], levels);
+        let b = quantize(data[idx + 2], levels);
+        if(isPaper(r, g, b)) continue;
+        const hex = rgbToHex(r, g, b);
+        counted++;
+        counts.set(hex, (counts.get(hex) || 0) + 1);
+        rects += `<rect x="${x * cell}" y="${y * cell}" width="${rectSize}" height="${rectSize}" fill="${hex}" data-hex="${hex}"/>`;
+      }
+    }
+    const outW = sampleW * cell;
+    const outH = sampleH * cell;
+    state.svgText = `<svg xmlns="http://www.w3.org/2000/svg" width="${outW}" height="${outH}" viewBox="0 0 ${outW} ${outH}" shape-rendering="crispEdges">${rects}</svg>`;
+    svgPreview.innerHTML = state.svgText || '<div class="palette-empty">No SVG cells generated.</div>';
+    imageSizeEl.textContent = `${sampleW} x ${sampleH}`;
+    renderDominants(counts, counted);
+    downloadSvgBtn.disabled = !state.svgText;
+    setStatus(`Built SVG with ${counted.toLocaleString()} sampled cells.`);
+  }
+
+  function revokeImageUrl(){
+    if(state.imageUrl){
+      URL.revokeObjectURL(state.imageUrl);
+      state.imageUrl = '';
+    }
+  }
+
+  function fileLooksLikeImage(file){
+    return !!file && (file.type.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(file.name || ''));
+  }
+
+  function firstImageFile(fileList){
+    return Array.from(fileList || []).find(fileLooksLikeImage) || null;
+  }
+
+  function loadImageFile(file){
+    if(!file){
+      setStatus('Drop an image file to load it.');
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      revokeImageUrl();
+      state.imageUrl = url;
+      state.image = img;
+      state.imageName = file.name.replace(/\.[^.]+$/, '') || 'palette';
+      sourceImage.src = url;
+      sourceWrap.classList.remove('d-none', 'has-pick');
+      sourceMarker.style.left = '';
+      sourceMarker.style.top = '';
+      dropName.textContent = file.name;
+      rebuildSvgBtn.disabled = false;
+      clearImageBtn.disabled = false;
+      buildSvg();
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      setStatus('Could not load image.');
+    };
+    img.src = url;
+  }
+
+  function handleUploadFiles(fileList){
+    const file = firstImageFile(fileList);
+    if(!file){
+      setStatus('No supported image file found.');
+      return;
+    }
+    loadImageFile(file);
+  }
+
+  imageInput.addEventListener('change', () => {
+    handleUploadFiles(imageInput.files);
+  });
+
+  dropZone.addEventListener('click', () => imageInput.click());
+  dropZone.addEventListener('keydown', ev => {
+    if(ev.key === 'Enter' || ev.key === ' '){
+      ev.preventDefault();
+      imageInput.click();
+    }
+  });
+
+  function setDropActive(active){
+    dropZone.classList.toggle('is-dragging', !!active);
+  }
+  imagePanel.addEventListener('dragenter', ev => {
+    if(!ev.dataTransfer || !Array.from(ev.dataTransfer.types || []).includes('Files')) return;
+    ev.preventDefault();
+    setDropActive(true);
+  });
+  imagePanel.addEventListener('dragover', ev => {
+    if(!ev.dataTransfer) return;
+    ev.preventDefault();
+    ev.dataTransfer.dropEffect = 'copy';
+    setDropActive(true);
+  });
+  imagePanel.addEventListener('dragleave', ev => {
+    if(!imagePanel.contains(ev.relatedTarget)) setDropActive(false);
+  });
+  imagePanel.addEventListener('drop', ev => {
+    ev.preventDefault();
+    setDropActive(false);
+    handleUploadFiles(ev.dataTransfer.files);
+  });
+
+  function pickSourceColor(ev){
+    if(!state.image) return false;
+    const rect = sourceImage.getBoundingClientRect();
+    if(!rect.width || !rect.height) return false;
+    const relX = clamp((ev.clientX - rect.left) / rect.width, 0, 1);
+    const relY = clamp((ev.clientY - rect.top) / rect.height, 0, 1);
+    const x = Math.min(state.image.width - 1, Math.max(0, Math.floor(relX * state.image.width)));
+    const y = Math.min(state.image.height - 1, Math.max(0, Math.floor(relY * state.image.height)));
+    try{
+      pickCtx.clearRect(0, 0, 1, 1);
+      pickCtx.drawImage(state.image, x, y, 1, 1, 0, 0, 1, 1);
+      const pixel = pickCtx.getImageData(0, 0, 1, 1).data;
+      if(pixel[3] < 24){
+        setStatus('Picked a transparent pixel.');
+        return false;
+      }
+      const hex = rgbToHex(pixel[0], pixel[1], pixel[2]);
+      sourceMarker.style.left = `${relX * rect.width}px`;
+      sourceMarker.style.top = `${relY * rect.height}px`;
+      sourceWrap.classList.add('has-pick');
+      setFromHex(hex);
+      setStatus(`Picked ${hex} from uploaded image`);
+      return true;
+    }catch(_){
+      setStatus('Could not sample this image pixel.');
+      return false;
+    }
+  }
+
+  let draggingSource = false;
+  sourceWrap.addEventListener('pointerdown', ev => {
+    if(!state.image) return;
+    ev.preventDefault();
+    draggingSource = true;
+    sourceWrap.setPointerCapture(ev.pointerId);
+    pickSourceColor(ev);
+  });
+  sourceWrap.addEventListener('pointermove', ev => {
+    if(draggingSource) pickSourceColor(ev);
+  });
+  sourceWrap.addEventListener('pointerup', ev => {
+    draggingSource = false;
+    if(sourceWrap.hasPointerCapture(ev.pointerId)) sourceWrap.releasePointerCapture(ev.pointerId);
+  });
+  sourceWrap.addEventListener('pointercancel', ev => {
+    draggingSource = false;
+    if(sourceWrap.hasPointerCapture(ev.pointerId)) sourceWrap.releasePointerCapture(ev.pointerId);
+  });
+  [svgWidthInput, cellSizeInput, cellGapInput, quantizeInput, ignoreWhiteInput].forEach(input => {
+    input.addEventListener('change', buildSvg);
+  });
+  rebuildSvgBtn.addEventListener('click', buildSvg);
+  clearImageBtn.addEventListener('click', () => {
+    revokeImageUrl();
+    state.image = null;
+    state.svgText = '';
+    imageInput.value = '';
+    sourceImage.removeAttribute('src');
+    sourceWrap.classList.add('d-none');
+    sourceWrap.classList.remove('has-pick');
+    sourceMarker.style.left = '';
+    sourceMarker.style.top = '';
+    dropName.textContent = 'or click to browse PNG, JPG, WEBP, GIF, or SVG';
+    svgPreview.innerHTML = '<div class="palette-empty">Load a manga image to generate separated SVG color cells.</div>';
+    dominantsEl.innerHTML = '';
+    imageSizeEl.textContent = '';
+    rebuildSvgBtn.disabled = true;
+    downloadSvgBtn.disabled = true;
+    clearImageBtn.disabled = true;
+    setStatus('');
+  });
+  downloadSvgBtn.addEventListener('click', () => {
+    if(!state.svgText) return;
+    const blob = new Blob([state.svgText], { type:'image/svg+xml' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${state.imageName}_pixel_palette.svg`;
+    document.body.appendChild(a);
+    a.click();
+    URL.revokeObjectURL(a.href);
+    a.remove();
+  });
+  svgPreview.addEventListener('click', ev => {
+    const target = ev.target;
+    if(target && target.dataset && target.dataset.hex){
+      setFromHex(target.dataset.hex);
+      setStatus(`Selected ${target.dataset.hex} from SVG`);
+    }
+  });
+
+  updateUi();
+})();
+</script>

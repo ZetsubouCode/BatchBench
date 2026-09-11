@@ -1,116 +1,347 @@
+<style>
+  .bb-batch-workspace {
+    display: grid;
+    gap: 1rem;
+  }
+  .bb-batch-top {
+    display: grid;
+    grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+    gap: 1rem;
+    align-items: start;
+  }
+  .bb-batch-panel {
+    border: 1px solid var(--bb-border);
+    border-radius: 8px;
+    background: rgba(11, 18, 32, .58);
+  }
+  .bb-batch-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    padding: .85rem 1rem;
+    border-bottom: 1px solid var(--bb-border);
+  }
+  .bb-batch-panel-body {
+    padding: 1rem;
+  }
+  .bb-batch-preview-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .75rem;
+  }
+  .bb-batch-preview-frame {
+    position: relative;
+    min-height: 340px;
+    border: 1px solid var(--bb-border);
+    border-radius: 8px;
+    background: var(--bb-input-bg);
+    overflow: hidden;
+  }
+  .bb-batch-preview-frame img {
+    width: 100%;
+    height: 100%;
+    max-height: 620px;
+    object-fit: contain;
+    display: block;
+  }
+  .bb-batch-preview-label {
+    position: absolute;
+    top: .65rem;
+    left: .65rem;
+    padding: .2rem .5rem;
+    border-radius: 999px;
+    background: rgba(11, 18, 32, .86);
+    border: 1px solid var(--bb-border);
+    color: var(--bb-text);
+    font-size: .78rem;
+    pointer-events: none;
+  }
+  .bb-batch-empty {
+    min-height: 340px;
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+    color: var(--bb-muted);
+    text-align: center;
+  }
+  .bb-batch-controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .75rem;
+  }
+  .bb-batch-control {
+    border: 1px solid var(--bb-border);
+    border-radius: 8px;
+    padding: .85rem;
+    background: rgba(15, 23, 42, .55);
+  }
+  .bb-batch-control-top {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: .5rem;
+    align-items: center;
+    margin-bottom: .55rem;
+  }
+  .bb-batch-control-name {
+    font-weight: 600;
+    color: var(--bb-text);
+    min-width: 0;
+  }
+  .bb-batch-value {
+    width: 6.5rem;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+  .bb-batch-value .input-group-text {
+    background: var(--bb-input-bg);
+    color: var(--bb-muted);
+    border-color: var(--bb-input-bd);
+  }
+  .bb-batch-reset {
+    width: 2.25rem;
+    height: 2.25rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .bb-batch-range-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: .65rem;
+    align-items: center;
+    color: var(--bb-muted);
+    font-size: .78rem;
+  }
+  .bb-batch-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    align-items: center;
+    justify-content: space-between;
+  }
+  @media (max-width: 1199.98px) {
+    .bb-batch-top,
+    .bb-batch-controls {
+      grid-template-columns: 1fr;
+    }
+  }
+  @media (max-width: 767.98px) {
+    .bb-batch-preview-grid {
+      grid-template-columns: 1fr;
+    }
+    .bb-batch-preview-frame,
+    .bb-batch-empty {
+      min-height: 260px;
+    }
+    .bb-batch-control-top {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+    .bb-batch-reset {
+      grid-column: 2;
+    }
+  }
+</style>
+
 <div class="card p-4">
-  <form method="post" data-tool-label="Photo Adjust (preset + tweak)">
+  <form method="post" data-tool-label="Photo Adjust">
     <input type="hidden" name="tool" value="batch">
 
     {# Preset library for JS: preset_name -> params #}
     <script id="bb-batch-presets" type="application/json">{{ presets|tojson }}</script>
 
-    <div class="row g-3">
-      <div class="col-md-4">
-        <label class="form-label">Source Folder</label>
-        <div class="input-group">
-          <input id="src_batch" name="src_batch" type="text" class="form-control"
-                 placeholder="{{ work_dir }}" data-root-sync="1"
-                 data-bs-toggle="tooltip" data-bs-title="Images to process (.jpg/.png/.webp)">
-          <button class="btn btn-outline-light" type="button" id="btn-src-workdir"
-                  data-bs-toggle="tooltip" data-bs-title="Use WORK_DIR">WORK_DIR</button>
-          <button class="btn btn-outline-light btn-browse" type="button" data-target="src_batch"
-                  data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
+    <div class="bb-batch-workspace">
+      <div class="bb-batch-top">
+        <div class="bb-batch-panel">
+          <div class="bb-batch-panel-header">
+            <h5 class="m-0">Photo Adjust</h5>
+            <span class="small text-muted">Non-destructive output</span>
+          </div>
+          <div class="bb-batch-panel-body">
+            <div class="vstack gap-3">
+              <div>
+                <label class="form-label" for="src_batch">Source Folder</label>
+                <div class="input-group">
+                  <input id="src_batch" name="src_batch" type="text" class="form-control"
+                         placeholder="{{ work_dir }}" data-root-sync="1"
+                         data-bs-toggle="tooltip" data-bs-title="Images to process. Empty uses WORK_DIR.">
+                  <button class="btn btn-outline-light" type="button" id="btn-src-workdir"
+                          data-bs-toggle="tooltip" data-bs-title="Use WORK_DIR"><i class="bi bi-house-door" aria-hidden="true"></i></button>
+                  <button class="btn btn-outline-light btn-browse" type="button" data-target="src_batch"
+                          data-bs-toggle="tooltip" data-bs-title="Browse folders"><i class="bi bi-folder2-open" aria-hidden="true"></i></button>
+                </div>
+              </div>
+
+              <div>
+                <label class="form-label" for="dst_batch">Output Folder</label>
+                <div class="input-group">
+                  <input id="dst_batch" name="dst_batch" type="text" class="form-control"
+                         placeholder="Auto: Source\\_batch_adjust_out"
+                         data-bs-toggle="tooltip" data-bs-title="Processed images are saved here. Empty creates a new folder under Source.">
+                  <button class="btn btn-outline-light btn-browse" type="button" data-target="dst_batch"
+                          data-bs-toggle="tooltip" data-bs-title="Browse folders"><i class="bi bi-folder2-open" aria-hidden="true"></i></button>
+                </div>
+              </div>
+
+              <div>
+                <label class="form-label" for="preset_batch">Preset</label>
+                <div class="input-group">
+                  <select class="form-select" id="preset_batch" name="preset"
+                          data-bs-toggle="tooltip" data-bs-title="Choose a starting look">
+                    {% for name in preset_names %}<option value="{{ name }}">{{ name }}</option>{% endfor %}
+                  </select>
+                  <button class="btn btn-outline-light" type="button" id="btn-load-preset"
+                          data-bs-toggle="tooltip" data-bs-title="Apply preset values to controls"><i class="bi bi-magic" aria-hidden="true"></i></button>
+                </div>
+              </div>
+
+              <div class="row g-2">
+                <div class="col-sm-6">
+                  <label class="form-label" for="suffix_batch">Suffix</label>
+                  <input id="suffix_batch" class="form-control" name="suffix" value="_adj"
+                         data-bs-toggle="tooltip" data-bs-title="Added to output filenames">
+                </div>
+                <div class="col-sm-6">
+                  <label class="form-label" for="output_format_batch">Format</label>
+                  <select id="output_format_batch" class="form-select" name="output_format"
+                          data-bs-toggle="tooltip" data-bs-title="Same keeps each original extension">
+                    <option value="same" selected>Same</option>
+                    <option value="jpg">JPG</option>
+                    <option value="png">PNG</option>
+                    <option value="webp">WebP</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="row g-2 align-items-end">
+                <div class="col-sm-6">
+                  <label class="form-label" for="limit_batch">Max files</label>
+                  <input id="limit_batch" class="form-control" type="number" name="limit" value="0" min="0"
+                         data-bs-toggle="tooltip" data-bs-title="0 processes every matching image">
+                </div>
+                <div class="col-sm-6">
+                  <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="recursive_batch" name="recursive" checked>
+                    <label class="form-check-label" for="recursive_batch">Include subfolders</label>
+                  </div>
+                  <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="batch_auto_preview" checked>
+                    <label class="form-check-label" for="batch_auto_preview">Live preview</label>
+                  </div>
+                </div>
+              </div>
+
+              <div class="bb-batch-actions pt-2">
+                <button class="btn btn-primary" type="submit"><i class="bi bi-play-fill me-1" aria-hidden="true"></i>Process</button>
+                <div class="d-flex flex-wrap gap-2">
+                  <button class="btn btn-outline-light" type="button" id="btn-reset-zero"
+                          data-bs-toggle="tooltip" data-bs-title="Set every adjustment to neutral"><i class="bi bi-arrow-counterclockwise me-1" aria-hidden="true"></i>Reset</button>
+                  <button class="btn btn-outline-light" type="button" id="btn-preview-load-images"
+                          data-bs-toggle="tooltip" data-bs-title="Refresh the preview image list"><i class="bi bi-images me-1" aria-hidden="true"></i>Images</button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-        <div class="form-text">Tip: leave Source empty to use WORK_DIR automatically.</div>
-      </div>
 
-      <div class="col-md-4">
-        <label class="form-label">Output Folder</label>
-        <div class="input-group">
-          <input id="dst_batch" name="dst_batch" type="text" class="form-control"
-                 placeholder="(auto: _batch_adjust_out)"
-                 data-bs-toggle="tooltip" data-bs-title="Processed images saved here. If empty, will auto-create under Source.">
-          <button class="btn btn-outline-light btn-browse" type="button" data-target="dst_batch"
-                  data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
+        <div class="bb-batch-panel">
+          <div class="bb-batch-panel-header">
+            <div>
+              <h5 class="m-0">Preview</h5>
+              <div class="small text-muted" id="batch-preview-status">Select Source + image, then move sliders.</div>
+            </div>
+            <button class="btn btn-sm btn-outline-light" type="button" id="btn-preview-refresh"
+                    data-bs-toggle="tooltip" data-bs-title="Render preview now"><i class="bi bi-arrow-repeat" aria-hidden="true"></i></button>
+          </div>
+          <div class="bb-batch-panel-body">
+            <div class="row g-2 mb-3">
+              <div class="col-lg-9">
+                <label class="form-label" for="preview_image_batch">Preview Image</label>
+                <select class="form-select" id="preview_image_batch"
+                        data-bs-toggle="tooltip" data-bs-title="Pick one source image for before/after preview">
+                  <option value="">No image selected</option>
+                </select>
+              </div>
+              <div class="col-lg-3">
+                <label class="form-label" for="preview_max_side_batch">Preview size</label>
+                <select id="preview_max_side_batch" class="form-select"
+                        data-bs-toggle="tooltip" data-bs-title="Larger previews are more detailed but slower">
+                  <option value="512">Fast</option>
+                  <option value="960" selected>Balanced</option>
+                  <option value="1536">Detailed</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="bb-batch-preview-grid">
+              <div class="bb-batch-preview-frame">
+                <span class="bb-batch-preview-label">Original</span>
+                <div id="batch-preview-original-empty" class="bb-batch-empty">No image loaded.</div>
+                <img id="batch-preview-original" class="d-none" alt="Original preview">
+              </div>
+              <div class="bb-batch-preview-frame">
+                <span class="bb-batch-preview-label">Adjusted</span>
+                <div id="batch-preview-empty" class="bb-batch-empty">No image loaded.</div>
+                <img id="batch-preview-image" class="d-none" alt="Adjusted preview">
+              </div>
+            </div>
+            <div class="small text-muted mt-2" id="batch-preview-meta"></div>
+          </div>
         </div>
       </div>
 
-      <div class="col-md-4">
-        <label class="form-label d-flex justify-content-between align-items-center">
-          <span>Preset</span>
-          <button class="btn btn-sm btn-outline-light" type="button" id="btn-load-preset">Load preset -> sliders</button>
-        </label>
-        <select class="form-select" id="preset_batch" name="preset"
-                data-bs-toggle="tooltip" data-bs-title="Choose an adjustment preset">
-          {% for name in preset_names %}<option value="{{ name }}">{{ name }}</option>{% endfor %}
-        </select>
-      </div>
+      <div class="bb-batch-panel">
+        <div class="bb-batch-panel-header">
+          <div>
+            <h5 class="m-0">Adjustments</h5>
+            <div class="small text-muted">Exposure uses EV. Other controls use -100 to +100 for easier fine-tuning.</div>
+          </div>
+          <button class="btn btn-sm btn-outline-light" type="button" id="btn-warmth-demo"
+                  data-bs-toggle="tooltip" data-bs-title="Set warmth to a visible midpoint"><i class="bi bi-thermometer-sun me-1" aria-hidden="true"></i>Warm +35</button>
+        </div>
+        <div class="bb-batch-panel-body">
+          <div class="bb-batch-controls">
+            {% set sliders = [
+              ("exposure_ev", "Exposure", -4, 4, 0.01, "EV", 1),
+              ("brightness", "Brightness", -100, 100, 1, "%", 100),
+              ("contrast", "Contrast", -100, 100, 1, "%", 100),
+              ("highlights", "Highlights", -100, 100, 1, "%", 100),
+              ("shadows", "Shadows", -100, 100, 1, "%", 100),
+              ("saturation", "Saturation", -100, 100, 1, "%", 100),
+              ("warmth", "Warmth", -100, 100, 1, "%", 100),
+              ("tint", "Tint", -100, 100, 1, "%", 100),
+              ("sharpness", "Sharpness", -100, 100, 1, "%", 100),
+              ("vignette", "Vignette", 0, 100, 1, "%", 100)
+            ] %}
 
-      <div class="col-md-3">
-        <label class="form-label">Suffix</label>
-        <input class="form-control" name="suffix" value="_adj"
-               data-bs-toggle="tooltip" data-bs-title="Added to output filenames">
-      </div>
-
-      <div class="col-md-3">
-        <label class="form-label">Output format</label>
-        <select class="form-select" name="output_format"
-                data-bs-toggle="tooltip" data-bs-title="same = keep original extension">
-          <option value="same" selected>same (keep)</option>
-          <option value="jpg">jpg</option>
-          <option value="png">png</option>
-          <option value="webp">webp</option>
-        </select>
-      </div>
-
-      <div class="col-md-3">
-        <label class="form-label">Max files (0 = all)</label>
-        <input class="form-control" type="number" name="limit" value="0" min="0"
-               data-bs-toggle="tooltip" data-bs-title="Limit number of processed files">
-      </div>
-
-      <div class="col-md-3 d-flex align-items-end">
-        <div class="form-check">
-          <input class="form-check-input" type="checkbox" id="recursive_batch" name="recursive" checked>
-          <label class="form-check-label" for="recursive_batch">Recursive</label>
+            {% for key, label, lo, hi, step, unit, scale in sliders %}
+            <div class="bb-batch-control">
+              <input type="hidden" id="val_{{ key }}" name="{{ key }}" value="">
+              <div class="bb-batch-control-top">
+                <label class="bb-batch-control-name" for="rng_{{ key }}">{{ label }}</label>
+                <div class="input-group input-group-sm bb-batch-value">
+                  <input type="number" class="form-control" id="num_{{ key }}"
+                         min="{{ lo }}" max="{{ hi }}" step="{{ step }}" value="0"
+                         data-scale="{{ scale }}" data-unit="{{ unit }}" data-no-persist="1">
+                  <span class="input-group-text">{{ unit }}</span>
+                </div>
+                <button class="btn btn-sm btn-outline-light bb-batch-reset" type="button"
+                        data-reset-key="{{ key }}" data-bs-toggle="tooltip" data-bs-title="Reset {{ label }}">
+                  <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>
+                </button>
+              </div>
+              <div class="bb-batch-range-row">
+                <span>{{ lo }}</span>
+                <input type="range" class="form-range" id="rng_{{ key }}"
+                       min="{{ lo }}" max="{{ hi }}" step="{{ step }}" value="0"
+                       data-scale="{{ scale }}" data-unit="{{ unit }}">
+                <span>{{ hi }}</span>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
         </div>
       </div>
-    </div>
-
-    <hr class="my-4">
-
-    <div class="d-flex justify-content-between align-items-center mb-2">
-      <h6 class="m-0">Adjustments</h6>
-      <small class="text-muted">Range: -1..1. Exposure: -4..4. Vignette: 0..1.</small>
-    </div>
-
-    <div class="row g-3">
-      {% set sliders = [
-        ("exposure_ev", "Exposure (EV)", -4, 4, 0.01),
-        ("brightness", "Brightness", -1, 1, 0.01),
-        ("contrast", "Contrast", -1, 1, 0.01),
-        ("highlights", "Highlights", -1, 1, 0.01),
-        ("shadows", "Shadows", -1, 1, 0.01),
-        ("saturation", "Saturation", -1, 1, 0.01),
-        ("warmth", "Warmth", -1, 1, 0.01),
-        ("tint", "Tint", -1, 1, 0.01),
-        ("sharpness", "Sharpness", -1, 1, 0.01),
-        ("vignette", "Vignette", 0, 1, 0.01)
-      ] %}
-
-      {% for key, label, lo, hi, step in sliders %}
-      <div class="col-md-6">
-        <label class="form-label">{{ label }}</label>
-        <div class="d-flex gap-2 align-items-center">
-          <input type="range" class="form-range" id="rng_{{ key }}"
-                 min="{{ lo }}" max="{{ hi }}" step="{{ step }}" value="0">
-          <input type="number" class="form-control" style="max-width: 140px"
-                 id="num_{{ key }}" name="{{ key }}" value="" step="{{ step }}" placeholder="auto">
-        </div>
-      </div>
-      {% endfor %}
-    </div>
-
-    <div class="mt-3 d-flex gap-2">
-      <button class="btn btn-primary">Process</button>
-      <button class="btn btn-outline-light" type="button" id="btn-reset-zero"
-              data-bs-toggle="tooltip" data-bs-title="Set all sliders to 0">Reset to 0</button>
     </div>
   </form>
 </div>
@@ -119,10 +350,24 @@
 (() => {
   const presetEl = document.getElementById('preset_batch');
   const srcEl = document.getElementById('src_batch');
+  const recursiveEl = document.getElementById('recursive_batch');
+  const autoPreviewEl = document.getElementById('batch_auto_preview');
   const btnWorkdir = document.getElementById('btn-src-workdir');
   const btnLoad = document.getElementById('btn-load-preset');
   const btnReset = document.getElementById('btn-reset-zero');
+  const btnWarmthDemo = document.getElementById('btn-warmth-demo');
+  const btnPreviewLoadImages = document.getElementById('btn-preview-load-images');
+  const btnPreviewRefresh = document.getElementById('btn-preview-refresh');
+  const previewSelectEl = document.getElementById('preview_image_batch');
+  const previewMaxSideEl = document.getElementById('preview_max_side_batch');
+  const previewStatusEl = document.getElementById('batch-preview-status');
+  const previewMetaEl = document.getElementById('batch-preview-meta');
+  const previewEmptyEl = document.getElementById('batch-preview-empty');
+  const previewOriginalEmptyEl = document.getElementById('batch-preview-original-empty');
+  const previewImgEl = document.getElementById('batch-preview-image');
+  const previewOriginalEl = document.getElementById('batch-preview-original');
   const presetDataEl = document.getElementById('bb-batch-presets');
+  const defaultWorkDir = {{ work_dir|tojson }};
 
   let presets = {};
   try { presets = JSON.parse(presetDataEl?.textContent || '{}') || {}; } catch(e) { presets = {}; }
@@ -132,66 +377,353 @@
     'saturation','warmth','tint','sharpness','vignette'
   ];
 
+  const ranges = {
+    exposure_ev: [-4, 4, 1],
+    vignette: [0, 100, 100],
+  };
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-  const ranges = { exposure_ev: [-4, 4], vignette: [0, 1] };
+  const decimalsFor = (key) => key === 'exposure_ev' ? 2 : 0;
+  const normalizeValue = (key, displayValue) => {
+    const scale = (ranges[key] || [-100, 100, 100])[2];
+    return Number(displayValue) / scale;
+  };
+  const displayValue = (key, normalizedValue) => {
+    const [lo, hi, scale] = ranges[key] || [-100, 100, 100];
+    const raw = Number(normalizedValue || 0) * scale;
+    return clamp(raw, lo, hi);
+  };
+  const formatNumber = (value, decimals) => {
+    const fixed = Number(value || 0).toFixed(decimals);
+    return fixed.replace(/\.?0+$/, '');
+  };
 
-  function setPair(key, val){
+  let previewTimer = null;
+  let previewSeq = 0;
+  let previewAbort = null;
+  let adjustedUrl = '';
+  let originalUrl = '';
+
+  function setPair(key, normalizedVal, schedule = true){
     const rng = document.getElementById('rng_' + key);
     const num = document.getElementById('num_' + key);
-    if(!rng || !num) return;
+    const hidden = document.getElementById('val_' + key);
+    if(!rng || !num || !hidden) return;
 
-    const lohi = ranges[key] || [-1, 1];
-    const v = clamp(Number(val || 0), lohi[0], lohi[1]);
-    rng.value = String(v);
-    num.value = String(v);
+    const [lo, hi] = ranges[key] || [-100, 100];
+    const shown = displayValue(key, normalizedVal);
+    const clampedShown = clamp(shown, lo, hi);
+    const normalized = normalizeValue(key, clampedShown);
+    const displayText = formatNumber(clampedShown, decimalsFor(key));
+    const normalizedText = key === 'exposure_ev' ? formatNumber(normalized, 2) : formatNumber(normalized, 4);
+
+    rng.value = displayText;
+    num.value = displayText;
+    hidden.value = normalizedText || '0';
+    if(schedule) schedulePreview();
   }
 
-  function loadPreset(name){
+  function setPairFromDisplay(key, displayVal, schedule = true){
+    const [lo, hi] = ranges[key] || [-100, 100];
+    const raw = Number(displayVal);
+    const shown = clamp(Number.isFinite(raw) ? raw : 0, lo, hi);
+    setPair(key, normalizeValue(key, shown), schedule);
+  }
+
+  function setPreviewStatus(msg){
+    if(previewStatusEl) previewStatusEl.textContent = msg || '';
+  }
+
+  function setPreviewMeta(msg){
+    if(previewMetaEl) previewMetaEl.textContent = msg || '';
+  }
+
+  function revokeUrl(url){
+    if(url) URL.revokeObjectURL(url);
+  }
+
+  function clearPreviewUrls(){
+    revokeUrl(adjustedUrl);
+    revokeUrl(originalUrl);
+    adjustedUrl = '';
+    originalUrl = '';
+  }
+
+  function hideImage(imgEl, emptyEl, msg){
+    if(imgEl){
+      imgEl.classList.add('d-none');
+      imgEl.removeAttribute('src');
+    }
+    if(emptyEl){
+      emptyEl.classList.remove('d-none');
+      if(msg) emptyEl.textContent = msg;
+    }
+  }
+
+  function setPreviewEmpty(msg){
+    clearPreviewUrls();
+    hideImage(previewImgEl, previewEmptyEl, msg || 'No image loaded.');
+    hideImage(previewOriginalEl, previewOriginalEmptyEl, msg || 'No image loaded.');
+  }
+
+  function showBlobImage(imgEl, emptyEl, url){
+    if(imgEl){
+      imgEl.src = url;
+      imgEl.classList.remove('d-none');
+    }
+    if(emptyEl){
+      emptyEl.classList.add('d-none');
+    }
+  }
+
+  function loadPreset(name, schedule = true){
     const cfg = presets?.[name] || {};
-    keys.forEach(k => setPair(k, (k in cfg) ? cfg[k] : 0));
+    keys.forEach(k => setPair(k, (k in cfg) ? cfg[k] : 0, false));
+    if(schedule) schedulePreview(80);
   }
 
-  function resetZero(){ keys.forEach(k => setPair(k, 0)); }
+  function resetZero(){
+    keys.forEach(k => setPair(k, 0, false));
+    schedulePreview(80);
+  }
 
-  // Bind range -> number
+  function getFolderForPreview(){
+    const raw = String(srcEl?.value || '').trim();
+    return raw || defaultWorkDir;
+  }
+
+  function getPreviewCfg(){
+    const cfg = {};
+    keys.forEach((k) => {
+      const hidden = document.getElementById('val_' + k);
+      const raw = String(hidden?.value || '').trim();
+      const n = Number(raw);
+      cfg[k] = Number.isFinite(n) ? n : 0;
+    });
+    return cfg;
+  }
+
+  function getPreviewPayload(cfgOverride = null){
+    const rel = String(previewSelectEl?.value || '').trim();
+    if(!rel) return null;
+    const rawMaxSide = Number(previewMaxSideEl?.value || 960);
+    const maxSide = Number.isFinite(rawMaxSide) ? clamp(rawMaxSide, 128, 2048) : 960;
+    return {
+      folder: getFolderForPreview(),
+      rel,
+      preview_max_side: Math.round(maxSide),
+      cfg: cfgOverride || getPreviewCfg(),
+    };
+  }
+
+  function refillPreviewOptions(items, selectedValue, autoSelectFirst){
+    if(!previewSelectEl) return;
+    const options = Array.isArray(items) ? items : [];
+    previewSelectEl.innerHTML = '';
+    const emptyOpt = document.createElement('option');
+    emptyOpt.value = '';
+    emptyOpt.textContent = 'No image selected';
+    previewSelectEl.appendChild(emptyOpt);
+
+    options.forEach((rel) => {
+      const opt = document.createElement('option');
+      opt.value = rel;
+      opt.textContent = rel;
+      previewSelectEl.appendChild(opt);
+    });
+
+    if(selectedValue && options.includes(selectedValue)){
+      previewSelectEl.value = selectedValue;
+      return;
+    }
+    if(autoSelectFirst && options.length){
+      previewSelectEl.value = options[0];
+      return;
+    }
+    previewSelectEl.value = '';
+  }
+
+  async function fetchPreviewBlob(payload, signal){
+    const res = await fetch('/api/batch-adjust/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal,
+    });
+    if(!res.ok){
+      let errMsg = 'Preview failed.';
+      try{
+        const body = await res.json();
+        errMsg = body.error || errMsg;
+      }catch(e){}
+      throw new Error(errMsg);
+    }
+    return await res.blob();
+  }
+
+  async function loadPreviewImages(autoSelectFirst = false){
+    const folder = getFolderForPreview();
+    if(!folder){
+      setPreviewStatus('Source folder is required for preview.');
+      setPreviewEmpty('No image loaded.');
+      return;
+    }
+
+    const previous = String(previewSelectEl?.value || '').trim();
+    setPreviewStatus('Loading image list...');
+    try{
+      const q = new URLSearchParams({
+        folder,
+        recursive: recursiveEl?.checked ? '1' : '0',
+        limit: '800',
+      });
+      const res = await fetch('/api/batch-adjust/list-images?' + q.toString());
+      const data = await res.json().catch(() => ({}));
+      if(!res.ok || !data.ok){
+        throw new Error(data.error || ('HTTP ' + res.status));
+      }
+
+      const images = Array.isArray(data.images) ? data.images : [];
+      refillPreviewOptions(images, previous, autoSelectFirst);
+
+      if(images.length === 0){
+        setPreviewStatus('No image found in selected source folder.');
+        setPreviewMeta('');
+        setPreviewEmpty('No image found in selected source folder.');
+        return;
+      }
+
+      setPreviewStatus(`Loaded ${data.returned || images.length} image(s).`);
+      setPreviewMeta(`Folder: ${data.folder || folder}`);
+      if(String(previewSelectEl?.value || '').trim()){
+        await requestPreviewNow();
+      }else{
+        setPreviewEmpty('Select one image from the preview list.');
+      }
+    }catch(err){
+      setPreviewStatus(`Load image list failed: ${err.message}`);
+      setPreviewMeta('');
+      setPreviewEmpty('No image loaded.');
+    }
+  }
+
+  async function requestPreviewNow(){
+    const payload = getPreviewPayload();
+    if(!payload){
+      setPreviewStatus('Select one preview image first.');
+      setPreviewMeta('');
+      setPreviewEmpty('Select one image from the preview list.');
+      return;
+    }
+
+    if(previewAbort){
+      try { previewAbort.abort(); } catch(e) {}
+    }
+    previewAbort = new AbortController();
+    const seq = ++previewSeq;
+    setPreviewStatus('Generating preview...');
+
+    try{
+      const neutralPayload = getPreviewPayload(keys.reduce((acc, key) => {
+        acc[key] = 0;
+        return acc;
+      }, {}));
+      const [originalBlob, adjustedBlob] = await Promise.all([
+        fetchPreviewBlob(neutralPayload, previewAbort.signal),
+        fetchPreviewBlob(payload, previewAbort.signal),
+      ]);
+
+      const nextOriginalUrl = URL.createObjectURL(originalBlob);
+      const nextAdjustedUrl = URL.createObjectURL(adjustedBlob);
+      const adjustedProbe = new Image();
+      await new Promise((resolve, reject) => {
+        adjustedProbe.onload = resolve;
+        adjustedProbe.onerror = () => reject(new Error('Preview image invalid.'));
+        adjustedProbe.src = nextAdjustedUrl;
+      });
+      if(seq !== previewSeq){
+        URL.revokeObjectURL(nextOriginalUrl);
+        URL.revokeObjectURL(nextAdjustedUrl);
+        return;
+      }
+
+      clearPreviewUrls();
+      originalUrl = nextOriginalUrl;
+      adjustedUrl = nextAdjustedUrl;
+      showBlobImage(previewOriginalEl, previewOriginalEmptyEl, originalUrl);
+      showBlobImage(previewImgEl, previewEmptyEl, adjustedUrl);
+      setPreviewStatus(`Preview ready (${adjustedProbe.naturalWidth}x${adjustedProbe.naturalHeight}).`);
+      setPreviewMeta(`Image: ${payload.rel}`);
+    }catch(err){
+      if(err?.name === 'AbortError') return;
+      setPreviewStatus(`Preview failed: ${err.message}`);
+      setPreviewMeta('');
+      setPreviewEmpty('Failed to render preview image.');
+    }
+  }
+
+  function schedulePreview(delay = 160){
+    if(!autoPreviewEl?.checked) return;
+    if(previewTimer) window.clearTimeout(previewTimer);
+    previewTimer = window.setTimeout(() => {
+      previewTimer = null;
+      requestPreviewNow();
+    }, delay);
+  }
+
   keys.forEach((k) => {
     const rng = document.getElementById('rng_' + k);
     const num = document.getElementById('num_' + k);
     if(!rng || !num) return;
 
-    rng.addEventListener('input', () => { num.value = rng.value; });
+    rng.addEventListener('input', () => {
+      setPairFromDisplay(k, rng.value, true);
+    });
     num.addEventListener('input', () => {
-      const lohi = ranges[k] || [-1, 1];
-      const raw = Number(num.value || 0);
-      rng.value = String(clamp(raw, lohi[0], lohi[1]));
+      setPairFromDisplay(k, num.value, true);
+    });
+    num.addEventListener('change', () => {
+      setPairFromDisplay(k, num.value, true);
+    });
+  });
+
+  document.querySelectorAll('[data-reset-key]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      setPair(btn.getAttribute('data-reset-key'), 0, true);
     });
   });
 
   btnWorkdir?.addEventListener('click', () => {
-    srcEl.value = '{{ work_dir }}';
+    srcEl.value = defaultWorkDir;
     srcEl.dispatchEvent(new Event('input', { bubbles: true }));
     srcEl.dispatchEvent(new Event('change', { bubbles: true }));
   });
 
-  btnLoad?.addEventListener('click', () => loadPreset(presetEl.value));
+  btnLoad?.addEventListener('click', () => loadPreset(presetEl.value, true));
   btnReset?.addEventListener('click', resetZero);
-  presetEl?.addEventListener('change', () => loadPreset(presetEl.value));
+  btnWarmthDemo?.addEventListener('click', () => setPair('warmth', 0.35, true));
+  presetEl?.addEventListener('change', () => loadPreset(presetEl.value, true));
+  btnPreviewLoadImages?.addEventListener('click', () => { loadPreviewImages(true); });
+  btnPreviewRefresh?.addEventListener('click', () => { requestPreviewNow(); });
+  previewSelectEl?.addEventListener('change', () => { requestPreviewNow(); });
+  srcEl?.addEventListener('change', () => { loadPreviewImages(true); });
+  recursiveEl?.addEventListener('change', () => { loadPreviewImages(true); });
+  previewMaxSideEl?.addEventListener('change', () => { requestPreviewNow(); });
+  autoPreviewEl?.addEventListener('change', () => {
+    if(autoPreviewEl.checked) requestPreviewNow();
+  });
 
-  // Auto-load once if numeric fields are empty
   window.setTimeout(() => {
-    const anyHasValue = keys.some(k => {
-      const num = document.getElementById('num_' + k);
-      return num && String(num.value || '').trim() !== '';
-    });
-
-    if(!anyHasValue){
-      loadPreset(presetEl.value);
-    }else{
-      keys.forEach(k => {
-        const num = document.getElementById('num_' + k);
-        if(num && String(num.value || '').trim() !== '') setPair(k, num.value);
-      });
-    }
+    loadPreset(presetEl.value, false);
+    window.setTimeout(() => {
+      loadPreviewImages(true);
+    }, 220);
   }, 0);
+
+  window.addEventListener('beforeunload', () => {
+    clearPreviewUrls();
+    if(previewAbort){
+      try { previewAbort.abort(); } catch(e) {}
+    }
+  });
 })();
 </script>

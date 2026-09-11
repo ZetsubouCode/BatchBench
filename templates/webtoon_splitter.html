@@ -5,7 +5,7 @@
     <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
       <div>
         <h2 class="h5 mb-1">Webtoon Splitter</h2>
-        <div class="text-muted small">Stacks pages vertically (no gap), then slices wherever a horizontal white band is detected. Works per chapter folder or across numbered subfolders.</div>
+        <div class="text-muted small">Stacks pages vertically (no gap), then slices wherever a horizontal selected-color band is detected. Works per chapter folder or across numbered subfolders.</div>
       </div>
       <div class="text-muted small">Outputs: <code>&lt;chapter&gt;_001.png</code>, <code>_002.png</code>, ...</div>
     </div>
@@ -39,6 +39,21 @@
           <input name="wt_exts" class="form-control" value=".png,.jpg,.jpeg,.webp" data-bs-toggle="tooltip" data-bs-title="Comma-separated list (with or without dots). Only these are stacked.">
         </div>
         <div class="col-md-4">
+          <label class="form-label">Sort by</label>
+          <select name="wt_sort_by" class="form-select" data-bs-toggle="tooltip" data-bs-title="Controls the order pages are stacked and chapter folders are processed.">
+            <option value="name" selected>Name (natural)</option>
+            <option value="ctime">Date created</option>
+          </select>
+          <div class="form-text">Natural name order sorts <code>2.png</code> before <code>10.png</code>.</div>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Sort order</label>
+          <select name="wt_sort_dir" class="form-select" data-bs-toggle="tooltip" data-bs-title="Ascending processes oldest or A-Z first. Descending processes newest or Z-A first.">
+            <option value="asc" selected>Ascending</option>
+            <option value="desc">Descending</option>
+          </select>
+        </div>
+        <div class="col-md-4">
           <label class="form-label">Width alignment</label>
           <select name="wt_resize" class="form-select" data-bs-toggle="tooltip" data-bs-title="How to handle different widths before stacking into one tall strip.">
             <option value="match-width" selected>Resize narrower pages up to the widest</option>
@@ -56,9 +71,19 @@
           <label class="form-label">Min stripe height (px)</label>
           <input type="number" name="wt_min_stripe" class="form-control" value="12" min="1" data-bs-toggle="tooltip" data-bs-title="Ignore thinner white lines; raise if double pages get cut.">
         </div>
+        <div class="col-md-6">
+          <label class="form-label">Stripe colors</label>
+          <div class="input-group">
+            <input id="wt_stripe_color_picker" type="color" class="form-control form-control-color" value="#ffffff" data-bs-toggle="tooltip" data-bs-title="Pick a color to add to stripe detection.">
+            <input id="wt_stripe_colors" name="wt_stripe_colors" class="form-control text-uppercase" value="#FFFFFF" spellcheck="false" autocomplete="off" data-bs-toggle="tooltip" data-bs-title="Hex colors separated by commas or spaces. Rows matching any listed color count as stripe rows.">
+            <button id="wt_add_stripe_color" class="btn btn-outline-light" type="button" data-bs-toggle="tooltip" data-bs-title="Add picked color"><i class="bi bi-plus-lg" aria-hidden="true"></i></button>
+          </div>
+          <div id="wt_stripe_color_chips" class="wt-color-chips mt-2" aria-label="Selected stripe colors"></div>
+          <div class="form-text">Examples: <code>#FFFFFF</code> or <code>#FFFFFF, #000000</code>.</div>
+        </div>
         <div class="col-sm-6 col-md-3">
-          <label class="form-label">Row white threshold (0-255)</label>
-          <input type="number" name="wt_white_threshold" class="form-control" value="245" min="0" max="255" data-bs-toggle="tooltip" data-bs-title="Pixel brightness needed to count as white (255 = pure white). Lower if gutters are gray.">
+          <label class="form-label">Color threshold (0-255)</label>
+          <input type="number" name="wt_white_threshold" class="form-control" value="245" min="0" max="255" data-bs-toggle="tooltip" data-bs-title="How close a pixel must be to any selected stripe color. Higher is stricter; lower allows noisier gutters.">
         </div>
         <div class="col-sm-6 col-md-3">
           <label class="form-label">Row coverage (%)</label>
@@ -115,7 +140,119 @@
     margin-bottom: .75rem;
     opacity: .9;
   }
+  .wt-color-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+    min-height: 2rem;
+  }
+  .wt-color-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    border: 1px solid var(--bs-border-color, #2a2a2a);
+    border-radius: .5rem;
+    background: rgba(255,255,255,0.04);
+    color: var(--bs-body-color);
+    padding: .18rem .42rem;
+    font: 0.78rem/1.2 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  }
+  .wt-color-swatch {
+    width: 1rem;
+    height: 1rem;
+    border-radius: .2rem;
+    border: 1px solid rgba(255,255,255,.55);
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,.18);
+  }
+  .wt-color-remove {
+    border: 0;
+    background: transparent;
+    color: var(--bs-secondary-color, #adb5bd);
+    padding: 0 .05rem;
+    line-height: 1;
+  }
+  .wt-color-remove:hover,
+  .wt-color-remove:focus {
+    color: var(--bs-body-color);
+  }
   @media (prefers-color-scheme: dark) {
     .wt-section { background: rgba(255,255,255,0.03); }
   }
 </style>
+
+<script>
+(() => {
+  const input = document.getElementById('wt_stripe_colors');
+  const picker = document.getElementById('wt_stripe_color_picker');
+  const addBtn = document.getElementById('wt_add_stripe_color');
+  const chips = document.getElementById('wt_stripe_color_chips');
+  if (!input || !picker || !addBtn || !chips) return;
+
+  function normalizeHex(value) {
+    let text = String(value || '').trim();
+    if (text.startsWith('#')) text = text.slice(1);
+    if (/^[0-9a-fA-F]{3}$/.test(text)) {
+      text = text.split('').map((ch) => ch + ch).join('');
+    }
+    if (!/^[0-9a-fA-F]{6}$/.test(text)) return '';
+    return `#${text.toUpperCase()}`;
+  }
+
+  function selectedColors() {
+    const colors = [];
+    const seen = new Set();
+    String(input.value || '').split(/[\s,;]+/).forEach((part) => {
+      const hex = normalizeHex(part);
+      if (hex && !seen.has(hex)) {
+        seen.add(hex);
+        colors.push(hex);
+      }
+    });
+    return colors;
+  }
+
+  function commitColors(colors) {
+    input.value = colors.length ? colors.join(', ') : '#FFFFFF';
+    renderChips();
+  }
+
+  function renderChips() {
+    const colors = selectedColors();
+    chips.innerHTML = '';
+    colors.forEach((hex) => {
+      const chip = document.createElement('span');
+      chip.className = 'wt-color-chip';
+
+      const swatch = document.createElement('span');
+      swatch.className = 'wt-color-swatch';
+      swatch.style.backgroundColor = hex;
+
+      const label = document.createElement('span');
+      label.textContent = hex;
+
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'wt-color-remove';
+      remove.setAttribute('aria-label', `Remove ${hex}`);
+      remove.textContent = 'x';
+      remove.addEventListener('click', () => {
+        commitColors(selectedColors().filter((item) => item !== hex));
+      });
+
+      chip.append(swatch, label, remove);
+      chips.appendChild(chip);
+    });
+  }
+
+  addBtn.addEventListener('click', () => {
+    const hex = normalizeHex(picker.value);
+    if (!hex) return;
+    const colors = selectedColors();
+    if (!colors.includes(hex)) colors.push(hex);
+    commitColors(colors);
+  });
+  input.addEventListener('input', renderChips);
+  input.addEventListener('blur', () => commitColors(selectedColors()));
+  renderChips();
+})();
+</script>

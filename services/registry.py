@@ -5,8 +5,10 @@ from .combine_datasets import handle as combine_handle
 from .merge_groups_tool import handle as merge_groups_handle
 from .group_renamer import handle as renamer_handle
 from .webtoon_splitter import handle as webtoon_handle
+from .epub_extractor import handle as epub_extractor_handle
 from .offline_tagger import handle as offline_tagger_handle
 from .blur_brush import handle as blur_brush_handle
+from .color_brush import handle as color_brush_handle
 from .clip_token_check import handle as clip_tokens_handle
 
 TOOL_REGISTRY = {
@@ -17,7 +19,9 @@ TOOL_REGISTRY = {
     "merge_groups": merge_groups_handle,
     "rename": renamer_handle,
     "webtoon": webtoon_handle,
+    "epub_extractor": epub_extractor_handle,
     "offline_tagger": offline_tagger_handle,
     "blur_brush": blur_brush_handle,
+    "color_brush": color_brush_handle,
     "clip_tokens": clip_tokens_handle,
 }

@@ -1,0 +1,68 @@
+{
+  "enabled": true,
+  "min_post_count": 5,
+  "max_suggestions": 12,
+  "include_categories": {
+    "general": true,
+    "character": false,
+    "copyright": true,
+    "artist": false,
+    "meta": true
+  },
+  "include_deprecated": false,
+  "aliases": {},
+  "sections": {
+    "appearance": {
+      "label": "Appearance",
+      "enabled": true
+    },
+    "accessory": {
+      "label": "Accessory",
+      "enabled": true
+    },
+    "outfit": {
+      "label": "Outfit",
+      "enabled": true
+    },
+    "pose_expression": {
+      "label": "Pose & Expression",
+      "enabled": true
+    },
+    "camera_pov": {
+      "label": "Camera & POV",
+      "enabled": true
+    },
+    "body_composition": {
+      "label": "Body Composition",
+      "enabled": true
+    },
+    "lighting": {
+      "label": "Lighting",
+      "enabled": true
+    },
+    "background": {
+      "label": "Background",
+      "enabled": true
+    },
+    "manual_tags": {
+      "label": "Manual Tags",
+      "enabled": true
+    },
+    "breast_size": {
+      "label": "Breast Size",
+      "enabled": true
+    },
+    "camera_angle": {
+      "label": "POV / Camera Angle",
+      "enabled": true
+    },
+    "face_and_appearance": {
+      "label": "Face and Appearance",
+      "enabled": true
+    },
+    "subject_count": {
+      "label": "Subject Count",
+      "enabled": true
+    }
+  }
+}

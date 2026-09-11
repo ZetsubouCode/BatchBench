@@ -23,6 +23,24 @@
     body{background:var(--bb-bg);color:var(--bb-text);}
     .navbar,.card{background:var(--bb-card);border:1px solid var(--bb-border);}
     .navbar .navbar-brand{color:var(--bb-text);}
+    .bb-top-nav{
+      position:sticky;
+      top:0;
+      z-index:1020;
+      box-shadow:0 .35rem .9rem rgba(0,0,0,.18);
+    }
+    body.bb-fullscreen-active .bb-top-nav{
+      display:none;
+    }
+    .bb-shell{
+      width:min(1760px, calc(100% - 2rem));
+      margin:0 auto;
+      padding-left:0;
+      padding-right:0;
+    }
+    @media (max-width: 991.98px){
+      .bb-shell{ width:calc(100% - 1rem); }
+    }
     h1,h2,h3,h4,h5,h6,p,li,label{color:var(--bb-text);}
     .text-muted,.text-body-secondary,.small-note{color:var(--bb-muted)!important;}
     a{color:var(--bb-link);} a:hover,a:focus{color:var(--bb-link-hover);}
@@ -51,6 +69,50 @@
     .bb-tab-link .bi{
       font-size:1rem;
       opacity:.92;
+    }
+    .bb-tool-menu{
+      gap:.15rem;
+      align-items:center;
+    }
+    .bb-tool-menu .bb-menu-link{
+      display:flex;
+      align-items:center;
+      gap:.45rem;
+      color:var(--bb-text);
+      white-space:nowrap;
+    }
+    .bb-tool-menu .bb-menu-link:hover,
+    .bb-tool-menu .bb-menu-link:focus,
+    .bb-tool-menu .bb-menu-link.active{
+      color:var(--bb-link-hover);
+    }
+    .bb-tool-menu .dropdown-menu{
+      --bs-dropdown-bg:var(--bb-card);
+      --bs-dropdown-border-color:var(--bb-border);
+      --bs-dropdown-link-color:var(--bb-text);
+      --bs-dropdown-link-hover-color:var(--bb-link-hover);
+      --bs-dropdown-link-hover-bg:var(--bb-bg);
+      --bs-dropdown-link-active-color:var(--bb-link);
+      --bs-dropdown-link-active-bg:var(--bb-bg);
+      box-shadow:0 .5rem 1rem rgba(0,0,0,.28);
+    }
+    .bb-tool-menu .dropdown-item{
+      display:flex;
+      align-items:center;
+      gap:.55rem;
+    }
+    .bb-menu-note{
+      color:var(--bb-muted);
+      white-space:nowrap;
+    }
+    @media (max-width: 991.98px){
+      .bb-tool-menu{
+        align-items:stretch;
+        padding-top:.5rem;
+      }
+      .bb-tool-menu .dropdown-menu{
+        box-shadow:none;
+      }
     }
 
     /* Tooltips: force white text on dark bg */
@@ -85,16 +147,22 @@
   </style>
 </head>
 <body>
-  <nav class="navbar navbar-expand-lg navbar-dark mb-4">
-    <div class="container">
+  <nav class="navbar navbar-expand-lg navbar-dark mb-4 bb-top-nav">
+    <div class="container-fluid bb-shell">
       <a class="navbar-brand" href="/">{{ config.APP_NAME or "BatchBench" }}</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#bb-navbar-tools" aria-controls="bb-navbar-tools" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="bb-navbar-tools">
+        {% block navbar_menu %}{% endblock %}
+      </div>
     </div>
   </nav>
 
-  <div class="container pb-5">
+  <div class="container-fluid bb-shell pb-5">
     {% with messages = get_flashed_messages() %}
       {% if messages %}
-        <div class="alert alert-info">{% for m in messages %}<div>{{ m }}</div>{% endfor %}</div>
+        <div class="alert alert-info bb-scoped-flash" data-flash-tab="{{ active_tab or '' }}">{% for m in messages %}<div>{{ m }}</div>{% endfor %}</div>
       {% endif %}
     {% endwith %}
     {% block content %}{% endblock %}
@@ -196,12 +264,116 @@
       };
     });
 
+    const tooltipSelector = '[data-bs-toggle="tooltip"]';
+
+    window.bbInitTooltips = (root = document) => {
+      if(typeof bootstrap === "undefined" || !bootstrap.Tooltip) return;
+      const targets = [];
+      if(root instanceof Element && root.matches(tooltipSelector)){
+        targets.push(root);
+      }
+      if(root.querySelectorAll){
+        targets.push(...root.querySelectorAll(tooltipSelector));
+      }
+      targets.forEach((el) => {
+        if(bootstrap.Tooltip.getInstance(el)) return;
+        const instance = new bootstrap.Tooltip(el, {
+          trigger: "hover focus",
+          container: "body",
+        });
+        el.addEventListener("mouseleave", () => instance.hide());
+        el.addEventListener("blur", () => instance.hide());
+      });
+    };
+
+    window.bbHideTooltips = () => {
+      if(typeof bootstrap === "undefined" || !bootstrap.Tooltip) return;
+      document.querySelectorAll(tooltipSelector).forEach((el) => {
+        bootstrap.Tooltip.getInstance(el)?.hide();
+      });
+      document.querySelectorAll("body > .tooltip").forEach((tip) => {
+        const tooltipId = tip.id;
+        if(!tooltipId) return;
+        const escaped = window.CSS && CSS.escape ? CSS.escape(tooltipId) : tooltipId.replace(/["\\]/g, "\\$&");
+        const owner = document.querySelector(`[aria-describedby="${escaped}"]`);
+        if(!owner){
+          tip.remove();
+        }
+      });
+    };
+
+    window.bbHideOpenToolMenus = () => {
+      const navbar = document.getElementById("bb-navbar-tools");
+      if(!navbar || typeof bootstrap === "undefined" || !bootstrap.Dropdown) return;
+      navbar.querySelectorAll('[data-bs-toggle="dropdown"]').forEach((toggle) => {
+        if(toggle.classList.contains("show") || toggle.getAttribute("aria-expanded") === "true"){
+          bootstrap.Dropdown.getOrCreateInstance(toggle).hide();
+        }
+      });
+    };
+
+    function bbInitToolMenuBehavior(){
+      const menu = document.querySelector(".bb-tool-menu");
+      if(!menu || typeof bootstrap === "undefined" || !bootstrap.Dropdown) return;
+      const closeTimers = new WeakMap();
+      const clearClose = (dropdown) => {
+        const timer = closeTimers.get(dropdown);
+        if(timer) window.clearTimeout(timer);
+      };
+      const scheduleClose = (dropdown) => {
+        clearClose(dropdown);
+        closeTimers.set(dropdown, window.setTimeout(() => {
+          if(dropdown.matches(":hover") || dropdown.matches(":focus-within")) return;
+          const toggle = dropdown.querySelector('[data-bs-toggle="dropdown"]');
+          if(toggle) bootstrap.Dropdown.getOrCreateInstance(toggle).hide();
+        }, 180));
+      };
+
+      menu.querySelectorAll(".dropdown").forEach((dropdown) => {
+        dropdown.addEventListener("pointerenter", () => clearClose(dropdown));
+        dropdown.addEventListener("pointerleave", () => scheduleClose(dropdown));
+        dropdown.addEventListener("focusin", () => clearClose(dropdown));
+        dropdown.addEventListener("focusout", () => scheduleClose(dropdown));
+      });
+
+      menu.addEventListener("shown.bs.tab", () => {
+        window.setTimeout(window.bbHideOpenToolMenus, 0);
+      });
+    }
+
     // On DOM ready: tooltips, busy indicator, and form persistence
     document.addEventListener("DOMContentLoaded", () => {
-      // Tooltips
-      document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
-        new bootstrap.Tooltip(el);
+      bbInitTooltips(document);
+      bbInitToolMenuBehavior();
+      const tooltipObserver = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+          mutation.addedNodes.forEach((node) => {
+            if(node instanceof Element){
+              bbInitTooltips(node);
+            }
+          });
+          if(mutation.removedNodes.length){
+            bbHideTooltips();
+          }
+        });
       });
+      tooltipObserver.observe(document.body, { childList: true, subtree: true });
+      document.addEventListener("show.bs.tab", bbHideTooltips);
+      document.addEventListener("show.bs.modal", bbHideTooltips);
+      document.addEventListener("show.bs.modal", bbHideOpenToolMenus);
+      document.addEventListener("hide.bs.modal", bbHideTooltips);
+      document.addEventListener("show.bs.offcanvas", bbHideTooltips);
+      document.addEventListener("show.bs.offcanvas", bbHideOpenToolMenus);
+      document.addEventListener("hide.bs.offcanvas", bbHideTooltips);
+
+      const syncFullscreenState = () => {
+        const fullscreenElement = document.fullscreenElement || document.webkitFullscreenElement || null;
+        document.body.classList.toggle("bb-fullscreen-active", !!fullscreenElement);
+        if(fullscreenElement) window.bbHideOpenToolMenus();
+      };
+      document.addEventListener("fullscreenchange", syncFullscreenState);
+      document.addEventListener("webkitfullscreenchange", syncFullscreenState);
+      syncFullscreenState();
 
       const busy = document.getElementById("bb-busy");
       const busyMsg = document.getElementById("bb-busy-msg");
@@ -275,6 +447,26 @@
         }
       });
 
+      const scopedFlashes = Array.from(document.querySelectorAll(".bb-scoped-flash[data-flash-tab]"));
+      const activeTabKey = () => {
+        const pane = document.querySelector(".tab-pane.active[id^='tab-']");
+        return pane ? pane.id.replace(/^tab-/, "").replace(/-/g, "_") : "";
+      };
+      const syncScopedFlashes = () => {
+        const current = activeTabKey();
+        scopedFlashes.forEach(el => {
+          const owner = (el.getAttribute("data-flash-tab") || "").trim();
+          el.classList.toggle("d-none", !!owner && !!current && owner !== current);
+        });
+      };
+      syncScopedFlashes();
+      document.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => {
+        tab.addEventListener("shown.bs.tab", () => {
+          bbHideTooltips();
+          syncScopedFlashes();
+        });
+      });
+
       // Shared root folder default across tabs
       const rootKey = "bb-default-root";
       const rootInputs = Array.from(document.querySelectorAll('input[data-root-sync="1"]'));
@@ -332,5 +524,30 @@
       });
     });
   </script>
+  {% if config.DEBUG %}
+  <script>
+    (() => {
+      const endpoint = "/api/dev/live-reload";
+      let currentToken = null;
+
+      async function checkForReload(){
+        try {
+          const response = await fetch(endpoint, { cache: "no-store" });
+          if(!response.ok) return;
+          const data = await response.json();
+          if(!data.token) return;
+          if(currentToken && data.token !== currentToken){
+            window.location.reload();
+            return;
+          }
+          currentToken = data.token;
+        } catch(e){}
+      }
+
+      checkForReload();
+      window.setInterval(checkForReload, 1500);
+    })();
+  </script>
+  {% endif %}
 </body>
 </html>

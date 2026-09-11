@@ -208,6 +208,135 @@ class TagEditorTransactionTests(unittest.TestCase):
                 "legs_crossed, brick_wall",
             )
 
+    def test_replace_keeps_single_renamed_tag_at_original_position(self):
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td) / "dataset"
+            temp = base / "_temp"
+            temp.mkdir(parents=True, exist_ok=True)
+            (temp / "sample.png").write_bytes(b"img")
+            (temp / "sample.txt").write_text("character_name, solo, long_hair, blue_eyes\n", encoding="utf-8")
+
+            _, _, meta = tag_editor.handle(
+                {
+                    "folder": str(base),
+                    "mode": "replace",
+                    "tags": "long_hair -> high_ponytail",
+                    "exts": ".png",
+                },
+                {},
+            )
+
+            self.assertTrue(meta.get("ok"), msg=meta)
+            self.assertEqual(
+                (temp / "sample.txt").read_text(encoding="utf-8").strip(),
+                "character_name, solo, high_ponytail, blue_eyes",
+            )
+
+    def test_replace_keeps_multiple_renamed_tags_at_their_positions(self):
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td) / "dataset"
+            temp = base / "_temp"
+            temp.mkdir(parents=True, exist_ok=True)
+            (temp / "sample.png").write_bytes(b"img")
+            (temp / "sample.txt").write_text("character_name, solo, long_hair, blue_eyes\n", encoding="utf-8")
+
+            _, _, meta = tag_editor.handle(
+                {
+                    "folder": str(base),
+                    "mode": "replace",
+                    "tags": "solo -> 1girl; blue_eyes -> green_eyes",
+                    "exts": ".png",
+                },
+                {},
+            )
+
+            self.assertTrue(meta.get("ok"), msg=meta)
+            self.assertEqual(
+                (temp / "sample.txt").read_text(encoding="utf-8").strip(),
+                "character_name, 1girl, long_hair, green_eyes",
+            )
+
+    def test_replace_existing_target_duplicate_keeps_source_position(self):
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td) / "dataset"
+            temp = base / "_temp"
+            temp.mkdir(parents=True, exist_ok=True)
+            (temp / "sample.png").write_bytes(b"img")
+            (temp / "sample.txt").write_text(
+                "character_name, long_hair, blue_eyes, high_ponytail, outdoors\n",
+                encoding="utf-8",
+            )
+
+            _, _, meta = tag_editor.handle(
+                {
+                    "folder": str(base),
+                    "mode": "replace",
+                    "tags": "long_hair -> high_ponytail",
+                    "exts": ".png",
+                },
+                {},
+            )
+
+            self.assertTrue(meta.get("ok"), msg=meta)
+            self.assertEqual(
+                (temp / "sample.txt").read_text(encoding="utf-8").strip(),
+                "character_name, high_ponytail, blue_eyes, outdoors",
+            )
+
+    def test_replace_multiple_sources_to_one_target_keeps_earliest_source_position(self):
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td) / "dataset"
+            temp = base / "_temp"
+            temp.mkdir(parents=True, exist_ok=True)
+            (temp / "sample.png").write_bytes(b"img")
+            (temp / "sample.txt").write_text(
+                "character_name, long_hair, blue_eyes, ponytail, outdoors\n",
+                encoding="utf-8",
+            )
+
+            _, _, meta = tag_editor.handle(
+                {
+                    "folder": str(base),
+                    "mode": "replace",
+                    "tags": "long_hair -> hair_up; ponytail -> hair_up",
+                    "exts": ".png",
+                },
+                {},
+            )
+
+            self.assertTrue(meta.get("ok"), msg=meta)
+            self.assertEqual(
+                (temp / "sample.txt").read_text(encoding="utf-8").strip(),
+                "character_name, hair_up, blue_eyes, outdoors",
+            )
+
+    def test_replace_unaffected_tags_retain_original_order(self):
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td) / "dataset"
+            temp = base / "_temp"
+            temp.mkdir(parents=True, exist_ok=True)
+            (temp / "sample.png").write_bytes(b"img")
+            (temp / "sample.txt").write_text(
+                "alpha_tag, beta_tag, long_hair, gamma_tag, delta_tag\n",
+                encoding="utf-8",
+            )
+
+            _, _, meta = tag_editor.handle(
+                {
+                    "folder": str(base),
+                    "mode": "replace",
+                    "tags": "long_hair -> high_ponytail",
+                    "exts": ".png",
+                },
+                {},
+            )
+
+            self.assertTrue(meta.get("ok"), msg=meta)
+            self.assertEqual(
+                (temp / "sample.txt").read_text(encoding="utf-8").strip(),
+                "alpha_tag, beta_tag, high_ponytail, gamma_tag, delta_tag",
+            )
+
     def test_delete_sanitizes_space_tags(self):
         with tempfile.TemporaryDirectory() as td:
             base = Path(td) / "dataset"
@@ -228,6 +357,28 @@ class TagEditorTransactionTests(unittest.TestCase):
 
             self.assertTrue(meta.get("ok"), msg=meta)
             self.assertEqual((temp / "sample.txt").read_text(encoding="utf-8").strip(), "cat")
+
+    def test_handle_requires_project_initialization_for_project_root_flow(self):
+        with tempfile.TemporaryDirectory() as td:
+            project = Path(td) / "project_init_guard"
+            dataset = project / "dataset"
+            temp = dataset / "_temp"
+            temp.mkdir(parents=True, exist_ok=True)
+            (temp / "sample.png").write_bytes(b"img")
+            (temp / "sample.txt").write_text("cat\n", encoding="utf-8")
+
+            _, _, meta = tag_editor.handle(
+                {
+                    "folder": str(project),
+                    "mode": "insert",
+                    "tags": "dog",
+                    "exts": ".png",
+                },
+                {},
+            )
+
+            self.assertFalse(meta.get("ok"), msg=meta)
+            self.assertIn("Project initialization required", (meta.get("error") or ""))
 
 
 if __name__ == "__main__":

@@ -38,7 +38,7 @@ def handle(form, ctx):
     src_raw = (form.get("src_png", "") or form.get("src_webp", "") or "").strip()
     dst_raw = (form.get("dst_png", "") or form.get("dst_webp", "") or "").strip()
     src = readable_path(src_raw)
-    dst = readable_path(dst_raw)
+    dst = readable_path(dst_raw) if dst_raw else src / "output"
     lines: List[str] = []
 
     def _done(ok: bool, error: str = ""):
@@ -47,13 +47,12 @@ def handle(form, ctx):
     if not src_raw:
         lines.append("Source folder is required.")
         return _done(False, "Source folder is required.")
-    elif not dst_raw:
-        lines.append("Output folder is required.")
-        return _done(False, "Output folder is required.")
     elif not src.exists() or not src.is_dir():
         lines.append("Source folder not found.")
         return _done(False, "Source folder not found.")
     else:
+        if not dst_raw:
+            lines.append(f"Output folder not set; using {dst}")
         ensure_out_dir(dst)
         supported_exts = _supported_image_exts()
         files = [p for p in src.iterdir() if p.is_file() and p.suffix.lower() in supported_exts]

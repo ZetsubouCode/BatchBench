@@ -403,6 +403,16 @@
     }
   }
 
+  function reportBlurBrushPresence() {
+    if (!window.bbReportDiscordPresence) return;
+    const imageSel = q("bb-brush-image");
+    const total = imageSel ? imageSel.options.length : 0;
+    const current = imageSel ? imageSel.selectedIndex + 1 : 0;
+    if (current > 0 && total > 0) {
+      window.bbReportDiscordPresence({ tool: "blur_brush", phase: "editing", current, total });
+    }
+  }
+
   async function openSelectedImage() {
     const folder = (q("bb-brush-folder")?.value || "").trim();
     const rel = (q("bb-brush-image")?.value || "").trim();
@@ -436,12 +446,13 @@
       showCanvas(true);
       render();
       setStatus(`Image ready: ${img.naturalWidth}x${img.naturalHeight}`);
+      reportBlurBrushPresence();
     };
     img.onerror = () => {
       setStatus("Gagal load image.");
       setLog(["[ERROR] Gagal load image from server."]);
     };
-    img.src = `/api/tags/image?folder=${encodeURIComponent(folder)}&path=${encodeURIComponent(rel)}&t=${Date.now()}`;
+    img.src = `/api/blur_brush/image?folder=${encodeURIComponent(folder)}&path=${encodeURIComponent(rel)}&t=${Date.now()}`;
   }
 
   async function previewMask() {

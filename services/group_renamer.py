@@ -5,12 +5,18 @@ import shutil
 import re
 
 from utils.io import readable_path
-from utils.parse import parse_bool, parse_exts
+from utils.parse import parse_bool, parse_exts, parse_int
 from utils.tool_result import build_tool_result
 
 
 def _natural_key(s: str):
-    return [int(t) if t.isdigit() else t.lower() for t in re.findall(r"\d+|\D+", s)]
+    parts = []
+    for token in re.findall(r"\d+|\D+", s):
+        if token.isdigit():
+            parts.append((0, int(token)))
+        else:
+            parts.append((1, token.lower()))
+    return parts
 
 
 def _list_images(folder: Path, exts: set) -> List[Path]:
@@ -106,10 +112,10 @@ def handle(form, ctx):
     move_instead = parse_bool(form.get("rn_move_instead"), default=False)
     dry_run = parse_bool(form.get("rn_dry_run"), default=False)
 
-    pad = max(1, int(form.get("rn_pad", "3")))
-    suffix_pad = max(0, int(form.get("rn_suffix_pad", "0")))
+    pad = max(1, parse_int(form.get("rn_pad"), 3))
+    suffix_pad = max(0, parse_int(form.get("rn_suffix_pad"), 0))
     sep = (form.get("rn_sep", "_") or "_")
-    start = max(1, int(form.get("rn_start", "1")))
+    start = max(1, parse_int(form.get("rn_start"), 1))
 
     order_top = form.get("rn_top_order", "name")
     order_folder = form.get("rn_folder_order", "name")

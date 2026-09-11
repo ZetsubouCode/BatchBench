@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 from app import app
@@ -124,6 +125,43 @@ class TagEditorFileApiTests(unittest.TestCase):
             self.assertTrue((root / "_temp").exists())
             self.assertFalse((root / "_temp" / "batch_a").exists())
 
+    def test_return_temp_with_source_all_moves_from_any_subfolder_to_root(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / "dataset"
+            temp_nested = root / "_temp" / "batch_a"
+            other_nested = root / "placeholderA" / "round_1"
+            temp_nested.mkdir(parents=True, exist_ok=True)
+            other_nested.mkdir(parents=True, exist_ok=True)
+
+            (temp_nested / "from_temp.png").write_bytes(b"img")
+            (temp_nested / "from_temp.txt").write_text("tag_temp", encoding="utf-8")
+            (other_nested / "from_other.png").write_bytes(b"img")
+            (other_nested / "from_other.txt").write_text("tag_other", encoding="utf-8")
+            (root / "already_root.png").write_bytes(b"img")
+            (root / "already_root.txt").write_text("tag_root", encoding="utf-8")
+
+            resp = self.client.post(
+                "/api/tags/return-temp",
+                json={"folder": str(root), "exts": ".png,.jpg,.jpeg,.webp", "source": "all"},
+            )
+
+            self.assertEqual(resp.status_code, 200)
+            data = resp.get_json()
+            self.assertTrue(data.get("ok"), msg=data)
+            self.assertEqual(data.get("source"), "all")
+            self.assertEqual(data.get("total"), 2)
+            self.assertEqual(len(data.get("moved") or []), 2)
+            self.assertTrue((root / "from_temp.png").exists())
+            self.assertTrue((root / "from_temp.txt").exists())
+            self.assertTrue((root / "from_other.png").exists())
+            self.assertTrue((root / "from_other.txt").exists())
+            self.assertTrue((root / "already_root.png").exists())
+            self.assertTrue((root / "already_root.txt").exists())
+            self.assertFalse((temp_nested / "from_temp.png").exists())
+            self.assertFalse((temp_nested / "from_temp.txt").exists())
+            self.assertFalse((other_nested / "from_other.png").exists())
+            self.assertFalse((other_nested / "from_other.txt").exists())
+
     def test_cheatsheet_reads_root_level_txt(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td) / "dataset"
@@ -151,6 +189,108 @@ class TagEditorFileApiTests(unittest.TestCase):
             self.assertEqual(sections[0]["tags"], ["blue_sky", "long_hair"])
             self.assertEqual(sections[0]["conditionals"], [["smiling", "looking_at_viewer"]])
             self.assertEqual(sections[1]["category"], "outfit")
+
+    def test_dataset_zip_excludes_temp_and_writes_next_to_dataset(self):
+        with tempfile.TemporaryDirectory() as td:
+            project = Path(td) / "project_a"
+            dataset = project / "dataset"
+            temp = dataset / "_temp"
+            nested = dataset / "set_1"
+            nested.mkdir(parents=True, exist_ok=True)
+            temp.mkdir(parents=True, exist_ok=True)
+            (dataset / "root.png").write_bytes(b"img")
+            (nested / "nested.png").write_bytes(b"img")
+            (temp / "hidden.png").write_bytes(b"img")
+
+            resp = self.client.post(
+                "/api/tags/dataset-zip",
+                json={"folder": str(project)},
+            )
+
+            self.assertEqual(resp.status_code, 200)
+            data = resp.get_json()
+            self.assertTrue(data.get("ok"), msg=data)
+            zip_path = Path(data.get("zip_path") or "")
+            self.assertTrue(zip_path.exists())
+            self.assertEqual(zip_path.parent, dataset.parent)
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                names = set(zf.namelist())
+            self.assertIn("root.png", names)
+            self.assertIn("set_1/nested.png", names)
+            self.assertNotIn("_temp/hidden.png", names)
+
+    def test_temp_move_all_moves_content_to_timestamped_folder(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / "dataset"
+            temp = root / "_temp"
+            nested = temp / "batch_a" / "variant"
+            nested.mkdir(parents=True, exist_ok=True)
+            (nested / "sample.png").write_bytes(b"img")
+            (nested / "sample.txt").write_text("tag_a", encoding="utf-8")
+            (temp / "notes.md").write_text("memo", encoding="utf-8")
+
+            resp = self.client.post(
+                "/api/tags/temp-move-all",
+                json={"folder": str(root), "exts": ".png,.jpg,.jpeg,.webp"},
+            )
+
+            self.assertEqual(resp.status_code, 200)
+            data = resp.get_json()
+            self.assertTrue(data.get("ok"), msg=data)
+            dst_rel = data.get("destination") or ""
+            self.assertTrue(dst_rel.startswith("_moved_"), msg=data)
+            dst_root = root / dst_rel
+            self.assertTrue((dst_root / "batch_a" / "variant" / "sample.png").exists())
+            self.assertTrue((dst_root / "batch_a" / "variant" / "sample.txt").exists())
+            self.assertTrue((dst_root / "notes.md").exists())
+            self.assertFalse((temp / "batch_a" / "variant" / "sample.png").exists())
+            self.assertFalse((temp / "batch_a" / "variant" / "sample.txt").exists())
+            self.assertFalse((temp / "notes.md").exists())
+
+    def test_cleanup_subdirs_removes_empty_folders_but_keeps_temp(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / "dataset"
+            (root / "_temp").mkdir(parents=True, exist_ok=True)
+            (root / "set_a" / "nested").mkdir(parents=True, exist_ok=True)
+            (root / "set_b").mkdir(parents=True, exist_ok=True)
+
+            resp = self.client.post(
+                "/api/tags/cleanup-subdirs",
+                json={"folder": str(root), "keep_temp": True},
+            )
+
+            self.assertEqual(resp.status_code, 200)
+            data = resp.get_json()
+            self.assertTrue(data.get("ok"), msg=data)
+            self.assertTrue(data.get("cleaned"), msg=data)
+            self.assertIn("set_a", data.get("removed") or [])
+            self.assertIn("set_b", data.get("removed") or [])
+            self.assertFalse((root / "set_a").exists())
+            self.assertFalse((root / "set_b").exists())
+            self.assertTrue((root / "_temp").exists())
+
+    def test_cleanup_subdirs_warns_and_skips_when_any_folder_has_files(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / "dataset"
+            (root / "_temp").mkdir(parents=True, exist_ok=True)
+            (root / "set_a").mkdir(parents=True, exist_ok=True)
+            (root / "set_a" / "img.png").write_bytes(b"img")
+            (root / "set_b").mkdir(parents=True, exist_ok=True)
+
+            resp = self.client.post(
+                "/api/tags/cleanup-subdirs",
+                json={"folder": str(root), "keep_temp": True},
+            )
+
+            self.assertEqual(resp.status_code, 200)
+            data = resp.get_json()
+            self.assertTrue(data.get("ok"), msg=data)
+            self.assertFalse(data.get("cleaned"), msg=data)
+            self.assertIn("set_a", data.get("blocked") or [])
+            self.assertEqual(data.get("removed"), [])
+            self.assertTrue((root / "set_a").exists())
+            self.assertTrue((root / "set_b").exists())
+            self.assertTrue((root / "_temp").exists())
 
 
 if __name__ == "__main__":

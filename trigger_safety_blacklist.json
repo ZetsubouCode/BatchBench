@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "updated_at": 0,
+  "entries": [
+    {
+      "term": "nelly",
+      "compact": "nelly",
+      "aliases": [],
+      "severity": "block",
+      "category": "poi",
+      "match_mode": "compact_contains",
+      "reason": "Known POI collision",
+      "source": "seed"
+    },
+    {
+      "term": "vanilla ice",
+      "compact": "vanillaice",
+      "aliases": [],
+      "severity": "block",
+      "category": "poi",
+      "match_mode": "compact_contains",
+      "reason": "Known POI collision",
+      "source": "seed"
+    }
+  ]
+}

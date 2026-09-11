@@ -1,0 +1,826 @@
+<style>
+  .cb-wrap { display:flex; flex-direction:column; gap:.9rem; }
+  .cb-stage-shell { border:1px solid var(--bb-border); border-radius:.75rem; background:var(--bb-code-bg); overflow:hidden; }
+  .cb-stage-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:.5rem; padding:.65rem .75rem; border-bottom:1px solid var(--bb-border); background:rgba(15,23,42,.72); }
+  .cb-stage-toolbar .btn { white-space:nowrap; }
+  .cb-zoom-label { min-width:5ch; text-align:right; color:var(--bb-muted); font-variant-numeric:tabular-nums; }
+  .cb-viewport { position:relative; min-height:480px; max-height:72vh; overflow:auto; overscroll-behavior:contain; touch-action:none; cursor:crosshair; }
+  .cb-viewport.is-picking { cursor:copy; }
+  .cb-viewport.is-panning { cursor:grab; }
+  .cb-viewport.is-panning.is-active { cursor:grabbing; }
+  .cb-canvas-wrap { display:inline-block; min-width:100%; min-height:100%; padding:1rem; }
+  #cb-canvas { display:block; margin:0 auto; background:#111827; box-shadow:0 8px 24px rgba(0,0,0,.35); touch-action:none; }
+  .cb-placeholder { min-height:420px; display:flex; align-items:center; justify-content:center; padding:2rem; text-align:center; color:var(--bb-muted); }
+  .cb-control-note { font-size:.8rem; color:var(--bb-muted); }
+  .cb-log { max-height:220px; overflow:auto; }
+  .cb-color-preview { width:2.4rem; padding:0; overflow:hidden; }
+  .cb-color-preview input { width:100%; height:100%; min-height:2.35rem; border:0; background:transparent; cursor:pointer; }
+  .cb-color-swatch { width:2.4rem; min-height:2.35rem; background:#ff4d6d; border-color:var(--bb-border); }
+  .cb-tool-button.active { background:var(--bb-primary); border-color:var(--bb-primary); color:#fff; }
+  .cb-stage-shell:fullscreen { width:100vw; height:100vh; border-radius:0; background:var(--bb-bg); display:flex; flex-direction:column; }
+  .cb-stage-shell:fullscreen .cb-viewport { flex:1; max-height:none; min-height:0; }
+  .cb-stage-shell:fullscreen .cb-stage-toolbar { position:sticky; top:0; z-index:2; }
+  @media (max-width: 767.98px) {
+    .cb-viewport { min-height:360px; max-height:60vh; }
+    .cb-stage-toolbar { gap:.35rem; }
+  }
+</style>
+
+<div class="card p-4 cb-wrap">
+  <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+    <div>
+      <h4 class="mb-1">Color Brush</h4>
+      <div class="text-muted small">Paint color directly onto an original-resolution RGBA layer. Zoom, fullscreen, undo, and redo stay local until you save.</div>
+    </div>
+    <span class="badge text-bg-secondary" id="cb-resolution">No image</span>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-8">
+      <label class="form-label">Folder</label>
+      <div class="input-group">
+        <input id="cb-folder" class="form-control" placeholder="D:\dataset" data-root-sync="1">
+        <button class="btn btn-outline-light" type="button" id="cb-browse-folder"><i class="bi bi-folder2-open" aria-hidden="true"></i> Browse</button>
+        <button class="btn btn-outline-light" type="button" id="cb-load-images">Load Images</button>
+      </div>
+      <div class="cb-control-note mt-1">Images are never changed until <strong>Apply &amp; Save</strong>. Overwrite uses a backup by default.</div>
+    </div>
+    <div class="col-lg-4">
+      <label class="form-label">Image</label>
+      <select id="cb-image" class="form-select"></select>
+    </div>
+  </div>
+
+  <div class="row g-3 align-items-end">
+    <div class="col-md-3 col-lg-2">
+      <label class="form-label">Brush type</label>
+      <select id="cb-brush-type" class="form-select">
+        <option value="hard">Hard Round</option>
+        <option value="soft" selected>Soft Round</option>
+        <option value="marker">Marker</option>
+        <option value="airbrush">Airbrush</option>
+      </select>
+    </div>
+    <div class="col-md-4 col-lg-3">
+      <label class="form-label">Color</label>
+      <div class="input-group">
+        <span class="input-group-text cb-color-preview"><input id="cb-color-picker" type="color" value="#ff4d6d" aria-label="Paint color"></span>
+        <input id="cb-color-hex" class="form-control font-monospace" value="#ff4d6d" maxlength="7" spellcheck="false">
+        <span class="input-group-text cb-color-swatch" id="cb-color-swatch" aria-label="Selected paint color"></span>
+      </div>
+    </div>
+    <div class="col-md-5 col-lg-3">
+      <label class="form-label">Brush size (source pixels)</label>
+      <div class="input-group">
+        <input id="cb-size" class="form-range" type="range" min="1" max="1000" step="1" value="80">
+        <input id="cb-size-num" class="form-control" type="number" min="1" max="1000" value="80" style="max-width:92px;">
+      </div>
+    </div>
+    <div class="col-md-5 col-lg-2">
+      <label class="form-label">Opacity</label>
+      <div class="input-group">
+        <input id="cb-opacity" class="form-range" type="range" min="1" max="100" step="1" value="65">
+        <span class="input-group-text" id="cb-opacity-label">65%</span>
+      </div>
+    </div>
+    <div class="col-md-7 col-lg-2">
+      <label class="form-label">Tool</label>
+      <div class="btn-group w-100" role="group">
+        <button class="btn btn-outline-light cb-tool-button active" type="button" id="cb-paint">Paint</button>
+        <button class="btn btn-outline-light cb-tool-button" type="button" id="cb-erase">Erase</button>
+        <button class="btn btn-outline-light cb-tool-button" type="button" id="cb-pick-color" data-bs-toggle="tooltip" data-bs-title="Pick a color from the original image. The paint layer is ignored."><i class="bi bi-eyedropper" aria-hidden="true"></i> Pick Color</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 align-items-end">
+    <div class="col-md-4">
+      <label class="form-label">Output</label>
+      <select id="cb-output" class="form-select">
+        <option value="overwrite">Overwrite selected image</option>
+        <option value="copy" selected>Copy as _paint</option>
+      </select>
+    </div>
+    <div class="col-md-4">
+      <div class="form-check mb-2">
+        <input class="form-check-input" type="checkbox" id="cb-backup" checked>
+        <label class="form-check-label" for="cb-backup">Create .bak before overwriting</label>
+      </div>
+      <div class="cb-control-note">Copy mode never creates a duplicate backup.</div>
+    </div>
+    <div class="col-md-4 d-flex flex-wrap gap-2 justify-content-md-end">
+      <button class="btn btn-outline-light" type="button" id="cb-undo" title="Ctrl/Cmd+Z">Undo</button>
+      <button class="btn btn-outline-light" type="button" id="cb-redo" title="Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y">Redo</button>
+      <button class="btn btn-outline-warning" type="button" id="cb-clear">Clear Paint</button>
+      <button class="btn btn-primary" type="button" id="cb-apply">Apply &amp; Save</button>
+    </div>
+  </div>
+
+  <div class="cb-stage-shell" id="cb-stage-shell">
+    <div class="cb-stage-toolbar">
+      <button class="btn btn-sm btn-outline-light" type="button" id="cb-zoom-out" title="Zoom out (-)"><i class="bi bi-zoom-out"></i></button>
+      <button class="btn btn-sm btn-outline-light" type="button" id="cb-zoom-in" title="Zoom in (+)"><i class="bi bi-zoom-in"></i></button>
+      <button class="btn btn-sm btn-outline-light" type="button" id="cb-zoom-fit" title="Fit image (0)">Fit</button>
+      <button class="btn btn-sm btn-outline-light" type="button" id="cb-zoom-100">100%</button>
+      <span class="cb-zoom-label" id="cb-zoom-label">100%</span>
+      <span class="vr"></span>
+      <button class="btn btn-sm btn-outline-light" type="button" id="cb-fullscreen"><i class="bi bi-arrows-fullscreen"></i> Fullscreen</button>
+      <span class="cb-control-note ms-auto" id="cb-status">Load a folder and image to start.</span>
+    </div>
+    <div class="cb-viewport" id="cb-viewport">
+      <div class="cb-placeholder" id="cb-placeholder">Load an image to paint. Use mouse wheel + Ctrl/Cmd to zoom, Space-drag to pan, and Ctrl/Cmd+Z to undo.</div>
+      <div class="cb-canvas-wrap d-none" id="cb-canvas-wrap"><canvas id="cb-canvas"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card p-3">
+    <div class="d-flex justify-content-between gap-2 align-items-center mb-2">
+      <h6 class="mb-0">Color Brush Log</h6>
+      <span class="cb-control-note" id="cb-log-meta"></span>
+    </div>
+    <pre class="monospace mb-0 cb-log" id="cb-log"></pre>
+  </div>
+</div>
+
+<script>
+(() => {
+  const q = (id) => document.getElementById(id);
+  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+  const int = (value, fallback) => {
+    const parsed = Number.parseInt(String(value ?? ""), 10);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+  const activeEditable = () => {
+    const el = document.activeElement;
+    return !!(el && (
+      /^(INPUT|TEXTAREA|SELECT)$/i.test(el.tagName) ||
+      el.isContentEditable ||
+      el.closest?.(".modal.show")
+    ));
+  };
+  const modalOpen = () => !!document.querySelector(".modal.show");
+  const shortcutsBlocked = () => activeEditable() || modalOpen();
+
+  const canvas = q("cb-canvas");
+  const viewCtx = canvas.getContext("2d");
+  const viewport = q("cb-viewport");
+  const stageShell = q("cb-stage-shell");
+  const placeholder = q("cb-placeholder");
+  const canvasWrap = q("cb-canvas-wrap");
+
+  const state = {
+    source: null,
+    paintCanvas: document.createElement("canvas"),
+    checkpointCanvas: document.createElement("canvas"),
+    sampleCanvas: document.createElement("canvas"),
+    paintCtx: null,
+    checkpointCtx: null,
+    sampleCtx: null,
+    zoom: 1,
+    pointer: null,
+    inside: false,
+    drawing: false,
+    panning: false,
+    spaceDown: false,
+    panStart: null,
+    tool: "paint",
+    previousDrawTool: "paint",
+    liveAction: null,
+    actions: [],
+    redo: [],
+    maxActions: 100,
+    dirty: false,
+    currentRel: "",
+    listSeq: 0,
+    imageSeq: 0,
+  };
+  state.paintCtx = state.paintCanvas.getContext("2d", { willReadFrequently: true });
+  state.checkpointCtx = state.checkpointCanvas.getContext("2d");
+  state.sampleCtx = state.sampleCanvas.getContext("2d", { willReadFrequently: true });
+
+  function setStatus(message) { q("cb-status").textContent = message || ""; }
+  function setLog(lines) { q("cb-log").textContent = Array.isArray(lines) ? lines.join("\n") : String(lines || ""); }
+  function appendLog(line) {
+    if (!line) return;
+    const log = q("cb-log");
+    log.textContent = log.textContent ? `${log.textContent}\n${line}` : line;
+    log.scrollTop = log.scrollHeight;
+  }
+  function showCanvas(visible) {
+    canvasWrap.classList.toggle("d-none", !visible);
+    placeholder.classList.toggle("d-none", visible);
+  }
+  function updateLogMeta() {
+    const folder = q("cb-folder").value.trim();
+    const image = q("cb-image").value.trim();
+    q("cb-log-meta").textContent = folder && image ? `${image} @ ${folder}` : "";
+  }
+  function colorValue() {
+    const raw = q("cb-color-hex").value.trim();
+    return /^#[0-9a-fA-F]{6}$/.test(raw) ? raw.toLowerCase() : q("cb-color-picker").value;
+  }
+  function syncColor(raw) {
+    const value = String(raw || "").trim();
+    if (/^#[0-9a-fA-F]{6}$/.test(value)) {
+      const normalized = value.toLowerCase();
+      q("cb-color-picker").value = normalized;
+      q("cb-color-hex").value = normalized;
+      q("cb-color-swatch").style.backgroundColor = normalized;
+    }
+  }
+  function brushSize() { return clamp(int(q("cb-size-num").value, 80), 1, 1000); }
+  function brushOpacity() { return clamp(int(q("cb-opacity").value, 65), 1, 100) / 100; }
+  function updateControls() {
+    const size = brushSize();
+    q("cb-size").value = String(size);
+    q("cb-size-num").value = String(size);
+    const opacity = clamp(int(q("cb-opacity").value, 65), 1, 100);
+    q("cb-opacity").value = String(opacity);
+    q("cb-opacity-label").textContent = `${opacity}%`;
+  }
+  function updateUndoRedo() {
+    q("cb-undo").disabled = !state.actions.length;
+    q("cb-redo").disabled = !state.redo.length;
+  }
+  function markDirty() { state.dirty = true; }
+  function resetDirty() { state.dirty = false; }
+  function updatePickerCursor(picking = false) {
+    viewport.classList.toggle("is-picking", picking || state.tool === "pick");
+  }
+  function updateZoomLabel() { q("cb-zoom-label").textContent = `${Math.round(state.zoom * 100)}%`; }
+  function applyZoom(nextZoom, anchor = null) {
+    if (!state.source) return;
+    const previous = state.zoom;
+    const next = clamp(nextZoom, 0.1, 8);
+    if (Math.abs(next - previous) < 0.001) return;
+
+    let sourceX = null;
+    let sourceY = null;
+    let offsetX = null;
+    let offsetY = null;
+    if (anchor) {
+      const rect = viewport.getBoundingClientRect();
+      offsetX = anchor.clientX - rect.left;
+      offsetY = anchor.clientY - rect.top;
+      sourceX = (viewport.scrollLeft + offsetX) / previous;
+      sourceY = (viewport.scrollTop + offsetY) / previous;
+    }
+
+    state.zoom = next;
+    canvas.style.width = `${Math.round(canvas.width * next)}px`;
+    canvas.style.height = `${Math.round(canvas.height * next)}px`;
+    updateZoomLabel();
+
+    if (sourceX !== null && sourceY !== null) {
+      viewport.scrollLeft = Math.max(0, sourceX * next - offsetX);
+      viewport.scrollTop = Math.max(0, sourceY * next - offsetY);
+    }
+    render();
+  }
+  function fitImage() {
+    if (!state.source) return;
+    const width = Math.max(1, viewport.clientWidth - 32);
+    const height = Math.max(1, viewport.clientHeight - 32);
+    applyZoom(Math.min(1, width / canvas.width, height / canvas.height));
+    viewport.scrollLeft = 0;
+    viewport.scrollTop = 0;
+  }
+  function toCanvasPoint(event) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: clamp((event.clientX - rect.left) * (canvas.width / Math.max(rect.width, 1)), 0, canvas.width),
+      y: clamp((event.clientY - rect.top) * (canvas.height / Math.max(rect.height, 1)), 0, canvas.height),
+    };
+  }
+  function pointToSourcePixel(point) {
+    return {
+      x: Math.floor(clamp(point.x, 0, Math.max(0, state.sampleCanvas.width - 1))),
+      y: Math.floor(clamp(point.y, 0, Math.max(0, state.sampleCanvas.height - 1))),
+    };
+  }
+  function hexFromRgb(r, g, b) {
+    return `#${[r, g, b].map((value) => clamp(value, 0, 255).toString(16).padStart(2, "0")).join("")}`;
+  }
+  function sampleSourceColor(event) {
+    if (!state.source || !state.sampleCanvas.width || !state.sampleCanvas.height) return null;
+    const pixel = pointToSourcePixel(toCanvasPoint(event));
+    const data = state.sampleCtx.getImageData(pixel.x, pixel.y, 1, 1).data;
+    const hex = hexFromRgb(data[0], data[1], data[2]).toLowerCase();
+    syncColor(hex);
+    setStatus(`Picked ${hex} from source image.`);
+    appendLog(`Picked color: ${hex}`);
+    render();
+    return hex;
+  }
+  function rgbaFromHex(hex, alpha) {
+    const normalized = String(hex || "#ff4d6d").replace("#", "");
+    const r = Number.parseInt(normalized.slice(0, 2), 16) || 0;
+    const g = Number.parseInt(normalized.slice(2, 4), 16) || 0;
+    const b = Number.parseInt(normalized.slice(4, 6), 16) || 0;
+    return `rgba(${r}, ${g}, ${b}, ${clamp(alpha, 0, 1)})`;
+  }
+  function distance(a, b) { return Math.hypot(b.x - a.x, b.y - a.y); }
+  function stampSoft(ctx, point, action, factor = 1) {
+    const radius = Math.max(0.5, action.size / 2);
+    const alpha = clamp(action.opacity * factor, 0, 1);
+    const gradient = ctx.createRadialGradient(point.x, point.y, 0, point.x, point.y, radius);
+    gradient.addColorStop(0, rgbaFromHex(action.color, alpha));
+    gradient.addColorStop(0.45, rgbaFromHex(action.color, alpha * 0.72));
+    gradient.addColorStop(1, rgbaFromHex(action.color, 0));
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  function renderSegment(ctx, from, to, action) {
+    const points = [];
+    const span = distance(from, to);
+    const spacing = Math.max(1, action.size * (action.brush === "airbrush" ? 0.12 : action.brush === "soft" ? 0.18 : 0.25));
+    const count = Math.max(1, Math.ceil(span / spacing));
+    for (let index = 1; index <= count; index += 1) {
+      const t = index / count;
+      points.push({ x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t });
+    }
+
+    ctx.save();
+    ctx.globalCompositeOperation = action.kind === "erase" ? "destination-out" : "source-over";
+    if (action.brush === "soft" || action.brush === "airbrush") {
+      const factor = action.brush === "airbrush" ? 0.24 : 1;
+      if (from === to) stampSoft(ctx, from, action, factor);
+      points.forEach((point) => stampSoft(ctx, point, action, factor));
+    } else {
+      ctx.globalAlpha = action.opacity * (action.brush === "marker" ? 0.72 : 1);
+      ctx.strokeStyle = action.kind === "erase" ? "rgba(0,0,0,1)" : action.color;
+      ctx.fillStyle = action.kind === "erase" ? "rgba(0,0,0,1)" : action.color;
+      ctx.lineWidth = action.brush === "marker" ? Math.max(1, action.size * 0.72) : action.size;
+      ctx.lineCap = action.brush === "marker" ? "square" : "round";
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      ctx.moveTo(from.x, from.y);
+      ctx.lineTo(to.x, to.y);
+      ctx.stroke();
+      if (from === to) {
+        ctx.beginPath();
+        ctx.arc(to.x, to.y, ctx.lineWidth / 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+  function drawAction(ctx, action) {
+    if (action.kind === "clear") {
+      ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+      return;
+    }
+    const points = Array.isArray(action.points) ? action.points : [];
+    if (!points.length) return;
+    renderSegment(ctx, points[0], points[0], action);
+    for (let index = 1; index < points.length; index += 1) renderSegment(ctx, points[index - 1], points[index], action);
+  }
+  function replayActions() {
+    if (!state.source) return;
+    state.paintCtx.clearRect(0, 0, canvas.width, canvas.height);
+    state.paintCtx.drawImage(state.checkpointCanvas, 0, 0);
+    state.actions.forEach((action) => drawAction(state.paintCtx, action));
+    render();
+  }
+  function squashHistoryIfNeeded() {
+    if (state.actions.length <= state.maxActions) return;
+    const keep = 75;
+    const cut = Math.max(1, state.actions.length - keep);
+    const removed = state.actions.splice(0, cut);
+    removed.forEach((action) => drawAction(state.checkpointCtx, action));
+  }
+  function commitAction(action) {
+    if (!action || action.kind !== "clear" && (!action.points || !action.points.length)) return;
+    state.actions.push(action);
+    state.redo = [];
+    markDirty();
+    squashHistoryIfNeeded();
+    updateUndoRedo();
+  }
+  function undo() {
+    if (!state.actions.length) return;
+    state.redo.push(state.actions.pop());
+    replayActions();
+    markDirty();
+    updateUndoRedo();
+  }
+  function redo() {
+    if (!state.redo.length) return;
+    state.actions.push(state.redo.pop());
+    replayActions();
+    markDirty();
+    updateUndoRedo();
+  }
+  function clearPaint() {
+    if (!state.source) return;
+    commitAction({ kind: "clear" });
+    replayActions();
+    setStatus("Paint layer cleared. Undo is available.");
+  }
+  function render() {
+    if (!state.source) return;
+    viewCtx.clearRect(0, 0, canvas.width, canvas.height);
+    viewCtx.drawImage(state.source, 0, 0, canvas.width, canvas.height);
+    viewCtx.drawImage(state.paintCanvas, 0, 0);
+
+    if (state.inside && state.pointer && !state.drawing && !state.panning && state.tool !== "pick") {
+      const size = brushSize();
+      viewCtx.save();
+      viewCtx.beginPath();
+      viewCtx.arc(state.pointer.x, state.pointer.y, size / 2, 0, Math.PI * 2);
+      viewCtx.lineWidth = 1 / state.zoom;
+      viewCtx.strokeStyle = state.tool === "erase" ? "rgba(110,220,255,.95)" : "rgba(255,235,135,.95)";
+      viewCtx.stroke();
+      viewCtx.restore();
+    }
+  }
+  async function fetchJson(url, options = {}) {
+    const response = await fetch(url, options);
+    let data = null;
+    try { data = await response.json(); } catch (_) {}
+    if (!response.ok || !data || data.ok === false) throw new Error(data?.error || `HTTP ${response.status}`);
+    return data;
+  }
+  async function loadImages(preferred = "") {
+    const folder = q("cb-folder").value.trim();
+    if (!folder) { setStatus("Folder is required."); return; }
+    const seq = ++state.listSeq;
+    const select = q("cb-image");
+    const current = preferred || select.value || state.currentRel;
+    select.disabled = true;
+    setStatus("Loading image list...");
+    try {
+      const data = await fetchJson(`/api/color_brush/list-images?folder=${encodeURIComponent(folder)}&recursive=1`);
+      if (seq !== state.listSeq) return;
+      select.innerHTML = "";
+      if (!(data.images || []).length) {
+        select.innerHTML = '<option value="">(no images)</option>';
+        state.currentRel = "";
+        state.source = null;
+        showCanvas(false);
+        q("cb-resolution").textContent = "No image";
+        setStatus("No images found.");
+        return;
+      }
+      data.images.forEach((rel) => {
+        const option = document.createElement("option");
+        option.value = rel;
+        option.textContent = rel;
+        select.appendChild(option);
+      });
+      select.value = current && data.images.includes(current) ? current : data.images[0];
+      updateLogMeta();
+      setStatus(`Loaded ${data.images.length} image(s).`);
+      await requestImageSwitch(select.value, { force: select.value === state.currentRel, source: "list" });
+    } catch (error) {
+      if (seq !== state.listSeq) return;
+      setStatus(`Could not load images: ${error.message}`);
+      setLog([`[ERROR] ${error.message}`]);
+    } finally {
+      if (seq === state.listSeq) select.disabled = false;
+    }
+  }
+  function reportColorBrushPresence() {
+    if (!window.bbReportDiscordPresence) return;
+    const select = q("cb-image");
+    const total = select ? select.options.length : 0;
+    const current = select ? select.selectedIndex + 1 : 0;
+    if (current > 0 && total > 0) {
+      window.bbReportDiscordPresence({ tool: "color_brush", phase: "editing", current, total });
+    }
+  }
+  function hasUnsavedActions() { return state.dirty || !!state.liveAction; }
+  async function requestImageSwitch(rel, options = {}) {
+    const nextRel = String(rel || "").trim();
+    const select = q("cb-image");
+    const previousRel = state.currentRel;
+    if (!nextRel) return false;
+    if (!options.force && previousRel && nextRel !== previousRel && hasUnsavedActions()) {
+      const confirmed = window.confirm("You have unsaved paint changes for this image. Switch image and discard them?");
+      if (!confirmed) {
+        select.value = previousRel;
+        setStatus("Image switch cancelled.");
+        return false;
+      }
+    }
+    select.value = nextRel;
+    return openImage(nextRel, options);
+  }
+  async function openImage(relOverride = "", options = {}) {
+    const folder = q("cb-folder").value.trim();
+    const rel = String(relOverride || q("cb-image").value || "").trim();
+    if (!folder || !rel) { setStatus("Folder and image are required."); return; }
+    const seq = ++state.imageSeq;
+    q("cb-image").disabled = true;
+    setStatus("Loading original-resolution image...");
+    const image = new Image();
+    return new Promise((resolve) => {
+    image.onload = () => {
+      if (seq !== state.imageSeq) { resolve(false); return; }
+      state.source = image;
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      state.paintCanvas.width = image.naturalWidth;
+      state.paintCanvas.height = image.naturalHeight;
+      state.checkpointCanvas.width = image.naturalWidth;
+      state.checkpointCanvas.height = image.naturalHeight;
+      state.sampleCanvas.width = image.naturalWidth;
+      state.sampleCanvas.height = image.naturalHeight;
+      state.paintCtx.clearRect(0, 0, canvas.width, canvas.height);
+      state.checkpointCtx.clearRect(0, 0, canvas.width, canvas.height);
+      state.sampleCtx.clearRect(0, 0, canvas.width, canvas.height);
+      state.sampleCtx.drawImage(image, 0, 0, canvas.width, canvas.height);
+      state.actions = [];
+      state.redo = [];
+      state.liveAction = null;
+      state.currentRel = rel;
+      resetDirty();
+      state.zoom = 1;
+      canvas.style.width = `${canvas.width}px`;
+      canvas.style.height = `${canvas.height}px`;
+      q("cb-resolution").textContent = `${image.naturalWidth} × ${image.naturalHeight}`;
+      q("cb-resolution").textContent = `${image.naturalWidth} x ${image.naturalHeight}`;
+      showCanvas(true);
+      updateLogMeta();
+      updateUndoRedo();
+      requestAnimationFrame(() => fitImage());
+      render();
+      setStatus("Ready. Paint locally, then apply when satisfied.");
+      appendLog(options.logMessage || `Loaded: ${rel}`);
+      reportColorBrushPresence();
+      q("cb-image").disabled = false;
+      resolve(true);
+    };
+    image.onerror = () => {
+      if (seq !== state.imageSeq) { resolve(false); return; }
+      q("cb-image").disabled = false;
+      setStatus("Could not load image from server.");
+      setLog(["[ERROR] Could not load image from server."]);
+      resolve(false);
+    };
+    image.src = `/api/color_brush/image?folder=${encodeURIComponent(folder)}&path=${encodeURIComponent(rel)}&t=${Date.now()}`;
+    });
+  }
+  async function applySave() {
+    const folder = q("cb-folder").value.trim();
+    const rel = q("cb-image").value.trim();
+    if (!state.source || !folder || !rel) { setStatus("Load an image first."); return; }
+    if (!state.actions.length) { setStatus("There are no committed color paint actions to save."); return; }
+    const payload = {
+      folder,
+      rel,
+      paint_png_base64: state.paintCanvas.toDataURL("image/png"),
+      backup: q("cb-backup").checked,
+      output_mode: q("cb-output").value,
+      action_count: state.actions.length,
+    };
+    setStatus("Saving full-resolution color layer...");
+    if (window.bbBusy?.show) window.bbBusy.show("Saving Color Brush result...");
+    try {
+      const data = await fetchJson("/api/color_brush/apply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      setLog(data.log || []);
+      setStatus(`Saved: ${data.saved || rel}`);
+      appendLog(`Save complete: ${data.saved || rel}`);
+      state.actions = [];
+      state.redo = [];
+      resetDirty();
+      if (payload.output_mode === "overwrite") {
+        await requestImageSwitch(rel, { force: true });
+      } else {
+        await loadImages(data.saved || rel);
+        q("cb-image").value = data.saved || rel;
+      }
+    } catch (error) {
+      setStatus(`Save failed: ${error.message}`);
+      setLog([`[ERROR] ${error.message}`]);
+    } finally {
+      if (window.bbBusy?.hide) window.bbBusy.hide();
+    }
+  }
+  function setTool(tool) {
+    if (tool === "pick") {
+      state.tool = "pick";
+    } else {
+      state.tool = tool === "erase" ? "erase" : "paint";
+      state.previousDrawTool = state.tool;
+    }
+    q("cb-paint").classList.toggle("active", state.tool === "paint");
+    q("cb-erase").classList.toggle("active", state.tool === "erase");
+    q("cb-pick-color").classList.toggle("active", state.tool === "pick");
+    updatePickerCursor();
+    render();
+  }
+  function togglePicker() {
+    if (state.tool === "pick") setTool(state.previousDrawTool || "paint");
+    else setTool("pick");
+  }
+  function openBatchBenchFolderFallback() {
+    const fallback = document.createElement("button");
+    fallback.type = "button";
+    fallback.className = "btn-browse d-none";
+    fallback.setAttribute("data-target", "cb-folder");
+    document.body.appendChild(fallback);
+    fallback.click();
+    fallback.remove();
+  }
+  async function browseFolderNative() {
+    appendLog("Opened native folder picker.");
+    try {
+      const response = await fetch("/api/native-folder-picker", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ initial_dir: q("cb-folder").value.trim() }),
+      });
+      const data = await response.json();
+      if (!response.ok || data.ok === false) {
+        throw Object.assign(new Error(data?.error || `HTTP ${response.status}`), { fallbackAllowed: !!data?.fallback_allowed });
+      }
+      if (data.cancelled) return;
+      if (data.path) {
+        q("cb-folder").value = data.path;
+        q("cb-folder").dispatchEvent(new Event("input", { bubbles: true }));
+        q("cb-folder").dispatchEvent(new Event("change", { bubbles: true }));
+        appendLog(`Selected folder: ${data.path}`);
+        await loadImages();
+      }
+    } catch (error) {
+      setStatus(`Native folder picker unavailable: ${error.message}`);
+      if (error.fallbackAllowed !== false) {
+        appendLog("Native picker unavailable; opened BatchBench folder picker instead.");
+        openBatchBenchFolderFallback();
+      }
+    }
+  }
+  async function navigateImage(direction) {
+    const select = q("cb-image");
+    if (!select.options.length || !select.value) return false;
+    const index = select.selectedIndex;
+    const nextIndex = index + direction;
+    if (nextIndex < 0) {
+      setStatus("Already at the first image.");
+      appendLog("No previous image available.");
+      return true;
+    }
+    if (nextIndex >= select.options.length) {
+      setStatus("Already at the last image.");
+      appendLog("No next image available.");
+      return true;
+    }
+    const rel = select.options[nextIndex].value;
+    const switched = await requestImageSwitch(rel, {
+      logMessage: direction > 0 ? `Switched to next image: ${rel}` : `Switched to previous image: ${rel}`,
+    });
+    return switched;
+  }
+  function pointerEvents(event) { return typeof event.getCoalescedEvents === "function" ? event.getCoalescedEvents() : [event]; }
+  function beginDraw(event) {
+    if (!state.source || state.spaceDown) return;
+    event.preventDefault();
+    if (state.tool === "pick" || event.altKey) {
+      updatePickerCursor(true);
+      sampleSourceColor(event);
+      return;
+    }
+    canvas.setPointerCapture(event.pointerId);
+    const point = toCanvasPoint(event);
+    state.drawing = true;
+    state.liveAction = {
+      kind: state.tool,
+      brush: q("cb-brush-type").value,
+      color: colorValue(),
+      opacity: brushOpacity(),
+      size: brushSize(),
+      points: [point],
+    };
+    renderSegment(state.paintCtx, point, point, state.liveAction);
+    state.pointer = point;
+    render();
+  }
+  function continueDraw(event) {
+    if (!state.source) return;
+    state.pointer = toCanvasPoint(event);
+    state.inside = true;
+    updatePickerCursor(event.altKey);
+    if (!state.drawing || !state.liveAction) { render(); return; }
+    event.preventDefault();
+    pointerEvents(event).forEach((item) => {
+      const point = toCanvasPoint(item);
+      const previous = state.liveAction.points[state.liveAction.points.length - 1];
+      state.liveAction.points.push(point);
+      renderSegment(state.paintCtx, previous, point, state.liveAction);
+    });
+    render();
+  }
+  function finishDraw(event) {
+    updatePickerCursor(false);
+    if (!state.drawing) return;
+    if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+    state.drawing = false;
+    commitAction(state.liveAction);
+    state.liveAction = null;
+    render();
+  }
+  function bindCanvas() {
+    canvas.addEventListener("pointerdown", beginDraw);
+    canvas.addEventListener("pointermove", continueDraw);
+    canvas.addEventListener("pointerup", finishDraw);
+    canvas.addEventListener("pointercancel", finishDraw);
+    canvas.addEventListener("pointerenter", (event) => { state.inside = true; state.pointer = toCanvasPoint(event); render(); });
+    canvas.addEventListener("pointerleave", () => { state.inside = false; updatePickerCursor(false); render(); });
+
+    viewport.addEventListener("wheel", (event) => {
+      if (!state.source || !(event.ctrlKey || event.metaKey)) return;
+      event.preventDefault();
+      const delta = event.deltaY < 0 ? 1.15 : 1 / 1.15;
+      applyZoom(state.zoom * delta, event);
+    }, { passive: false });
+
+    viewport.addEventListener("pointerdown", (event) => {
+      if (!state.spaceDown || !state.source) return;
+      state.panning = true;
+      state.panStart = { x: event.clientX, y: event.clientY, left: viewport.scrollLeft, top: viewport.scrollTop };
+      viewport.classList.add("is-active");
+      viewport.setPointerCapture(event.pointerId);
+    });
+    viewport.addEventListener("pointermove", (event) => {
+      if (!state.panning || !state.panStart) return;
+      viewport.scrollLeft = state.panStart.left - (event.clientX - state.panStart.x);
+      viewport.scrollTop = state.panStart.top - (event.clientY - state.panStart.y);
+    });
+    const stopPan = (event) => {
+      if (!state.panning) return;
+      if (viewport.hasPointerCapture(event.pointerId)) viewport.releasePointerCapture(event.pointerId);
+      state.panning = false;
+      state.panStart = null;
+      viewport.classList.remove("is-active");
+    };
+    viewport.addEventListener("pointerup", stopPan);
+    viewport.addEventListener("pointercancel", stopPan);
+  }
+  function bindEvents() {
+    q("cb-browse-folder").addEventListener("click", browseFolderNative);
+    q("cb-load-images").addEventListener("click", () => loadImages());
+    q("cb-image").addEventListener("change", () => requestImageSwitch(q("cb-image").value));
+    q("cb-color-picker").addEventListener("input", () => syncColor(q("cb-color-picker").value));
+    q("cb-color-hex").addEventListener("change", () => syncColor(q("cb-color-hex").value));
+    q("cb-size").addEventListener("input", () => { q("cb-size-num").value = q("cb-size").value; render(); });
+    q("cb-size-num").addEventListener("input", () => { updateControls(); render(); });
+    q("cb-opacity").addEventListener("input", () => { updateControls(); });
+    q("cb-paint").addEventListener("click", () => setTool("paint"));
+    q("cb-erase").addEventListener("click", () => setTool("erase"));
+    q("cb-pick-color").addEventListener("click", togglePicker);
+    q("cb-undo").addEventListener("click", undo);
+    q("cb-redo").addEventListener("click", redo);
+    q("cb-clear").addEventListener("click", clearPaint);
+    q("cb-apply").addEventListener("click", applySave);
+    q("cb-zoom-in").addEventListener("click", () => applyZoom(state.zoom * 1.25));
+    q("cb-zoom-out").addEventListener("click", () => applyZoom(state.zoom / 1.25));
+    q("cb-zoom-fit").addEventListener("click", fitImage);
+    q("cb-zoom-100").addEventListener("click", () => applyZoom(1));
+    q("cb-fullscreen").addEventListener("click", async () => {
+      try {
+        if (document.fullscreenElement === stageShell) await document.exitFullscreen();
+        else await stageShell.requestFullscreen();
+        requestAnimationFrame(() => { if (state.source) fitImage(); });
+      } catch (error) { setStatus(`Fullscreen unavailable: ${error.message}`); }
+    });
+    document.addEventListener("fullscreenchange", () => requestAnimationFrame(() => { if (state.source) fitImage(); }));
+    window.addEventListener("keydown", (event) => {
+      if (event.code === "Space" && !shortcutsBlocked()) { state.spaceDown = true; viewport.classList.add("is-panning"); event.preventDefault(); }
+      if (shortcutsBlocked()) return;
+      const modifier = event.ctrlKey || event.metaKey;
+      if (modifier && event.key.toLowerCase() === "z") { event.preventDefault(); event.shiftKey ? redo() : undo(); }
+      else if (modifier && event.key.toLowerCase() === "y") { event.preventDefault(); redo(); }
+      else if (event.key === "[") { event.preventDefault(); q("cb-size-num").value = String(Math.max(1, brushSize() - 5)); updateControls(); render(); }
+      else if (event.key === "]") { event.preventDefault(); q("cb-size-num").value = String(Math.min(1000, brushSize() + 5)); updateControls(); render(); }
+      else if (event.key === "+" || event.key === "=") { event.preventDefault(); applyZoom(state.zoom * 1.25); }
+      else if (event.key === "-") { event.preventDefault(); applyZoom(state.zoom / 1.25); }
+      else if (event.key === "0") { event.preventDefault(); fitImage(); }
+      else if (event.key.toLowerCase() === "f") { event.preventDefault(); q("cb-fullscreen").click(); }
+      else if (event.key.toLowerCase() === "i") { event.preventDefault(); togglePicker(); }
+      else if (event.key === "Escape" && state.tool === "pick") { event.preventDefault(); setTool(state.previousDrawTool || "paint"); }
+      else if ((event.key === "ArrowLeft" || event.key === "ArrowRight") && q("cb-image").options.length && q("cb-image").value) {
+        event.preventDefault();
+        navigateImage(event.key === "ArrowRight" ? 1 : -1);
+      }
+    });
+    window.addEventListener("keyup", (event) => {
+      if (event.code === "Space") { state.spaceDown = false; viewport.classList.remove("is-panning"); }
+    });
+    updateControls();
+    syncColor(q("cb-color-hex").value);
+    updateUndoRedo();
+    updateZoomLabel();
+    updatePickerCursor();
+    if (window.bbInitTooltips) window.bbInitTooltips(document);
+  }
+  bindCanvas();
+  bindEvents();
+})();
+</script>

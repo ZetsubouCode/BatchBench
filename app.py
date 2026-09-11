@@ -1,19 +1,40 @@
-import os, json, re, sys, shutil
+import atexit
+import os, json, re, sys, shutil, threading
+import time
+import webbrowser
+from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict, Any
-from flask import Flask, render_template, request, flash, jsonify, redirect, url_for, session, send_file
+from urllib.request import urlopen
+from flask import Flask, render_template, request, flash, jsonify, redirect, url_for, session, send_file, abort
+from markupsafe import Markup, escape
 from dotenv import load_dotenv
+from PIL import Image
+from werkzeug.serving import make_server
 
 from utils.io import readable_path, readable_path_or_none, windows_drives, default_browse_root
+from utils.image_ops import apply_preset
 from utils.parse import parse_bool, parse_int, parse_float, parse_exts, parse_tag_list
 from utils.tool_result import unpack_tool_result
 
 from services.registry import TOOL_REGISTRY
 from services import normalizer
 from services import tag_editor
+from services import review_quiz
 from services import danbooru_client
+from services import tag_catalog
+from services import tagging_assist
 from services import blur_brush
+from services import color_brush
+from services import trigger_safety
+from services.discord_presence import (
+    ACTIVITY_PAYLOADS,
+    DiscordPresenceService,
+    NullDiscordPresence,
+    normalize_activity_key,
+)
+from services.paths import resource_path, user_path
 from services.pipeline import PIPELINE_MANAGER
 
 load_dotenv()
@@ -23,16 +44,346 @@ app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-dev-dev")
 app.config["APP_NAME"] = APP_NAME
 
+_NATIVE_FOLDER_PICKER_LOCK = threading.Lock()
+_RUNTIME_SERVICES_LOCK = threading.Lock()
+_RUNTIME_SERVICES_CONFIGURED = False
+_RUNTIME_SHUTDOWN_REGISTERED = False
+
+
+_APP_ROOT = resource_path()
+_LIVE_RELOAD_DIRS = ("services", "static", "templates", "utils")
+_LIVE_RELOAD_SUFFIXES = {".css", ".html", ".js", ".json", ".py"}
+
+
+def get_discord_presence():
+    return app.extensions.get("discord_presence") or NullDiscordPresence()
+
+
+def _stop_runtime_services() -> None:
+    try:
+        get_discord_presence().stop()
+    except Exception:
+        pass
+
+
+def configure_runtime_services() -> None:
+    global _RUNTIME_SERVICES_CONFIGURED, _RUNTIME_SHUTDOWN_REGISTERED
+    with _RUNTIME_SERVICES_LOCK:
+        if _RUNTIME_SERVICES_CONFIGURED:
+            return
+        service = DiscordPresenceService.from_env()
+        app.extensions["discord_presence"] = service
+        try:
+            service.start()
+            service.set_activity("home")
+        except Exception:
+            app.extensions["discord_presence"] = NullDiscordPresence()
+        if not _RUNTIME_SHUTDOWN_REGISTERED:
+            atexit.register(_stop_runtime_services)
+            _RUNTIME_SHUTDOWN_REGISTERED = True
+        _RUNTIME_SERVICES_CONFIGURED = True
+
+
+def _open_browser_when_ready(url: str, *, timeout_seconds: float = 15.0) -> None:
+    def worker() -> None:
+        deadline = time.monotonic() + timeout_seconds
+        opened = False
+        while time.monotonic() < deadline and not opened:
+            try:
+                with urlopen(url, timeout=0.75):
+                    webbrowser.open(url)
+                    opened = True
+                    return
+            except Exception:
+                time.sleep(0.25)
+        if not opened:
+            try:
+                webbrowser.open(url)
+            except Exception:
+                pass
+
+    thread = threading.Thread(target=worker, name="BatchBenchBrowserLauncher", daemon=True)
+    thread.start()
+
+
+def batchbench_host_port() -> Tuple[str, int]:
+    host = os.getenv("FLASK_RUN_HOST", "127.0.0.1").strip() or "127.0.0.1"
+    try:
+        port = int(os.getenv("FLASK_RUN_PORT", "5000"))
+    except ValueError:
+        port = 5000
+    return host, port
+
+
+def batchbench_local_url() -> str:
+    host, port = batchbench_host_port()
+    return f"http://{host}:{port}/"
+
+
+def run_batchbench_server(*, open_browser: bool = False, stop_event: Optional[threading.Event] = None) -> None:
+    host, port = batchbench_host_port()
+    url = f"http://{host}:{port}/"
+
+    configure_runtime_services()
+    server = None
+    try:
+        server = make_server(host, port, app, threaded=True)
+        if stop_event is not None:
+            def shutdown_when_requested() -> None:
+                stop_event.wait()
+                try:
+                    server.shutdown()
+                except Exception:
+                    pass
+
+            threading.Thread(target=shutdown_when_requested, name="BatchBenchShutdownWatcher", daemon=True).start()
+        if open_browser:
+            _open_browser_when_ready(url)
+        server.serve_forever()
+    finally:
+        if server is not None:
+            try:
+                server.server_close()
+            except Exception:
+                pass
+        _stop_runtime_services()
+
+
+def _live_reload_token() -> str:
+    newest = 0.0
+    for path in [_APP_ROOT / "app.py", *_iter_live_reload_files()]:
+        try:
+            newest = max(newest, path.stat().st_mtime)
+        except OSError:
+            continue
+    return str(int(newest * 1000))
+
+
+def _iter_live_reload_files():
+    for dirname in _LIVE_RELOAD_DIRS:
+        root = _APP_ROOT / dirname
+        if not root.exists():
+            continue
+        for path in root.rglob("*"):
+            if path.is_file() and path.suffix.lower() in _LIVE_RELOAD_SUFFIXES:
+                yield path
+
+
+@app.get("/api/dev/live-reload")
+def api_dev_live_reload():
+    if not app.debug:
+        abort(404)
+    return jsonify({"token": _live_reload_token()})
+
+
+@app.template_filter("guide_inline")
+def guide_inline(value: Any) -> Markup:
+    text = str(value or "")
+    parts = re.split(r"(`[^`]+`|\*\*[^*]+\*\*)", text)
+    rendered: List[str] = []
+    for part in parts:
+        if part.startswith("`") and part.endswith("`") and len(part) >= 2:
+            rendered.append(f"<code>{escape(part[1:-1])}</code>")
+        elif part.startswith("**") and part.endswith("**") and len(part) >= 4:
+            rendered.append(f"<strong>{escape(part[2:-2])}</strong>")
+        else:
+            rendered.append(str(escape(part)))
+    return Markup("".join(rendered))
+
 # Work dir
-WORK_DIR = os.getenv("WORK_DIR", "").strip() or str(Path(__file__).parent.joinpath("_work"))
+WORK_DIR = os.getenv("WORK_DIR", "").strip() or str(user_path("_work"))
 Path(WORK_DIR).mkdir(parents=True, exist_ok=True)
-TAG_EDITOR_GLOSSARY_PATH = Path(__file__).parent / "tag_editor_glossary.json"
+TAG_EDITOR_GLOSSARY_PATH = user_path("tag_editor_glossary.json")
+DEFAULT_TAG_EDITOR_GLOSSARY_PATH = TAG_EDITOR_GLOSSARY_PATH
+TAG_EDITOR_GLOSSARY_RESOURCE_PATH = resource_path("tag_editor_glossary.json")
+README_PATH = resource_path("README.md")
 
 # Dataset normalization preset root
-NORMALIZE_PRESET_ROOT = Path(__file__).parent / "presets"
+NORMALIZE_PRESET_ROOT = resource_path("presets")
 NORMALIZE_PRESET_ROOT.mkdir(parents=True, exist_ok=True)
 SERVER_UPLOAD_IMAGE_EXTS = {ext.lower() for ext in normalizer.DEFAULT_IMAGE_EXTS}
 BROWSE_STRICT_MODE = parse_bool(os.getenv("BROWSE_STRICT_MODE"), default=False)
+BATCH_ADJUST_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
+BATCH_ADJUST_PARAM_KEYS = [
+    "exposure_ev",
+    "brightness",
+    "contrast",
+    "highlights",
+    "shadows",
+    "saturation",
+    "warmth",
+    "tint",
+    "sharpness",
+    "vignette",
+]
+
+WORKFLOW_GUIDE_META = [
+    {"readme_title": "Image -> PNG Converter", "id": "webp", "icon": "images", "title": "Image to PNG Converter"},
+    {"readme_title": "Photo Adjust (preset)", "id": "batch", "icon": "sliders2", "title": "Photo Adjust"},
+    {"readme_title": "Brush Blur", "id": "blur", "icon": "brush", "title": "Brush Blur"},
+    {"readme_title": "Color Brush", "id": "color-brush", "icon": "palette2", "title": "Color Brush"},
+    {"readme_title": "Manga Palette Helper", "id": "palette_helper", "icon": "palette", "title": "Manga Palette Helper"},
+    {"readme_title": "EPUB Image Extractor", "id": "epub-extractor", "icon": "book", "title": "EPUB Image Extractor"},
+    {"readme_title": "Webtoon Panel Splitter", "id": "webtoon", "icon": "scissors", "title": "Webtoon Panel Splitter"},
+    {"readme_title": "Stitch Groups", "id": "merge", "icon": "columns-gap", "title": "Stitch Groups"},
+    {"readme_title": "Flatten & Renumber", "id": "rename", "icon": "sort-numeric-down", "title": "Flatten & Renumber"},
+    {"readme_title": "Combine Dataset", "id": "combine", "icon": "collection", "title": "Combine Dataset"},
+    {"readme_title": "Dataset Tag Editor", "id": "tags", "icon": "tags", "title": "Dataset Tag Editor"},
+    {"readme_title": "Dataset Normalization", "id": "normalize", "icon": "funnel", "title": "Dataset Normalization"},
+    {"readme_title": "Auto Tag Assist", "id": "offline", "icon": "cpu", "title": "Auto Tag Assist"},
+    {"readme_title": "CLIP Token Check", "id": "clip-tokens", "icon": "body-text", "title": "CLIP Token Check"},
+    {"readme_title": "Dataset Workflow", "id": "pipeline", "icon": "diagram-3", "title": "Dataset Workflow"},
+    {"readme_title": "Tag Glossary Wiki", "id": "tag-wiki", "icon": "journal-richtext", "title": "Tag Glossary Wiki"},
+    {"readme_title": "Settings", "id": "settings", "icon": "gear", "title": "Settings"},
+]
+
+WORKFLOW_GUIDE_GROUP_HEADINGS = {"Image Tools", "Dataset Assembly", "Tag Tools", "Workflow", "Reference"}
+WORKFLOW_GUIDE_USE_LABELS = {"How to use"}
+WORKFLOW_GUIDE_WATCH_LABELS = {"Watch out"}
+
+
+def _read_packaged_text_file(path: Path, *, encoding: str = "utf-8") -> str:
+    candidates = [path]
+    if path.suffix:
+        candidates.append(path / path.name)
+    for candidate in candidates:
+        try:
+            if candidate.is_file():
+                return candidate.read_text(encoding=encoding)
+        except Exception:
+            continue
+    return ""
+
+
+def _normalize_guide_label(raw: str) -> str:
+    return re.sub(r"\s+", " ", str(raw or "").strip().rstrip(":"))
+
+
+def _readme_heading_title(line: str, level: int) -> str:
+    prefix = "#" * level
+    if not line.startswith(prefix + " "):
+        return ""
+    return line[len(prefix):].strip()
+
+
+def _append_readme_item(items: List[Dict[str, Any]], current: Optional[Dict[str, Any]]) -> None:
+    if current and current.get("title"):
+        current["raw_lines"] = current.get("raw_lines") or []
+        items.append(current)
+
+
+def _extract_workflow_readme_items(readme_text: str) -> Dict[str, Dict[str, Any]]:
+    lines = readme_text.splitlines()
+    start = 0
+    for idx, line in enumerate(lines):
+        if line.startswith("## 5) "):
+            start = idx + 1
+            break
+
+    items: List[Dict[str, Any]] = []
+    current_group = ""
+    current: Optional[Dict[str, Any]] = None
+    for raw_line in lines[start:]:
+        if raw_line.startswith("## ") and not raw_line.startswith("### "):
+            break
+        h3 = _readme_heading_title(raw_line, 3)
+        h4 = _readme_heading_title(raw_line, 4)
+        if h3:
+            _append_readme_item(items, current)
+            current = None
+            if h3 in WORKFLOW_GUIDE_GROUP_HEADINGS:
+                current_group = h3
+            else:
+                current_group = ""
+                current = {"title": h3, "group": "", "raw_lines": []}
+            continue
+        if h4:
+            _append_readme_item(items, current)
+            current = {"title": h4, "group": current_group, "raw_lines": []}
+            continue
+        if current is not None:
+            current["raw_lines"].append(raw_line)
+
+    _append_readme_item(items, current)
+    return {str(item["title"]).lower(): item for item in items}
+
+
+def _parse_readme_item_sections(raw_lines: List[str]) -> Dict[str, List[str]]:
+    sections: Dict[str, List[str]] = {}
+    active_label = ""
+    for raw_line in raw_lines:
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.endswith(":") and not line.startswith("- "):
+            active_label = _normalize_guide_label(line)
+            sections.setdefault(active_label, [])
+            continue
+        if line.startswith("- "):
+            label = active_label or "Notes"
+            sections.setdefault(label, []).append(line[2:].strip())
+            continue
+        if active_label:
+            sections.setdefault(active_label, []).append(line)
+    return sections
+
+
+def _readme_workflow_guide_items() -> List[Dict[str, Any]]:
+    readme_text = _read_packaged_text_file(README_PATH)
+    readme_items = _extract_workflow_readme_items(readme_text)
+
+    out: List[Dict[str, Any]] = []
+    for meta in WORKFLOW_GUIDE_META:
+        source = readme_items.get(str(meta["readme_title"]).lower(), {})
+        sections = _parse_readme_item_sections(source.get("raw_lines") or [])
+        steps: List[str] = []
+        watch: List[str] = []
+        details: List[Dict[str, Any]] = []
+        for label, values in sections.items():
+            clean_values = [value for value in values if value]
+            if not clean_values:
+                continue
+            if label in WORKFLOW_GUIDE_USE_LABELS:
+                steps.extend(clean_values)
+            elif label in WORKFLOW_GUIDE_WATCH_LABELS:
+                watch.extend(clean_values)
+            else:
+                details.append({"label": label, "items": clean_values})
+
+        summary = steps[0] if steps else (watch[0] if watch else "See README for this tool's usage notes.")
+        out.append({
+            "group": source.get("group", meta.get("group", "")),
+            "id": meta["id"],
+            "icon": meta["icon"],
+            "title": meta["title"],
+            "source_title": meta["readme_title"],
+            "summary": summary,
+            "steps": steps,
+            "details": details,
+            "watch": watch,
+        })
+    return out
+
+
+def _review_quiz_tagging_settings() -> Dict[str, Any]:
+    config = review_quiz.load_review_quiz_config()
+    steps = config.get("quiz_review", {}).get("steps") or []
+    base = tag_editor.load_tagging_quiz_settings()
+    base["segments"] = [
+        {
+            "id": step.get("id") or "",
+            "label": step.get("label") or step.get("id") or "",
+            "order": index + 1,
+            "mode": step.get("mode") or "multi",
+            "required": bool(step.get("required", False)),
+            "auto_advance": bool(step.get("auto_advance", False)),
+            "allow_not_applicable": bool(step.get("allow_not_applicable", False)),
+            "queue_mode": step.get("queue_mode") or "all",
+            "tags": step.get("tags") or [],
+        }
+        for index, step in enumerate(steps)
+    ]
+    return base
 
 
 def _parse_path_list(raw: str) -> List[Path]:
@@ -73,10 +424,87 @@ def _is_allowed_path(path: Path) -> bool:
             return True
     return False
 
+
+def _native_folder_picker(initial_dir: str = "") -> Dict[str, Any]:
+    """Open a local Windows folder dialog for Color Brush.
+
+    The native dialog opens on the machine running the Flask server. This is
+    correct for local BatchBench use and is not intended for remote-hosted
+    BatchBench sessions.
+    """
+    if os.name != "nt":
+        return {
+            "ok": False,
+            "error": "Native Windows folder picker is unavailable in this environment.",
+            "fallback_allowed": True,
+        }
+
+    if not _NATIVE_FOLDER_PICKER_LOCK.acquire(blocking=False):
+        return {
+            "ok": False,
+            "error": "Native Windows folder picker is already open.",
+            "fallback_allowed": True,
+        }
+
+    root = None
+    try:
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+        except Exception:
+            return {
+                "ok": False,
+                "error": "Native Windows folder picker is unavailable in this environment.",
+                "fallback_allowed": True,
+            }
+
+        picker_initial = None
+        raw_initial = str(initial_dir or "").strip()
+        if raw_initial:
+            candidate = readable_path(raw_initial)
+            if candidate.exists() and candidate.is_dir():
+                picker_initial = candidate
+
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            root.attributes("-topmost", True)
+        except Exception:
+            pass
+        try:
+            root.update()
+        except Exception:
+            pass
+
+        options: Dict[str, Any] = {"title": "Choose Color Brush image folder", "parent": root}
+        if picker_initial is not None:
+            options["initialdir"] = str(picker_initial)
+
+        selected = filedialog.askdirectory(**options)
+        if not selected:
+            return {"ok": True, "cancelled": True, "path": ""}
+
+        selected_path = readable_path(selected)
+        if not selected_path.exists() or not selected_path.is_dir():
+            return {"ok": False, "error": "Selected folder does not exist.", "fallback_allowed": True}
+        if not _is_allowed_path(selected_path):
+            return {"ok": False, "error": f"Path is outside allowed roots: {selected_path}", "fallback_allowed": False}
+
+        return {"ok": True, "cancelled": False, "path": str(selected_path)}
+    except Exception as exc:
+        return {"ok": False, "error": f"Native Windows folder picker failed: {exc}", "fallback_allowed": True}
+    finally:
+        if root is not None:
+            try:
+                root.destroy()
+            except Exception:
+                pass
+        _NATIVE_FOLDER_PICKER_LOCK.release()
+
 # Load presets if present
 PRESET_FILES = {}
-for name in ["preset_keep_warm_balanced.json", "preset_neutral_daylight.json", "custom.json"]:
-    p = Path(__file__).parent / name
+for name in ["preset_keep_warm_balanced.json", "preset_neutral_daylight.json", "preset_greyscale.json", "custom.json"]:
+    p = resource_path(name)
     if p.exists():
         try:
             PRESET_FILES[name] = json.loads(p.read_text(encoding="utf-8"))
@@ -102,6 +530,19 @@ def _parse_float(val: Any) -> Optional[float]:
 
 def _parse_int(val: Any, default: int) -> int:
     return parse_int(val, default=default)
+
+
+def _parse_batch_adjust_cfg(payload: Dict[str, Any]) -> Dict[str, float]:
+    src = payload.get("cfg") if isinstance(payload.get("cfg"), dict) else payload
+    if not isinstance(src, dict):
+        src = {}
+    cfg: Dict[str, float] = {}
+    for key in BATCH_ADJUST_PARAM_KEYS:
+        val = _parse_float(src.get(key))
+        if val is None:
+            continue
+        cfg[key] = val
+    return cfg
 
 
 def _safe_child(root: Path, rel: str) -> Optional[Path]:
@@ -138,6 +579,62 @@ def _rel_to_root(root: Path, path: Path) -> str:
             return path.relative_to(root).as_posix()
         except Exception:
             return str(path)
+
+
+def _project_paths(folder_raw: str) -> Dict[str, Any]:
+    return tag_editor.resolve_project_paths(readable_path(folder_raw))
+
+
+def _json_error(message: str, code: int = 400, **extra):
+    payload = {"ok": False, "error": message, "warnings": [], "info": [], **extra}
+    return jsonify(payload), code
+
+
+def _resolve_project_root_from_payload(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Optional[Any]]:
+    folder = (payload.get("folder") or "").strip()
+    if not folder:
+        return None, _json_error("folder is required", 400)
+    paths = _project_paths(folder)
+    root = paths["project_root"]
+    if not root.exists() or not root.is_dir():
+        return None, _json_error(
+            f"Project root not found: {root}",
+            400,
+            normalized_root=str(root),
+            needs_init=True,
+        )
+    return paths, None
+
+
+def _resolve_quiz_project_from_payload(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Optional[Any]]:
+    folder = (payload.get("project_root") or payload.get("folder") or "").strip()
+    if not folder:
+        return None, _json_error("project_root is required", 400)
+    paths = _project_paths(folder)
+    root = paths["project_root"]
+    if not root.exists() or not root.is_dir():
+        return None, _json_error(
+            f"Project root not found: {root}",
+            400,
+            normalized_root=str(root),
+            needs_init=True,
+        )
+    return paths, None
+
+
+def _resolve_rel_under(root: Path, rel: str) -> Optional[Path]:
+    rel_path = Path(str(rel or "").replace("\\", "/").lstrip("/"))
+    if not str(rel_path) or any(part == ".." for part in rel_path.parts):
+        return None
+    target = root / rel_path
+    try:
+        target_res = target.resolve()
+        root_res = root.resolve()
+    except Exception:
+        return None
+    if target_res != root_res and root_res not in target_res.parents:
+        return None
+    return target
 
 
 def _parse_cheatsheet_content(content: str) -> Dict[str, Any]:
@@ -294,6 +791,32 @@ def _remove_empty_dirs(root: Path, keep: Optional[Path] = None) -> None:
             continue
 
 
+def _next_unique_dir(parent: Path, base_name: str) -> Tuple[Path, bool]:
+    candidate = parent / base_name
+    if not candidate.exists():
+        return candidate, False
+    bump = 1
+    while True:
+        next_candidate = parent / f"{base_name}_{bump}"
+        if not next_candidate.exists():
+            return next_candidate, True
+        bump += 1
+
+
+def _next_available_file(dst_parent: Path, file_name: str) -> Tuple[Path, bool]:
+    target = dst_parent / file_name
+    if not target.exists():
+        return target, False
+    stem = Path(file_name).stem
+    suffix = Path(file_name).suffix
+    bump = 1
+    while True:
+        candidate = dst_parent / f"{stem}_{bump}{suffix}"
+        if not candidate.exists():
+            return candidate, True
+        bump += 1
+
+
 def _bad_rel(rel: str) -> bool:
     rel_norm = str(rel).replace("\\", "/")
     parts = [p for p in Path(rel_norm).parts if p not in ("", ".", "./", ".\\")]
@@ -305,26 +828,25 @@ def _parse_tag_list(raw: Any) -> List[str]:
 
 
 def _default_glossary_payload() -> Dict[str, Any]:
-    return {"version": 1, "categories": {"Unsorted": []}, "updated_at": 0}
+    return {"version": 2, "categories": {"Unsorted": []}, "tag_meta": {}, "updated_at": 0}
 
 
 def _normalize_glossary_payload(payload: Any) -> Dict[str, Any]:
     src = payload if isinstance(payload, dict) else {}
     categories = src.get("categories") if isinstance(src.get("categories"), dict) else {}
     normalized_categories: Dict[str, List[str]] = {}
+    seen_tags = set()
     for raw_name, raw_tags in categories.items():
-        name = str(raw_name).strip() or "Unsorted"
-        seen = set()
-        tags: List[str] = []
+        name = re.sub(r"\s+", " ", str(raw_name).strip())[:40] or "Unsorted"
+        tags = normalized_categories.setdefault(name, [])
         if isinstance(raw_tags, list):
             for raw_tag in raw_tags:
                 tag = str(raw_tag or "").strip().lower()
-                tag = re.sub(r"\s+", "_", tag).strip("_")
-                if not tag or tag in seen:
+                tag = re.sub(r"_+", "_", re.sub(r"\s+", "_", tag)).strip("_")
+                if not tag or tag in seen_tags:
                     continue
-                seen.add(tag)
+                seen_tags.add(tag)
                 tags.append(tag)
-        normalized_categories[name] = tags
     if "Unsorted" not in normalized_categories:
         normalized_categories["Unsorted"] = []
     updated_at = src.get("updated_at", 0)
@@ -332,14 +854,54 @@ def _normalize_glossary_payload(payload: Any) -> Dict[str, Any]:
         updated_at = int(updated_at)
     except Exception:
         updated_at = 0
-    return {"version": 1, "categories": normalized_categories, "updated_at": max(0, updated_at)}
+    raw_tag_meta = src.get("tag_meta") if isinstance(src.get("tag_meta"), dict) else {}
+    normalized_tag_meta: Dict[str, Dict[str, Any]] = {}
+    for tag in seen_tags:
+        raw_meta = raw_tag_meta.get(tag)
+        if not isinstance(raw_meta, dict):
+            continue
+        post_count = raw_meta.get("post_count")
+        try:
+            post_count = max(0, int(post_count))
+        except Exception:
+            post_count = None
+        category = raw_meta.get("category")
+        try:
+            category = int(category)
+        except Exception:
+            category = None
+        fetched_at = raw_meta.get("fetched_at", 0)
+        try:
+            fetched_at = max(0, int(fetched_at))
+        except Exception:
+            fetched_at = 0
+        meta: Dict[str, Any] = {
+            "found": bool(raw_meta.get("found", post_count is not None)),
+            "post_count": post_count,
+            "category": category,
+            "category_name": str(raw_meta.get("category_name") or "unknown")[:40],
+            "fetched_at": fetched_at,
+        }
+        normalized_tag_meta[tag] = meta
+    return {
+        "version": 2,
+        "categories": normalized_categories,
+        "tag_meta": normalized_tag_meta,
+        "updated_at": max(0, updated_at),
+    }
 
 
 def _load_tag_editor_glossary() -> Dict[str, Any]:
-    if not TAG_EDITOR_GLOSSARY_PATH.exists():
+    use_resource_fallback = TAG_EDITOR_GLOSSARY_PATH == DEFAULT_TAG_EDITOR_GLOSSARY_PATH
+    path = (
+        TAG_EDITOR_GLOSSARY_PATH
+        if TAG_EDITOR_GLOSSARY_PATH.exists() or not use_resource_fallback
+        else TAG_EDITOR_GLOSSARY_RESOURCE_PATH
+    )
+    if not path.exists():
         return _default_glossary_payload()
     try:
-        payload = json.loads(TAG_EDITOR_GLOSSARY_PATH.read_text(encoding="utf-8"))
+        payload = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return _default_glossary_payload()
     return _normalize_glossary_payload(payload)
@@ -347,6 +909,10 @@ def _load_tag_editor_glossary() -> Dict[str, Any]:
 
 def _save_tag_editor_glossary(payload: Any) -> Dict[str, Any]:
     normalized = _normalize_glossary_payload(payload)
+    current = _load_tag_editor_glossary()
+    if current.get("updated_at", 0) > normalized.get("updated_at", 0):
+        return current
+    TAG_EDITOR_GLOSSARY_PATH.parent.mkdir(parents=True, exist_ok=True)
     TAG_EDITOR_GLOSSARY_PATH.write_text(json.dumps(normalized, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
     return normalized
 
@@ -429,6 +995,15 @@ def api_list_dir():
     return jsonify(out)
 
 
+@app.post("/api/native-folder-picker")
+def api_native_folder_picker():
+    payload = request.get_json(silent=True) or {}
+    initial_dir = str(payload.get("initial_dir") or "").strip()
+    result = _native_folder_picker(initial_dir)
+    status = 200 if result.get("ok") or result.get("fallback_allowed") else 403
+    return jsonify(result), status
+
+
 @app.post("/api/danbooru/taginfo")
 def api_danbooru_taginfo():
     payload = request.get_json(silent=True) or {}
@@ -450,15 +1025,1068 @@ def api_danbooru_taginfo():
     code = 400 if error_code == "invalid_input" else 502
     return jsonify(result), code
 
-@app.post("/api/tags/scan")
-def api_tags_scan():
+
+@app.post("/api/danbooru/tag-summaries")
+def api_danbooru_tag_summaries():
+    payload = request.get_json(silent=True) or {}
+    return jsonify(danbooru_client.lookup_tag_summaries(payload.get("tags")))
+
+
+@app.post("/api/danbooru/tag-wiki")
+def api_danbooru_tag_wiki():
+    payload = request.get_json(silent=True) or {}
+    preview_limit = _parse_int(payload.get("preview_limit"), 12)
+    preview_limit = max(1, min(20, preview_limit))
+    result = danbooru_client.lookup_tag_wiki(
+        payload.get("tag"),
+        preview_limit=preview_limit,
+    )
+    error_code = result.get("error_code")
+    if error_code:
+        result = {k: v for k, v in result.items() if k != "error_code"}
+    if result.get("ok"):
+        return jsonify(result)
+    code = 400 if error_code == "invalid_input" else 502
+    return jsonify(result), code
+
+
+def _tag_suggestion_section_defs() -> List[Dict[str, str]]:
+    sections: List[Dict[str, str]] = []
+    try:
+        config = review_quiz.load_review_quiz_config()
+        for step in (config.get("quiz_review") or {}).get("steps") or []:
+            step_id = str(step.get("id") or "").strip()
+            if step_id:
+                sections.append({"id": step_id, "label": str(step.get("label") or step_id)})
+    except Exception:
+        pass
+    return sections
+
+
+def _danbooru_step_suggestions_enabled(section: str) -> Optional[bool]:
+    section_key = tag_catalog.normalize_tag_name(section)
+    if not section_key or section_key == "manual_tags":
+        return None
+    try:
+        config = review_quiz.load_review_quiz_config()
+        for step in (config.get("quiz_review") or {}).get("steps") or []:
+            step_id = tag_catalog.normalize_tag_name(step.get("id") or "")
+            if step_id == section_key:
+                return bool(step.get("danbooru_autosuggest", False))
+    except Exception:
+        return False
+    return None
+
+
+@app.get("/api/tag-catalog/status")
+def api_tag_catalog_status():
+    return jsonify(tag_catalog.get_catalog_status())
+
+
+@app.post("/api/tag-catalog/sync")
+def api_tag_catalog_sync():
+    result = tag_catalog.start_full_sync()
+    return jsonify(result), 200 if result.get("ok") else 400
+
+
+@app.post("/api/tag-catalog/cancel")
+def api_tag_catalog_cancel():
+    result = tag_catalog.cancel_sync()
+    return jsonify(result), 200 if result.get("ok") else 400
+
+
+@app.post("/api/tag-catalog/import")
+def api_tag_catalog_import():
+    upload = request.files.get("file")
+    if not upload or not upload.filename:
+        return _json_error("CSV file is required.", 400)
+    name = Path(upload.filename).name
+    if not name.lower().endswith(".csv"):
+        return _json_error("Import file must be a CSV.", 400)
+    temp_dir = Path(WORK_DIR) / "uploads" / "tag_catalog"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    temp_path = temp_dir / f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{name}"
+    upload.save(str(temp_path))
+    try:
+        result = tag_catalog.import_csv(temp_path)
+    finally:
+        try:
+            temp_path.unlink()
+        except Exception:
+            pass
+    return jsonify(result), 200 if result.get("ok") else 400
+
+
+@app.get("/api/tag-catalog/export")
+def api_tag_catalog_export():
+    try:
+        path = tag_catalog.export_csv()
+    except FileNotFoundError as exc:
+        return _json_error(str(exc), 404)
+    return send_file(path, as_attachment=True, download_name="danbooru_tags.csv", mimetype="text/csv")
+
+
+@app.post("/api/tag-catalog/rebuild-index")
+def api_tag_catalog_rebuild_index():
+    result = tag_catalog.rebuild_sqlite_from_csv()
+    return jsonify(result), 200 if result.get("ok") else 400
+
+
+@app.post("/api/tag-catalog/suggest")
+def api_tag_catalog_suggest():
+    payload = request.get_json(silent=True) or {}
+    query = str(payload.get("query") or "")
+    if len(query) > 120:
+        return _json_error("query is too long", 400)
+    section = tag_catalog.normalize_tag_name(payload.get("section") or "manual_tags")
+    settings = tag_catalog.settings_with_sections(_tag_suggestion_section_defs())
+    catalog_status = tag_catalog.get_catalog_status()
+    step_enabled = _danbooru_step_suggestions_enabled(section)
+    section_enabled = bool((settings.get("sections") or {}).get(section, {}).get("enabled", False))
+    if step_enabled is not None:
+        section_enabled = step_enabled
+    master_enabled = bool(settings.get("enabled") or step_enabled is True)
+    enabled = bool(master_enabled and section_enabled and catalog_status.get("ready"))
+    if not enabled:
+        return jsonify({"ok": True, "enabled": False, "suggestions": [], "warnings": [], "info": []})
+    try:
+        limit = int(payload.get("limit", settings.get("max_suggestions", 12)))
+    except Exception:
+        limit = int(settings.get("max_suggestions", 12))
+    limit = max(1, min(30, limit))
+    include_categories = [
+        name for name, include in (settings.get("include_categories") or {}).items()
+        if include
+    ]
+    step_cfg = None
+    try:
+        for cfg_step in (review_quiz.load_review_quiz_config().get("quiz_review") or {}).get("steps") or []:
+            if tag_catalog.normalize_tag_name(cfg_step.get("id") or "") == section:
+                step_cfg = cfg_step
+                break
+    except Exception:
+        step_cfg = None
+    if step_cfg and not _parse_bool(payload.get("show_all")):
+        preferred_categories = [
+            tag_catalog.normalize_tag_name(name)
+            for name in (step_cfg.get("preferred_danbooru_categories") or [])
+            if tag_catalog.normalize_tag_name(name)
+        ]
+        if preferred_categories:
+            include_categories = [name for name in include_categories if name in preferred_categories] or include_categories
+        project_tags = list(payload.get("project_tags") if isinstance(payload.get("project_tags"), list) else [])
+        project_tags.extend(step_cfg.get("preferred_tags") or [])
+    else:
+        project_tags = payload.get("project_tags") if isinstance(payload.get("project_tags"), list) else []
+    suggestions = tag_catalog.search_suggestions(
+        query=query,
+        limit=limit,
+        min_post_count=int(settings.get("min_post_count", 0) or 0),
+        include_categories=include_categories,
+        include_deprecated=bool(settings.get("include_deprecated")),
+        existing_tags=payload.get("existing_tags") if isinstance(payload.get("existing_tags"), list) else [],
+        project_tags=project_tags,
+        glossary_tags=payload.get("glossary_tags") if isinstance(payload.get("glossary_tags"), list) else [],
+    )
+    return jsonify({"ok": True, "enabled": True, "suggestions": suggestions, "warnings": [], "info": []})
+
+
+@app.get("/api/tag-suggestion-settings")
+def api_tag_suggestion_settings_get():
+    return jsonify({"ok": True, "settings": tag_catalog.settings_with_sections(_tag_suggestion_section_defs()), "warnings": [], "info": []})
+
+
+@app.post("/api/tag-suggestion-settings")
+def api_tag_suggestion_settings_post():
+    payload = request.get_json(silent=True) or {}
+    settings = payload.get("settings") if isinstance(payload.get("settings"), dict) else payload
+    saved = tag_catalog.save_settings(settings)
+    saved = tag_catalog.settings_with_sections(_tag_suggestion_section_defs())
+    return jsonify({"ok": True, "settings": saved, "warnings": [], "info": ["Tag suggestion settings saved"]})
+
+
+@app.get("/api/settings/review-quiz")
+def api_settings_review_quiz_get():
+    return jsonify({"ok": True, "config": review_quiz.load_review_quiz_config(), "warnings": [], "info": []})
+
+
+@app.post("/api/settings/review-quiz")
+def api_settings_review_quiz_save():
+    payload = request.get_json(silent=True) or {}
+    config = payload.get("config") if isinstance(payload.get("config"), dict) else payload
+    try:
+        saved = review_quiz.save_review_quiz_config(config)
+    except ValueError as exc:
+        return _json_error(str(exc), 400)
+    except Exception as exc:
+        return _json_error(f"Could not save Guided Tagging Flow settings: {exc}", 500)
+    return jsonify({"ok": True, "config": saved, "warnings": [], "info": []})
+
+
+@app.post("/api/settings/review-quiz/reset")
+def api_settings_review_quiz_reset():
+    try:
+        saved = review_quiz.reset_review_quiz_config()
+    except Exception as exc:
+        return _json_error(f"Could not reset Guided Tagging Flow settings: {exc}", 500)
+    return jsonify({"ok": True, "config": saved, "warnings": [], "info": []})
+
+
+@app.post("/api/settings/review-quiz/from-cheatsheet")
+def api_settings_review_quiz_from_cheatsheet():
+    payload = request.get_json(silent=True) or {}
+    rel = (payload.get("rel") or "prompt.txt").strip()
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    target = _resolve_rel_under(paths["project_root"], rel)
+    if not target or not target.exists() or not target.is_file() or target.suffix.lower() != ".txt":
+        return _json_error("Cheat sheet .txt file not found", 404, normalized_root=str(paths["project_root"]))
+    try:
+        content = target.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        content = target.read_text(encoding="utf-8-sig")
+    except Exception as exc:
+        return _json_error(str(exc), 500, normalized_root=str(paths["project_root"]))
+    parsed = _parse_cheatsheet_content(content)
+    return jsonify(
+        {
+            "ok": True,
+            "steps": review_quiz.steps_from_cheatsheet_sections(parsed.get("sections")),
+            "trigger": parsed.get("trigger") or "",
+            "rel": rel,
+            "normalized_root": str(paths["project_root"]),
+            "warnings": [],
+            "info": [],
+        }
+    )
+
+
+@app.post("/api/tags/quiz/list")
+def api_tags_quiz_list():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    try:
+        result = review_quiz.list_quiz_items(
+            paths["project_root"],
+            area=(payload.get("area") or "temp"),
+            step_id=(payload.get("step_id") or ""),
+            queue=(payload.get("queue") or ""),
+            exts=_parse_exts(payload.get("exts")),
+        )
+    except ValueError as exc:
+        return _json_error(str(exc), 400, normalized_root=str(paths["project_root"]))
+    except Exception as exc:
+        return _json_error(f"Quiz Review scan failed: {exc}", 500, normalized_root=str(paths["project_root"]))
+    for item in result.get("items") or []:
+        item["image_url"] = url_for(
+            "api_tags_image",
+            folder=str(paths["project_root"]),
+            area=result.get("area") or "temp",
+            path=item.get("rel") or "",
+        )
+    result.update({"normalized_root": str(paths["project_root"]), "needs_init": False, "warnings": [], "info": []})
+    return jsonify(result)
+
+
+@app.post("/api/tags/quiz/save")
+def api_tags_quiz_save():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    try:
+        result = review_quiz.save_quiz_item(
+            paths["project_root"],
+            area=(payload.get("area") or "temp"),
+            rel=(payload.get("rel") or ""),
+            step_id=(payload.get("step_id") or ""),
+            selected_tags=payload.get("selected_tags") or [],
+            manual_tags=payload.get("manual_tags") if "manual_tags" in payload else None,
+            not_applicable=_parse_bool(payload.get("not_applicable")),
+            uncertain=_parse_bool(payload.get("uncertain")),
+            uncertain_note=payload.get("uncertain_note") or "",
+            mark_reviewed=_parse_bool(payload.get("mark_reviewed"), True),
+            backup=_parse_bool(payload.get("backup"), True),
+        )
+    except ValueError as exc:
+        return _json_error(str(exc), 400, normalized_root=str(paths["project_root"]))
+    except Exception as exc:
+        return _json_error(f"Quiz Review save failed: {exc}", 500, normalized_root=str(paths["project_root"]))
+    result.update({"normalized_root": str(paths["project_root"]), "needs_init": False, "info": []})
+    return jsonify(result)
+
+
+@app.post("/api/tags/quiz/restore")
+def api_tags_quiz_restore():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    try:
+        result = review_quiz.restore_quiz_item(
+            paths["project_root"],
+            area=(payload.get("area") or "temp"),
+            rel=(payload.get("rel") or ""),
+            tags=payload.get("tags") or [],
+            metadata_item=payload.get("metadata") or {},
+            had_txt=_parse_bool(payload.get("had_txt"), True),
+        )
+    except ValueError as exc:
+        return _json_error(str(exc), 400, normalized_root=str(paths["project_root"]))
+    except Exception as exc:
+        return _json_error(f"Quiz Review restore failed: {exc}", 500, normalized_root=str(paths["project_root"]))
+    result.update({"normalized_root": str(paths["project_root"]), "needs_init": False, "info": []})
+    return jsonify(result)
+
+
+@app.post("/api/tags/assist/state")
+def api_tags_assist_state():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    state = tagging_assist.load_state(paths["project_root"])
+    return jsonify({"ok": True, "assist": state, "normalized_root": str(paths["project_root"]), "warnings": [], "info": []})
+
+
+@app.post("/api/tags/assist/custom-tags")
+def api_tags_assist_custom_tags():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    state = tagging_assist.set_custom_tags(paths["project_root"], payload.get("tags") or [])
+    return jsonify({"ok": True, "assist": state, "normalized_root": str(paths["project_root"]), "warnings": [], "info": []})
+
+
+@app.post("/api/tags/packs/list")
+def api_tags_packs_list():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    result = tagging_assist.list_packs(
+        paths["project_root"],
+        segment_id=payload.get("segment_id") or "",
+        show_all=_parse_bool(payload.get("show_all")),
+    )
+    result["normalized_root"] = str(paths["project_root"])
+    return jsonify(result)
+
+
+@app.post("/api/tags/packs/save")
+def api_tags_packs_save():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    try:
+        result = tagging_assist.upsert_pack(paths["project_root"], payload.get("pack") if isinstance(payload.get("pack"), dict) else payload)
+    except ValueError as exc:
+        return _json_error(str(exc), 400, normalized_root=str(paths["project_root"]))
+    result["normalized_root"] = str(paths["project_root"])
+    return jsonify(result)
+
+
+@app.post("/api/tags/packs/delete")
+def api_tags_packs_delete():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    try:
+        result = tagging_assist.delete_pack(paths["project_root"], payload.get("id") or "")
+    except ValueError as exc:
+        return _json_error(str(exc), 404, normalized_root=str(paths["project_root"]))
+    result["normalized_root"] = str(paths["project_root"])
+    return jsonify(result)
+
+
+@app.post("/api/tags/packs/apply")
+def api_tags_packs_apply():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    try:
+        result = tagging_assist.apply_pack(paths["project_root"], payload.get("id") or "", payload.get("current_tags") or [])
+    except ValueError as exc:
+        return _json_error(str(exc), 404, normalized_root=str(paths["project_root"]))
+    result["normalized_root"] = str(paths["project_root"])
+    return jsonify(result)
+
+
+@app.post("/api/tags/siblings/group")
+def api_tags_siblings_group():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    try:
+        result = tagging_assist.upsert_sibling_group(paths["project_root"], payload.get("group") if isinstance(payload.get("group"), dict) else payload)
+    except ValueError as exc:
+        return _json_error(str(exc), 400, normalized_root=str(paths["project_root"]))
+    result["normalized_root"] = str(paths["project_root"])
+    return jsonify(result)
+
+
+@app.post("/api/tags/siblings/preview")
+def api_tags_siblings_preview():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    try:
+        result = tagging_assist.sibling_preview(
+            paths["project_root"],
+            payload.get("area") or "temp",
+            payload.get("source_rel") or "",
+            payload.get("dest_rels") or [],
+            payload.get("tags") or [],
+            payload.get("mode") or "append",
+        )
+    except ValueError as exc:
+        return _json_error(str(exc), 400, normalized_root=str(paths["project_root"]))
+    result["normalized_root"] = str(paths["project_root"])
+    return jsonify(result)
+
+
+@app.post("/api/tags/siblings/apply")
+def api_tags_siblings_apply():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    try:
+        result = tagging_assist.sibling_apply(
+            paths["project_root"],
+            payload.get("area") or "temp",
+            payload.get("source_rel") or "",
+            payload.get("dest_rels") or [],
+            payload.get("tags") or [],
+            payload.get("mode") or "append",
+        )
+    except ValueError as exc:
+        return _json_error(str(exc), 400, normalized_root=str(paths["project_root"]))
+    result["normalized_root"] = str(paths["project_root"])
+    return jsonify(result)
+
+
+@app.post("/api/tags/machine-suggestions")
+def api_tags_machine_suggestions():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    if request.method == "POST":
+        try:
+            result = tagging_assist.list_machine_suggestions(paths["project_root"], payload.get("rel") or "")
+        except ValueError as exc:
+            return _json_error(str(exc), 400, normalized_root=str(paths["project_root"]))
+        result["normalized_root"] = str(paths["project_root"])
+        return jsonify(result)
+
+
+@app.post("/api/tags/machine-suggestions/store")
+def api_tags_machine_suggestions_store():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    try:
+        result = tagging_assist.store_machine_suggestions(paths["project_root"], payload.get("rel") or "", payload.get("suggestions") or [], payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {})
+    except ValueError as exc:
+        return _json_error(str(exc), 400, normalized_root=str(paths["project_root"]))
+    result["normalized_root"] = str(paths["project_root"])
+    return jsonify(result)
+
+
+@app.post("/api/tags/machine-suggestions/ignore")
+def api_tags_machine_suggestions_ignore():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    try:
+        result = tagging_assist.ignore_machine_suggestion(paths["project_root"], payload.get("rel") or "", payload.get("tag") or "")
+    except ValueError as exc:
+        return _json_error(str(exc), 400, normalized_root=str(paths["project_root"]))
+    result["normalized_root"] = str(paths["project_root"])
+    return jsonify(result)
+
+
+@app.post("/api/tags/lint")
+def api_tags_lint():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    try:
+        result = tagging_assist.lint_captions(
+            paths["project_root"],
+            area=payload.get("area") or "temp",
+            severity=str(payload.get("severity") or ""),
+            issue_type=str(payload.get("issue_type") or ""),
+        )
+    except ValueError as exc:
+        return _json_error(str(exc), 400, normalized_root=str(paths["project_root"]))
+    result["normalized_root"] = str(paths["project_root"])
+    return jsonify(result)
+
+
+@app.post("/api/tags/lint/export")
+def api_tags_lint_export():
+    payload = request.get_json(silent=True) or {}
+    report = payload.get("report") if isinstance(payload.get("report"), dict) else {"ok": True, "rows": []}
+    fmt = str(payload.get("format") or "json").lower()
+    text, mimetype = tagging_assist.export_lint(report, fmt)
+    download_name = "caption_lint.csv" if fmt == "csv" else "caption_lint.json"
+    return send_file(BytesIO(text.encode("utf-8")), as_attachment=True, download_name=download_name, mimetype=mimetype)
+
+
+@app.get("/api/tagging-quiz/settings")
+def api_tagging_quiz_settings_get():
+    return jsonify({"ok": True, "settings": _review_quiz_tagging_settings(), "warnings": [], "info": []})
+
+
+@app.post("/api/tagging-quiz/settings")
+def api_tagging_quiz_settings_post():
+    payload = request.get_json(silent=True) or {}
+    try:
+        saved = tag_editor.save_tagging_quiz_settings(payload.get("settings") if "settings" in payload else payload)
+    except Exception as exc:
+        return _json_error(f"Could not save Guided Tagging Flow settings: {exc}", 500)
+    return jsonify({"ok": True, "settings": saved, "warnings": [], "info": ["Guided Tagging Flow settings saved"]})
+
+
+@app.post("/api/tagging-quiz/cheatsheet/parse")
+def api_tagging_quiz_cheatsheet_parse():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_quiz_project_from_payload(payload)
+    if error:
+        return error
+    result = tag_editor.parse_cheatsheet_file(paths["project_root"], payload.get("prompt_file") or "prompt.txt")
+    code = 200 if result.get("ok") else 404
+    result.setdefault("normalized_root", str(paths["project_root"]))
+    result.setdefault("warnings", [])
+    result.setdefault("info", [])
+    return jsonify(result), code
+
+
+@app.post("/api/tagging-quiz/cheatsheet/validate-danbooru")
+def api_tagging_quiz_cheatsheet_validate_danbooru():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_quiz_project_from_payload(payload)
+    if error:
+        return error
+    parsed = tag_editor.parse_cheatsheet_file(paths["project_root"], payload.get("prompt_file") or "prompt.txt")
+    if not parsed.get("ok"):
+        parsed.setdefault("normalized_root", str(paths["project_root"]))
+        parsed.setdefault("warnings", [])
+        parsed.setdefault("info", [])
+        return jsonify(parsed), 404
+
+    try:
+        max_tags = int(payload.get("max_tags") or 300)
+    except Exception:
+        max_tags = 300
+    max_tags = max(1, min(500, max_tags))
+
+    tag_sources: Dict[str, Dict[str, Any]] = {}
+
+    def remember(raw_tag: Any, section_name: str) -> None:
+        raw = str(raw_tag or "").strip()
+        tag = danbooru_client.normalize_tag(raw)
+        if not tag or len(tag) > 120:
+            return
+        item = tag_sources.setdefault(tag, {"raw": raw, "sections": []})
+        if raw and raw not in item.setdefault("raw_variants", []):
+            item["raw_variants"].append(raw)
+        if section_name and section_name not in item["sections"]:
+            item["sections"].append(section_name)
+
+    for section in parsed.get("sections") or []:
+        if not isinstance(section, dict):
+            continue
+        section_name = str(section.get("name") or section.get("category") or "Unsorted").strip() or "Unsorted"
+        for raw_tag in section.get("tags") or []:
+            remember(raw_tag, section_name)
+        for group in section.get("conditionals") or []:
+            for raw_tag in group or []:
+                remember(raw_tag, section_name)
+
+    tags = list(tag_sources.keys())[:max_tags]
+    summaries: Dict[str, Dict[str, Any]] = {}
+    errors: Dict[str, str] = {}
+    for idx in range(0, len(tags), 20):
+        batch = tags[idx : idx + 20]
+        batch_result = danbooru_client.lookup_tag_summaries(batch)
+        if isinstance(batch_result.get("summaries"), dict):
+            summaries.update(batch_result["summaries"])
+        if isinstance(batch_result.get("errors"), dict):
+            errors.update(batch_result["errors"])
+
+    rows: List[Dict[str, Any]] = []
+    counts = {"found": 0, "missing": 0, "deprecated": 0, "errors": len(errors), "checked": len(tags)}
+    for tag in tags:
+        source = tag_sources.get(tag) or {}
+        summary = summaries.get(tag) or {
+            "name": tag,
+            "category": None,
+            "category_name": "unknown",
+            "post_count": 0,
+            "found": False,
+        }
+        found = bool(summary.get("found"))
+        deprecated = found and (
+            summary.get("category") == 2 or str(summary.get("category_name") or "").lower() == "deprecated"
+        )
+        if found:
+            counts["found"] += 1
+        else:
+            counts["missing"] += 1
+        if deprecated:
+            counts["deprecated"] += 1
+        rows.append(
+            {
+                "tag": tag,
+                "raw": source.get("raw") or tag,
+                "raw_variants": source.get("raw_variants") or [],
+                "sections": source.get("sections") or [],
+                "found": found,
+                "deprecated": deprecated,
+                "category": summary.get("category"),
+                "category_name": summary.get("category_name") or "unknown",
+                "post_count": summary.get("post_count") or 0,
+                "error": errors.get(tag) or "",
+            }
+        )
+
+    truncated = len(tag_sources) > len(tags)
+    warnings = []
+    if truncated:
+        warnings.append(f"Checked the first {len(tags)} unique tags out of {len(tag_sources)}.")
+    if errors:
+        warnings.append("Some Danbooru lookups failed; retry the check if the network is unstable.")
+    return jsonify(
+        {
+            "ok": True,
+            "rel": parsed.get("rel") or payload.get("prompt_file") or "prompt.txt",
+            "trigger": parsed.get("trigger") or "",
+            "total_tags": len(tag_sources),
+            "checked_tags": len(tags),
+            "truncated": truncated,
+            "counts": counts,
+            "tags": {row["tag"]: row for row in rows},
+            "rows": rows,
+            "errors": errors,
+            "warnings": warnings,
+            "info": [],
+            "normalized_root": str(paths["project_root"]),
+        }
+    )
+
+
+@app.post("/api/tagging-quiz/recommendations/build")
+def api_tagging_quiz_recommendations_build():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_quiz_project_from_payload(payload)
+    if error:
+        return error
+    try:
+        result = tag_editor.build_tagging_quiz_recommendations(
+            paths["project_root"],
+            payload.get("mapping_rows") or [],
+            prompt_file=payload.get("prompt_file") or "prompt.txt",
+            settings=_review_quiz_tagging_settings(),
+        )
+    except Exception as exc:
+        return _json_error(f"Could not build recommendations: {exc}", 500, normalized_root=str(paths["project_root"]))
+    return jsonify(result)
+
+
+@app.post("/api/tagging-quiz/session/start")
+def api_tagging_quiz_session_start():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_quiz_project_from_payload(payload)
+    if error:
+        return error
+    try:
+        result = tag_editor.start_tagging_session(
+            paths["project_root"],
+            _parse_exts(payload.get("image_exts") or payload.get("exts")),
+            mapping_rows=payload.get("mapping_rows") or [],
+            session_defaults=payload.get("session_defaults") or {},
+            recommendations=payload.get("recommendations") if isinstance(payload.get("recommendations"), dict) else None,
+            recommendation_sources=payload.get("recommendation_sources") if isinstance(payload.get("recommendation_sources"), dict) else None,
+            settings=_review_quiz_tagging_settings(),
+            replace=True,
+        )
+    except Exception as exc:
+        return _json_error(f"Could not start tagging session: {exc}", 500, normalized_root=str(paths["project_root"]))
+    return jsonify(result)
+
+
+@app.post("/api/tagging-quiz/session/load")
+def api_tagging_quiz_session_load():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_quiz_project_from_payload(payload)
+    if error:
+        return error
+    result = tag_editor.load_tagging_session(paths["project_root"])
+    code = 200 if result.get("ok") else 400
+    return jsonify(result), code
+
+
+@app.post("/api/tagging-quiz/session/save")
+def api_tagging_quiz_session_save():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_quiz_project_from_payload(payload)
+    if error:
+        return error
+    result = tag_editor.save_tagging_session(paths["project_root"], payload.get("session") or {})
+    code = 200 if result.get("ok") else 400
+    return jsonify(result), code
+
+
+@app.post("/api/tagging-quiz/image/save")
+def api_tagging_quiz_image_save():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_quiz_project_from_payload(payload)
+    if error:
+        return error
+    result = tag_editor.save_tagging_quiz_image(
+        paths["project_root"],
+        payload.get("image_rel") or "",
+        payload.get("segments") or {},
+        session_payload=payload.get("session") if isinstance(payload.get("session"), dict) else None,
+        backup=_parse_bool(payload.get("backup"), True),
+    )
+    code = 200 if result.get("ok") else 400
+    return jsonify(result), code
+
+
+@app.post("/api/tagging-quiz/session/delete")
+def api_tagging_quiz_session_delete():
+    payload = request.get_json(silent=True) or {}
+    if not _parse_bool(payload.get("confirm")):
+        return _json_error("confirm is required", 400)
+    paths, error = _resolve_quiz_project_from_payload(payload)
+    if error:
+        return error
+    return jsonify(tag_editor.delete_tagging_session(paths["project_root"]))
+
+
+@app.post("/api/tagging-quiz/session/archive")
+def api_tagging_quiz_session_archive():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_quiz_project_from_payload(payload)
+    if error:
+        return error
+    result = tag_editor.archive_tagging_session(paths["project_root"])
+    code = 200 if result.get("ok") else 400
+    return jsonify(result), code
+
+
+@app.post("/api/tags/project-state")
+def api_tags_project_state():
     payload = request.get_json(silent=True) or {}
     folder = (payload.get("folder") or "").strip()
     if not folder:
-        return jsonify({"ok": False, "error": "folder is required"}), 400
+        return _json_error("folder is required", 400)
+    exts = _parse_exts(payload.get("exts"))
+    multi_trigger_mode = _parse_bool(payload.get("multi_trigger_mode"), False)
+    result = tag_editor.inspect_project_layout(readable_path(folder), exts, multi_trigger_mode=multi_trigger_mode)
+    code = 200 if result.get("ok") else 400
+    result.setdefault("normalized_root", result.get("project_root", ""))
+    result.setdefault("warnings", [])
+    result.setdefault("info", [])
+    result.setdefault("needs_init", not bool(result.get("ready")))
+    return jsonify(result), code
+
+
+@app.post("/api/tags/project-init")
+def api_tags_project_init():
+    payload = request.get_json(silent=True) or {}
+    folder = (payload.get("folder") or "").strip()
+    if not folder:
+        return _json_error("folder is required", 400)
+    exts = _parse_exts(payload.get("exts"))
+    multi_trigger_mode = _parse_bool(payload.get("multi_trigger_mode"), False)
+    apply_changes = _parse_bool(payload.get("apply"))
+    if not apply_changes:
+        result = tag_editor.inspect_project_layout(readable_path(folder), exts, multi_trigger_mode=multi_trigger_mode)
+        code = 200 if result.get("ok") else 400
+        result.setdefault("normalized_root", result.get("project_root", ""))
+        result.setdefault("warnings", [])
+        result.setdefault("info", [])
+        result["apply"] = False
+        return jsonify(result), code
+    result = tag_editor.initialize_project_layout(
+        readable_path(folder),
+        exts,
+        create_prompt=True,
+        tagging_quiz_settings=tag_editor.load_tagging_quiz_settings(),
+        multi_trigger_mode=multi_trigger_mode,
+    )
+    code = 200 if result.get("ok") else 400
+    result.setdefault("normalized_root", result.get("project_root", ""))
+    result.setdefault("warnings", [])
+    result.setdefault("info", [])
+    result["apply"] = True
+    return jsonify(result), code
+
+
+@app.post("/api/trigger-safety/check")
+def api_trigger_safety_check():
+    payload = request.get_json(silent=True) or {}
+    try:
+        result = trigger_safety.scan_trigger_payload(
+            payload,
+            online_poi=_parse_bool(payload.get("online_poi"), True),
+        )
+    except Exception as exc:
+        return _json_error(f"Trigger safety check failed: {exc}", 500)
+    result.setdefault("warnings", [])
+    result.setdefault("info", [])
+    return jsonify(result), 200
+
+
+@app.post("/api/trigger-safety/blacklist/add")
+def api_trigger_safety_blacklist_add():
+    payload = request.get_json(silent=True) or {}
+    term = str(payload.get("term") or "").strip()
+    if not term:
+        return _json_error("term is required", 400)
+    try:
+        result = trigger_safety.add_blacklist_entry(
+            term=term,
+            reason=str(payload.get("reason") or "").strip() or "Flagged by CivitAI",
+            category=str(payload.get("category") or "poi").strip() or "poi",
+            severity=str(payload.get("severity") or "block").strip() or "block",
+            match_mode=str(payload.get("match_mode") or "compact_contains").strip() or "compact_contains",
+        )
+    except Exception as exc:
+        return _json_error(f"Blacklist update failed: {exc}", 500)
+    code = 200 if result.get("ok") else 400
+    result.setdefault("warnings", [])
+    result.setdefault("info", [])
+    return jsonify(result), code
+
+
+@app.get("/api/trigger-safety/blacklist/meta")
+def api_trigger_safety_blacklist_meta():
+    try:
+        payload = trigger_safety.load_blacklist()
+    except Exception as exc:
+        return _json_error(f"Blacklist metadata failed: {exc}", 500)
+    entries = payload.get("entries") or []
+    return jsonify({
+        "ok": True,
+        "entry_count": len(entries),
+        "updated_at": payload.get("updated_at") or 0,
+        "recent_entries": entries[-5:],
+        "warnings": payload.get("_warnings") or [],
+        "info": payload.get("_info") or [],
+    })
+
+
+@app.post("/api/tags/database-to-temp")
+def api_tags_database_to_temp():
+    payload = request.get_json(silent=True) or {}
+    folder = (payload.get("folder") or "").strip()
+    srcs = payload.get("srcs")
+    if not folder:
+        return _json_error("folder is required", 400)
+    if not isinstance(srcs, list) or not srcs:
+        return _json_error("srcs must be a non-empty list", 400)
+    result = tag_editor.move_database_files_to_temp(readable_path(folder), [str(item or "") for item in srcs])
+    code = 200 if result.get("ok") or result.get("moved") else 400
+    result.setdefault("normalized_root", result.get("project_root", ""))
+    return jsonify(result), code
+
+
+@app.post("/api/tags/dataset-zip")
+def api_tags_dataset_zip():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    result = tag_editor.export_dataset_zip(paths["project_root"])
+    code = 200 if result.get("ok") else 400
+    result.setdefault("normalized_root", str(paths["project_root"]))
+    result.setdefault("needs_init", False)
+    result.setdefault("warnings", [])
+    result.setdefault("info", [])
+    return jsonify(result), code
+
+
+@app.post("/api/tags/temp-move-all")
+def api_tags_temp_move_all():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    root = paths["dataset_root"]
+    temp_dir = paths["temp_root"]
+    if not root.exists() or not root.is_dir():
+        return _json_error(f"Dataset folder not found: {root}", 400, normalized_root=str(paths["project_root"]), needs_init=True)
+    if not temp_dir.exists() or not temp_dir.is_dir():
+        return _json_error("_temp folder not found", 404, normalized_root=str(paths["project_root"]), needs_init=True)
+
+    exts = _parse_exts(payload.get("exts"))
+    extset = {ext.lower() for ext in exts or []}
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    dst_dir, dst_renamed = _next_unique_dir(root, f"_moved_{stamp}")
+    try:
+        dst_dir.mkdir(parents=True, exist_ok=False)
+    except Exception as exc:
+        return _json_error(f"Failed to create destination folder: {exc}", 500, normalized_root=str(paths["project_root"]))
+
+    image_files = []
+    for path in temp_dir.rglob("*"):
+        if not path.is_file():
+            continue
+        if extset and path.suffix.lower() in extset:
+            image_files.append(path)
+    image_files.sort(key=lambda p: _rel_to_root(root, p).lower())
+
+    moved: List[Dict[str, Any]] = []
+    errors: List[Dict[str, Any]] = []
+    collisions: List[str] = []
+    logs: List[str] = [
+        f"[move-all] source _temp: {temp_dir}",
+        f"[move-all] destination: {dst_dir}",
+    ]
+    if dst_renamed:
+        logs.append(f"[move-all] destination renamed to avoid collision: {dst_dir.name}")
+
+    moved_images = 0
+    moved_txt = 0
+    moved_other = 0
+
+    for src_path in image_files:
+        src_rel = _rel_to_root(root, src_path)
+        had_txt = src_path.with_suffix(".txt").exists()
+        rel_parent = src_path.parent.relative_to(temp_dir)
+        dst_parent = dst_dir if rel_parent == Path(".") else dst_dir / rel_parent
+        try:
+            dst_parent.mkdir(parents=True, exist_ok=True)
+        except Exception as exc:
+            errors.append({"src": src_rel, "error": f"Cannot create destination folder: {exc}"})
+            continue
+        dst_rel = _rel_to_root(root, dst_parent)
+        result, code = _move_file_with_sidecars(root, src_rel, dst_rel)
+        if code == 200 and result.get("ok"):
+            moved_images += 1
+            if had_txt:
+                moved_txt += 1
+            dst_rel_file = result.get("rel") or src_rel
+            if Path(dst_rel_file).name != Path(src_rel).name:
+                collisions.append(f"{src_rel} -> {dst_rel_file}")
+            moved.append(
+                {
+                    "src": src_rel,
+                    "rel": dst_rel_file,
+                    "moved": bool(result.get("moved", True)),
+                    "warnings": result.get("warnings") or [],
+                }
+            )
+            logs.append(f"[move-all] moved image: {src_rel} -> {dst_rel_file}")
+            for warn in result.get("warnings") or []:
+                logs.append(f"[move-all][warn] {warn}")
+        else:
+            error_msg = result.get("error") or f"HTTP {code}"
+            errors.append({"src": src_rel, "error": error_msg})
+            logs.append(f"[move-all][error] {src_rel}: {error_msg}")
+
+    # Move remaining non-image files so _temp contents are fully moved out.
+    remaining_files = [p for p in temp_dir.rglob("*") if p.is_file()]
+    remaining_files.sort(key=lambda p: _rel_to_root(root, p).lower())
+    for src_path in remaining_files:
+        src_rel = _rel_to_root(root, src_path)
+        rel_parent = src_path.parent.relative_to(temp_dir)
+        dst_parent = dst_dir if rel_parent == Path(".") else dst_dir / rel_parent
+        try:
+            dst_parent.mkdir(parents=True, exist_ok=True)
+        except Exception as exc:
+            errors.append({"src": src_rel, "error": f"Cannot create destination folder: {exc}"})
+            logs.append(f"[move-all][error] {src_rel}: cannot create destination folder: {exc}")
+            continue
+        dst_path, renamed = _next_available_file(dst_parent, src_path.name)
+        try:
+            shutil.move(str(src_path), str(dst_path))
+        except Exception as exc:
+            errors.append({"src": src_rel, "error": str(exc)})
+            logs.append(f"[move-all][error] {src_rel}: {exc}")
+            continue
+        moved_other += 1
+        if src_path.suffix.lower() == ".txt":
+            moved_txt += 1
+        dst_rel_file = _rel_to_root(root, dst_path)
+        moved.append({"src": src_rel, "rel": dst_rel_file, "moved": True, "warnings": []})
+        logs.append(f"[move-all] moved file: {src_rel} -> {dst_rel_file}")
+        if renamed:
+            collisions.append(f"{src_rel} -> {dst_rel_file}")
+
+    _remove_empty_dirs(temp_dir, keep=temp_dir)
+    skipped = [_rel_to_root(root, p) for p in temp_dir.rglob("*") if p.is_file()]
+    logs.append(f"[move-all] images moved: {moved_images}")
+    logs.append(f"[move-all] txt moved: {moved_txt}")
+    logs.append(f"[move-all] other files moved: {moved_other}")
+    logs.append(f"[move-all] collisions/renamed: {len(collisions)}")
+    logs.append(f"[move-all] skipped files: {len(skipped)}")
+    logs.append(f"[move-all] errors: {len(errors)}")
+
+    return jsonify(
+        {
+            "ok": len(errors) == 0,
+            "moved": moved,
+            "errors": errors,
+            "collisions": collisions,
+            "skipped": skipped,
+            "destination": _rel_to_root(root, dst_dir),
+            "source_temp": str(temp_dir),
+            "moved_images": moved_images,
+            "moved_txt": moved_txt,
+            "moved_other": moved_other,
+            "logs": logs,
+            "normalized_root": str(paths["project_root"]),
+            "needs_init": False,
+            "warnings": [],
+            "info": [],
+        }
+    )
+
+
+@app.post("/api/tags/scan")
+def api_tags_scan():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
     exts = _parse_exts(payload.get("exts"))
     recursive = _parse_bool(payload.get("recursive"))
-    result = tag_editor.scan_tags(readable_path(folder), exts, recursive=recursive)
+    area = (payload.get("area") or "temp").strip().lower()
+    if area == "database":
+        folder = paths["database_root"]
+    elif area == "dataset":
+        folder = paths["dataset_root"]
+    else:
+        folder = paths["temp_root"]
+    result = tag_editor.scan_tags(folder, exts, recursive=recursive)
+    result.update(
+        {
+            "area": area,
+            "normalized_root": str(paths["project_root"]),
+            "needs_init": False,
+            "warnings": [],
+            "info": [],
+        }
+    )
     code = 200 if result.get("ok") else 400
     return jsonify(result), code
 
@@ -466,24 +2094,36 @@ def api_tags_scan():
 @app.post("/api/tags/images")
 def api_tags_images():
     payload = request.get_json(silent=True) or {}
-    folder = (payload.get("folder") or "").strip()
-    if not folder:
-        return jsonify({"ok": False, "error": "folder is required"}), 400
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
     exts = _parse_exts(payload.get("exts"))
     recursive = _parse_bool(payload.get("recursive"))
+    area = (payload.get("area") or "database").strip().lower()
+    include_temp = _parse_bool(payload.get("include_temp"), True)
     limit = _parse_int(payload.get("limit"), 80)
     if limit <= 0:
         limit = 80
     limit = max(1, min(500, limit))
     tag_limit = _parse_int(payload.get("tag_limit"), 200)
     tag_limit = max(10, min(2000, tag_limit))
-    result = tag_editor.list_images_with_tags(
-        readable_path(folder),
-        exts,
-        recursive=recursive,
-        limit=limit,
-        tag_limit=tag_limit,
-    )
+    if area == "dataset":
+        result = tag_editor.list_dataset_images(
+            paths["project_root"],
+            exts,
+            recursive=recursive,
+            limit=limit,
+            tag_limit=tag_limit,
+            include_temp=include_temp,
+        )
+    elif area == "temp":
+        result = tag_editor.list_temp_images(paths["project_root"], exts, recursive=recursive, limit=limit, tag_limit=tag_limit)
+    else:
+        result = tag_editor.list_database_images(paths["project_root"], exts, recursive=recursive, limit=limit, tag_limit=tag_limit)
+    result.setdefault("normalized_root", str(paths["project_root"]))
+    result.setdefault("needs_init", False)
+    result.setdefault("warnings", [])
+    result.setdefault("info", [])
     code = 200 if result.get("ok") else 400
     return jsonify(result), code
 
@@ -491,33 +2131,40 @@ def api_tags_images():
 @app.post("/api/tags/tag-remove")
 def api_tags_tag_remove():
     payload = request.get_json(silent=True) or {}
-    folder = (payload.get("folder") or "").strip()
     rel = (payload.get("rel") or "").strip()
     tag = (payload.get("tag") or "").strip()
     backup = _parse_bool(payload.get("backup"), True)
-    if not folder or not rel or not tag:
-        return jsonify({"ok": False, "error": "folder, rel, and tag are required"}), 400
-    if _bad_rel(rel):
-        return jsonify({"ok": False, "error": "Invalid path"}), 400
-    root = readable_path(folder)
-    if not root.exists() or not root.is_dir():
-        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
-    target = _safe_child(root, rel)
+    area = (payload.get("area") or "temp").strip().lower()
+    if not rel or not tag:
+        return _json_error("folder, rel, and tag are required", 400)
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    if area != "dataset":
+        rel_norm = rel.replace("\\", "/").lstrip("/")
+        if rel_norm.lower().startswith("_temp/"):
+            rel = rel_norm[6:]
+    base_root = paths["temp_root"] if area != "dataset" else paths["dataset_root"]
+    target = _resolve_rel_under(base_root, rel)
     if not target or not target.exists() or not target.is_file():
-        return jsonify({"ok": False, "error": "File not found"}), 404
+        return _json_error("File not found", 404, normalized_root=str(paths["project_root"]))
     txt_path = target if target.suffix.lower() == ".txt" else target.with_suffix(".txt")
     if not txt_path.exists():
-        return jsonify({"ok": False, "error": "Missing .txt"}), 400
+        return _json_error("Missing .txt", 400, normalized_root=str(paths["project_root"]))
     result = tag_editor.remove_tag(txt_path, tag, backup=backup)
     if not result.get("ok"):
-        return jsonify({"ok": False, "error": result.get("error") or "Remove failed"}), 400
+        return _json_error(result.get("error") or "Remove failed", 400, normalized_root=str(paths["project_root"]))
     return jsonify(
         {
             "ok": True,
-            "rel": _rel_to_root(root, target),
+            "rel": _rel_to_root(base_root, target),
             "tag": tag,
             "removed": bool(result.get("removed")),
             "tags": result.get("tags") or [],
+            "normalized_root": str(paths["project_root"]),
+            "needs_init": False,
+            "warnings": [],
+            "info": [],
         }
     )
 
@@ -525,21 +2172,24 @@ def api_tags_tag_remove():
 @app.post("/api/tags/tag-add")
 def api_tags_tag_add():
     payload = request.get_json(silent=True) or {}
-    folder = (payload.get("folder") or "").strip()
     rel = (payload.get("rel") or "").strip()
     raw_tags = payload.get("tags")
     backup = _parse_bool(payload.get("backup"), True)
     create_missing_txt = _parse_bool(payload.get("create_missing_txt"), True)
-    if not folder or not rel:
-        return jsonify({"ok": False, "error": "folder and rel are required"}), 400
-    if _bad_rel(rel):
-        return jsonify({"ok": False, "error": "Invalid path"}), 400
-    root = readable_path(folder)
-    if not root.exists() or not root.is_dir():
-        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
-    target = _safe_child(root, rel)
+    area = (payload.get("area") or "temp").strip().lower()
+    if not rel:
+        return _json_error("folder and rel are required", 400)
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    if area != "dataset":
+        rel_norm = rel.replace("\\", "/").lstrip("/")
+        if rel_norm.lower().startswith("_temp/"):
+            rel = rel_norm[6:]
+    base_root = paths["temp_root"] if area != "dataset" else paths["dataset_root"]
+    target = _resolve_rel_under(base_root, rel)
     if not target or not target.exists() or not target.is_file():
-        return jsonify({"ok": False, "error": "File not found"}), 404
+        return _json_error("File not found", 404, normalized_root=str(paths["project_root"]))
     txt_path = target if target.suffix.lower() == ".txt" else target.with_suffix(".txt")
 
     tags = parse_tag_list(raw_tags) if raw_tags is not None else []
@@ -550,15 +2200,19 @@ def api_tags_tag_add():
         create_missing_txt=create_missing_txt,
     )
     if not result.get("ok"):
-        return jsonify({"ok": False, "error": result.get("error") or "Add failed"}), 400
+        return _json_error(result.get("error") or "Add failed", 400, normalized_root=str(paths["project_root"]))
     return jsonify(
         {
             "ok": True,
-            "rel": _rel_to_root(root, target),
+            "rel": _rel_to_root(base_root, target),
             "tags": result.get("tags") or [],
             "added": result.get("added") or [],
             "created": bool(result.get("created")),
             "changed": bool(result.get("changed")),
+            "normalized_root": str(paths["project_root"]),
+            "needs_init": False,
+            "warnings": [],
+            "info": [],
         }
     )
 
@@ -566,38 +2220,43 @@ def api_tags_tag_add():
 @app.post("/api/tags/cheatsheet")
 def api_tags_cheatsheet():
     payload = request.get_json(silent=True) or {}
-    folder = (payload.get("folder") or "").strip()
     rel = (payload.get("rel") or "").strip()
-    if not folder or not rel:
-        return jsonify({"ok": False, "error": "folder and rel are required"}), 400
-    if _bad_rel(rel):
-        return jsonify({"ok": False, "error": "Invalid path"}), 400
-    root = readable_path(folder)
-    if not root.exists() or not root.is_dir():
-        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
-    target = _safe_child(root, rel)
+    if not rel:
+        return _json_error("folder and rel are required", 400)
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    root = paths["project_root"]
+    target = _resolve_rel_under(root, rel)
+    if (not target or not target.exists() or not target.is_file()) and paths["dataset_root"].exists():
+        target = _resolve_rel_under(paths["dataset_root"], rel)
     if not target or not target.exists() or not target.is_file():
-        return jsonify({"ok": False, "error": "Cheat sheet file not found"}), 404
+        return _json_error("Cheat sheet file not found", 404, normalized_root=str(root))
     if target.suffix.lower() != ".txt":
-        return jsonify({"ok": False, "error": "Cheat sheet must be a .txt file"}), 400
+        return _json_error("Cheat sheet must be a .txt file", 400, normalized_root=str(root))
     try:
         content = target.read_text(encoding="utf-8")
     except UnicodeDecodeError:
         try:
             content = target.read_text(encoding="utf-8-sig")
         except Exception as exc:
-            return jsonify({"ok": False, "error": str(exc)}), 500
+            return _json_error(str(exc), 500, normalized_root=str(root))
     except Exception as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 500
+        return _json_error(str(exc), 500, normalized_root=str(root))
     parsed = _parse_cheatsheet_content(content)
+    rel_out = rel.replace("\\", "/").lstrip("/")
     return jsonify(
         {
             "ok": True,
-            "rel": _rel_to_root(root, target),
+            "rel": rel_out or _rel_to_root(root, target),
             "content": content,
             "trigger": parsed.get("trigger") or "",
             "sections": parsed.get("sections") or [],
             "tags": parsed.get("tags") or [],
+            "normalized_root": str(root),
+            "needs_init": False,
+            "warnings": [],
+            "info": [],
         }
     )
 
@@ -606,15 +2265,102 @@ def api_tags_cheatsheet():
 def api_tags_image():
     folder = (request.args.get("folder") or "").strip()
     rel = (request.args.get("path") or "").strip()
+    area = (request.args.get("area") or "database").strip().lower()
     if not folder or not rel:
-        return jsonify({"ok": False, "error": "folder and path are required"}), 400
-    root = readable_path(folder)
+        return _json_error("folder and path are required", 400)
+    resolved = tag_editor.resolve_image_path(readable_path(folder), rel, area=area)
+    if not resolved.get("ok"):
+        return _json_error(resolved.get("error") or "Invalid path", 400, normalized_root=resolved.get("project_root", ""))
+    root = resolved["root"]
+    target = resolved["target"]
+    if not root.exists() or not root.is_dir():
+        return _json_error(f"Folder not found: {root}", 400, normalized_root=resolved.get("project_root", ""))
+    if not target or not target.exists() or not target.is_file():
+        return _json_error("File not found", 404, normalized_root=resolved.get("project_root", ""))
+    return send_file(target, conditional=True)
+
+
+@app.get("/api/batch-adjust/list-images")
+def api_batch_adjust_list_images():
+    folder = (request.args.get("folder") or "").strip()
+    recursive = _parse_bool(request.args.get("recursive"), True)
+    limit = _parse_int(request.args.get("limit"), 400)
+    limit = max(1, min(2000, limit))
+    root = readable_path(folder) if folder else readable_path(WORK_DIR)
+
+    if not _is_allowed_path(root):
+        return jsonify({"ok": False, "error": f"Path is outside allowed roots: {root}"}), 403
     if not root.exists() or not root.is_dir():
         return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
+
+    images = blur_brush.list_images(root, recursive=recursive, exts=sorted(BATCH_ADJUST_IMAGE_EXTS))
+    return jsonify(
+        {
+            "ok": True,
+            "folder": str(root),
+            "recursive": recursive,
+            "total": len(images),
+            "returned": min(len(images), limit),
+            "images": images[:limit],
+        }
+    )
+
+
+@app.post("/api/batch-adjust/preview")
+def api_batch_adjust_preview():
+    payload = request.get_json(silent=True) or {}
+    folder = (payload.get("folder") or "").strip()
+    rel = (payload.get("rel") or payload.get("path") or "").strip()
+    preview_max_side = _parse_int(payload.get("preview_max_side"), 960)
+    preview_max_side = max(128, min(2048, preview_max_side))
+
+    if not rel:
+        return jsonify({"ok": False, "error": "rel is required"}), 400
+    if _bad_rel(rel):
+        return jsonify({"ok": False, "error": "Invalid path"}), 400
+
+    root = readable_path(folder) if folder else readable_path(WORK_DIR)
+    if not _is_allowed_path(root):
+        return jsonify({"ok": False, "error": f"Path is outside allowed roots: {root}"}), 403
+    if not root.exists() or not root.is_dir():
+        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
+
     target = _safe_child(root, rel)
     if not target or not target.exists() or not target.is_file():
         return jsonify({"ok": False, "error": "File not found"}), 404
-    return send_file(target, conditional=True)
+    if target.suffix.lower() not in BATCH_ADJUST_IMAGE_EXTS:
+        return jsonify({"ok": False, "error": "Unsupported image format"}), 400
+
+    cfg = _parse_batch_adjust_cfg(payload)
+    try:
+        with Image.open(target) as src:
+            out = apply_preset(src.convert("RGB"), cfg)
+            w, h = out.size
+            long_side = max(w, h)
+            if long_side > preview_max_side:
+                scale = float(preview_max_side) / float(long_side)
+                nw = max(1, int(round(w * scale)))
+                nh = max(1, int(round(h * scale)))
+                try:
+                    resample = Image.Resampling.LANCZOS
+                except Exception:
+                    resample = Image.LANCZOS
+                out = out.resize((nw, nh), resample=resample)
+
+            buf = BytesIO()
+            out.save(buf, "JPEG", quality=92, optimize=True)
+            payload_bytes = buf.getvalue()
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    resp = send_file(
+        BytesIO(payload_bytes),
+        mimetype="image/jpeg",
+        conditional=False,
+        download_name="batch_adjust_preview.jpg",
+    )
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @app.get("/api/blur_brush/list-images")
@@ -629,6 +2375,24 @@ def api_blur_brush_list_images():
         return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
     images = blur_brush.list_images(root, recursive=recursive, exts=exts)
     return jsonify({"ok": True, "folder": str(root), "total": len(images), "images": images})
+
+
+@app.get("/api/blur_brush/image")
+def api_blur_brush_image():
+    folder = (request.args.get("folder") or "").strip()
+    rel = (request.args.get("path") or request.args.get("rel") or "").strip()
+    if not folder or not rel:
+        return jsonify({"ok": False, "error": "folder and path are required"}), 400
+    if _bad_rel(rel):
+        return jsonify({"ok": False, "error": "Invalid path"}), 400
+
+    root = readable_path(folder)
+    if not root.exists() or not root.is_dir():
+        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
+    target = _safe_child(root, rel)
+    if not target or not target.exists() or not target.is_file():
+        return jsonify({"ok": False, "error": "File not found"}), 404
+    return send_file(target, conditional=True)
 
 
 @app.post("/api/blur_brush/apply")
@@ -764,14 +2528,105 @@ def api_blur_brush_preview():
     return resp
 
 
+
+
+@app.get("/api/color_brush/list-images")
+def api_color_brush_list_images():
+    folder = (request.args.get("folder") or "").strip()
+    recursive = _parse_bool(request.args.get("recursive"), True)
+    exts = _parse_exts(request.args.get("exts"))
+    if not folder:
+        return jsonify({"ok": False, "error": "folder is required"}), 400
+
+    root = readable_path(folder)
+    if not root.exists() or not root.is_dir():
+        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
+
+    images = color_brush.list_images(root, recursive=recursive, exts=exts)
+    return jsonify({"ok": True, "folder": str(root), "total": len(images), "images": images})
+
+
+@app.get("/api/color_brush/image")
+def api_color_brush_image():
+    folder = (request.args.get("folder") or "").strip()
+    rel = (request.args.get("path") or "").strip()
+    if not folder or not rel:
+        return jsonify({"ok": False, "error": "folder and path are required"}), 400
+    if _bad_rel(rel):
+        return jsonify({"ok": False, "error": "Invalid path"}), 400
+
+    root = readable_path(folder)
+    if not root.exists() or not root.is_dir():
+        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
+    target = _safe_child(root, rel)
+    if not target or not target.exists() or not target.is_file():
+        return jsonify({"ok": False, "error": "File not found"}), 404
+    if target.suffix.lower() not in color_brush.IMG_EXTS:
+        return jsonify({"ok": False, "error": "Unsupported image extension"}), 400
+
+    return send_file(target, conditional=True)
+
+
+@app.post("/api/color_brush/apply")
+def api_color_brush_apply():
+    payload = request.get_json(silent=True) or {}
+    folder = (payload.get("folder") or "").strip()
+    rel = (payload.get("rel") or payload.get("rel_image_path") or "").strip()
+    paint_png_base64 = (payload.get("paint_png_base64") or "").strip()
+    backup = _parse_bool(payload.get("backup"), True)
+    output_mode = (payload.get("output_mode") or "copy").strip().lower()
+    action_count = max(0, _parse_int(payload.get("action_count"), 0))
+
+    if not folder or not rel:
+        return jsonify({"ok": False, "error": "folder and rel are required"}), 400
+    if not paint_png_base64:
+        return jsonify({"ok": False, "error": "paint_png_base64 is required"}), 400
+    if _bad_rel(rel):
+        return jsonify({"ok": False, "error": "Invalid path"}), 400
+
+    root = readable_path(folder)
+    if not root.exists() or not root.is_dir():
+        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
+    target = _safe_child(root, rel)
+    if not target or not target.exists() or not target.is_file():
+        return jsonify({"ok": False, "error": "File not found"}), 404
+    if target.suffix.lower() not in color_brush.IMG_EXTS:
+        return jsonify({"ok": False, "error": "Unsupported image extension"}), 400
+
+    result = color_brush.apply_color_paint(
+        image_path=target,
+        paint_png_base64=paint_png_base64,
+        backup=backup,
+        output_mode=output_mode,
+        action_count=action_count,
+    )
+    if not result.get("ok"):
+        return jsonify({"ok": False, "error": result.get("error") or "Apply failed", "log": result.get("log") or []}), 400
+
+    saved_path = result.get("saved_path")
+    backup_path = result.get("backup_path")
+    saved_rel = _rel_to_root(root, saved_path) if isinstance(saved_path, Path) else ""
+    backup_rel = _rel_to_root(root, backup_path) if isinstance(backup_path, Path) else ""
+    return jsonify({
+        "ok": True,
+        "saved": saved_rel,
+        "backup": backup_rel,
+        "output_mode": result.get("output_mode"),
+        "log": result.get("log") or [],
+    })
+
+
 @app.post("/api/tags/upload")
 def api_tags_upload():
     folder = (request.form.get("folder") or "").strip()
     if not folder:
-        return jsonify({"ok": False, "error": "folder is required"}), 400
-    root = readable_path(folder)
+        return _json_error("folder is required", 400)
+    paths = _project_paths(folder)
+    root = paths["dataset_root"]
+    if not paths["project_root"].exists() or not paths["project_root"].is_dir():
+        return _json_error(f"Project root not found: {paths['project_root']}", 400, normalized_root=str(paths["project_root"]), needs_init=True)
     if not root.exists() or not root.is_dir():
-        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
+        return _json_error(f"Dataset folder not found: {root}", 400, normalized_root=str(paths["project_root"]), needs_init=True)
 
     requested_exts = _parse_exts(request.form.get("exts"))
     allowed = {e.lower() for e in requested_exts if e.lower() in SERVER_UPLOAD_IMAGE_EXTS}
@@ -808,25 +2663,25 @@ def api_tags_upload():
         except Exception as exc:
             errors.append(f"{filename}: {exc}")
 
-    return jsonify({"ok": True, "saved": saved, "skipped": skipped, "errors": errors})
+    return jsonify({"ok": True, "saved": saved, "skipped": skipped, "errors": errors, "normalized_root": str(paths["project_root"]), "needs_init": False})
 
 
 @app.post("/api/tags/dirs")
 def api_tags_dirs():
     payload = request.get_json(silent=True) or {}
-    folder = (payload.get("folder") or "").strip()
     rel = (payload.get("rel") or "").strip()
     hide_temp = _parse_bool(payload.get("hide_temp"), True)
-    if not folder:
-        return jsonify({"ok": False, "error": "folder is required"}), 400
-    root = readable_path(folder)
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    root = paths["dataset_root"]
     if not root.exists() or not root.is_dir():
-        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
+        return _json_error(f"Dataset folder not found: {root}", 400, normalized_root=str(paths["project_root"]), needs_init=True)
     if _bad_rel(rel):
-        return jsonify({"ok": False, "error": "Invalid path"}), 400
+        return _json_error("Invalid path", 400, normalized_root=str(paths["project_root"]))
     target = _safe_child_or_root(root, rel)
     if not target or not target.exists() or not target.is_dir():
-        return jsonify({"ok": False, "error": "Path not found"}), 404
+        return _json_error("Path not found", 404, normalized_root=str(paths["project_root"]))
 
     dirs = []
     try:
@@ -839,97 +2694,174 @@ def api_tags_dirs():
                 has_children = False
             dirs.append({"name": d.name, "rel": _rel_to_root(root, d), "has_children": has_children})
     except Exception as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 500
-    return jsonify({"ok": True, "root": str(root), "rel": rel, "dirs": dirs})
+        return _json_error(str(exc), 500, normalized_root=str(paths["project_root"]))
+    return jsonify({"ok": True, "root": str(root), "rel": rel, "dirs": dirs, "normalized_root": str(paths["project_root"]), "needs_init": False, "warnings": [], "info": []})
 
 
 @app.post("/api/tags/mkdir")
 def api_tags_mkdir():
     payload = request.get_json(silent=True) or {}
-    folder = (payload.get("folder") or "").strip()
     rel = (payload.get("rel") or "").strip()
-    if not folder or not rel:
-        return jsonify({"ok": False, "error": "folder and rel are required"}), 400
+    if not rel:
+        return _json_error("folder and rel are required", 400)
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
     if _bad_rel(rel):
-        return jsonify({"ok": False, "error": "Invalid path"}), 400
-    root = readable_path(folder)
+        return _json_error("Invalid path", 400, normalized_root=str(paths["project_root"]))
+    root = paths["dataset_root"]
     if not root.exists() or not root.is_dir():
-        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
+        return _json_error(f"Dataset folder not found: {root}", 400, normalized_root=str(paths["project_root"]), needs_init=True)
     target = _safe_child(root, rel)
     if not target:
-        return jsonify({"ok": False, "error": "Invalid path"}), 400
+        return _json_error("Invalid path", 400, normalized_root=str(paths["project_root"]))
     if target.exists():
-        return jsonify({"ok": False, "error": "Folder already exists"}), 400
+        return _json_error("Folder already exists", 400, normalized_root=str(paths["project_root"]))
     try:
         target.mkdir(parents=True, exist_ok=False)
     except Exception as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 500
-    return jsonify({"ok": True, "rel": _rel_to_root(root, target)})
+        return _json_error(str(exc), 500, normalized_root=str(paths["project_root"]))
+    return jsonify({"ok": True, "rel": _rel_to_root(root, target), "normalized_root": str(paths["project_root"]), "needs_init": False, "warnings": [], "info": []})
 
 
 @app.post("/api/tags/rmdir")
 def api_tags_rmdir():
     payload = request.get_json(silent=True) or {}
-    folder = (payload.get("folder") or "").strip()
     rel = (payload.get("rel") or "").strip()
     force = _parse_bool(payload.get("force"))
-    if not folder or not rel:
-        return jsonify({"ok": False, "error": "folder and rel are required"}), 400
+    if not rel:
+        return _json_error("folder and rel are required", 400)
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
     if _bad_rel(rel):
-        return jsonify({"ok": False, "error": "Invalid path"}), 400
-    root = readable_path(folder)
+        return _json_error("Invalid path", 400, normalized_root=str(paths["project_root"]))
+    root = paths["dataset_root"]
     if not root.exists() or not root.is_dir():
-        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
+        return _json_error(f"Dataset folder not found: {root}", 400, normalized_root=str(paths["project_root"]), needs_init=True)
     target = _safe_child(root, rel)
     if not target or not target.exists() or not target.is_dir():
-        return jsonify({"ok": False, "error": "Folder not found"}), 404
+        return _json_error("Folder not found", 404, normalized_root=str(paths["project_root"]))
     if target == root:
-        return jsonify({"ok": False, "error": "Cannot delete root folder"}), 400
+        return _json_error("Cannot delete root folder", 400, normalized_root=str(paths["project_root"]))
 
     try:
         if not force:
             if any(target.iterdir()):
-                return jsonify({"ok": False, "error": "Folder not empty", "needs_force": True}), 400
+                return _json_error("Folder not empty", 400, normalized_root=str(paths["project_root"]), needs_force=True)
             target.rmdir()
         else:
             shutil.rmtree(target)
     except Exception as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 500
-    return jsonify({"ok": True})
+        return _json_error(str(exc), 500, normalized_root=str(paths["project_root"]))
+    return jsonify({"ok": True, "normalized_root": str(paths["project_root"]), "needs_init": False, "warnings": [], "info": []})
+
+
+@app.post("/api/tags/cleanup-subdirs")
+def api_tags_cleanup_subdirs():
+    payload = request.get_json(silent=True) or {}
+    keep_temp = _parse_bool(payload.get("keep_temp"), True)
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    root = paths["dataset_root"]
+    if not root.exists() or not root.is_dir():
+        return _json_error(f"Dataset folder not found: {root}", 400, normalized_root=str(paths["project_root"]), needs_init=True)
+
+    top_dirs: List[Path] = []
+    try:
+        for entry in sorted([x for x in root.iterdir() if x.is_dir()], key=lambda x: x.name.lower()):
+            if keep_temp and entry.name.lower() == "_temp":
+                continue
+            top_dirs.append(entry)
+    except Exception as exc:
+        return _json_error(str(exc), 500, normalized_root=str(paths["project_root"]))
+
+    blocked: List[str] = []
+    removable: List[Path] = []
+    for folder in top_dirs:
+        rel = _rel_to_root(root, folder)
+        try:
+            has_files = any(p.is_file() for p in folder.rglob("*"))
+        except Exception as exc:
+            return _json_error(str(exc), 500, normalized_root=str(paths["project_root"]))
+        if has_files:
+            blocked.append(rel)
+        else:
+            removable.append(folder)
+
+    if blocked:
+        return jsonify(
+            {
+                "ok": True,
+                "cleaned": False,
+                "removed": [],
+                "blocked": blocked,
+                "warning": "Some folders contain files. Cleanup was not applied.",
+                "normalized_root": str(paths["project_root"]),
+                "needs_init": False,
+                "warnings": [],
+                "info": [],
+            }
+        )
+
+    removed: List[str] = []
+    for folder in removable:
+        rel = _rel_to_root(root, folder)
+        try:
+            shutil.rmtree(folder)
+            removed.append(rel)
+        except Exception as exc:
+            return _json_error(str(exc), 500, normalized_root=str(paths["project_root"]))
+
+    return jsonify(
+        {
+            "ok": True,
+            "cleaned": True,
+            "removed": removed,
+            "blocked": [],
+            "normalized_root": str(paths["project_root"]),
+            "needs_init": False,
+            "warnings": [],
+            "info": [],
+        }
+    )
 
 
 @app.post("/api/tags/move")
 def api_tags_move():
     payload = request.get_json(silent=True) or {}
-    folder = (payload.get("folder") or "").strip()
     src_rel = (payload.get("src") or "").strip()
     dst_rel = (payload.get("dst") or "").strip()
-    if not folder or not src_rel:
-        return jsonify({"ok": False, "error": "folder and src are required"}), 400
+    if not src_rel:
+        return _json_error("folder and src are required", 400)
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
     if _bad_rel(src_rel) or _bad_rel(dst_rel):
-        return jsonify({"ok": False, "error": "Invalid path"}), 400
-    root = readable_path(folder)
+        return _json_error("Invalid path", 400, normalized_root=str(paths["project_root"]))
+    root = paths["dataset_root"]
     if not root.exists() or not root.is_dir():
-        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
+        return _json_error(f"Dataset folder not found: {root}", 400, normalized_root=str(paths["project_root"]), needs_init=True)
 
     src = _safe_child(root, src_rel)
     dst_parent = _safe_child_or_root(root, dst_rel)
     if not src or not src.exists() or not src.is_dir():
-        return jsonify({"ok": False, "error": "Source folder not found"}), 404
+        return _json_error("Source folder not found", 404, normalized_root=str(paths["project_root"]))
     if not dst_parent or not dst_parent.exists() or not dst_parent.is_dir():
-        return jsonify({"ok": False, "error": "Target folder not found"}), 404
+        return _json_error("Target folder not found", 404, normalized_root=str(paths["project_root"]))
 
     try:
         src_res = src.resolve()
         dst_res = dst_parent.resolve()
     except Exception:
-        return jsonify({"ok": False, "error": "Path resolution failed"}), 400
+        return _json_error("Path resolution failed", 400, normalized_root=str(paths["project_root"]))
 
     if dst_res == src_res or src_res in dst_res.parents:
-        return jsonify({"ok": False, "error": "Cannot move a folder into itself"}), 400
+        return _json_error("Cannot move a folder into itself", 400, normalized_root=str(paths["project_root"]))
 
     if dst_res == src_res.parent:
-        return jsonify({"ok": True, "moved": False, "rel": src_rel})
+        return jsonify({"ok": True, "moved": False, "rel": src_rel, "normalized_root": str(paths["project_root"]), "needs_init": False, "warnings": [], "info": []})
 
     target = dst_parent / src.name
     if target.exists():
@@ -943,38 +2875,44 @@ def api_tags_move():
     try:
         shutil.move(str(src), str(target))
     except Exception as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 500
-    return jsonify({"ok": True, "moved": True, "rel": _rel_to_root(root, target)})
+        return _json_error(str(exc), 500, normalized_root=str(paths["project_root"]))
+    return jsonify({"ok": True, "moved": True, "rel": _rel_to_root(root, target), "normalized_root": str(paths["project_root"]), "needs_init": False, "warnings": [], "info": []})
 
 
 @app.post("/api/tags/move-file")
 def api_tags_move_file():
     payload = request.get_json(silent=True) or {}
-    folder = (payload.get("folder") or "").strip()
     src_rel = (payload.get("src") or "").strip()
     dst_rel = (payload.get("dst") or "").strip()
-    if not folder or not src_rel:
-        return jsonify({"ok": False, "error": "folder and src are required"}), 400
+    if not src_rel:
+        return _json_error("folder and src are required", 400)
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
     if _bad_rel(src_rel) or _bad_rel(dst_rel):
-        return jsonify({"ok": False, "error": "Invalid path"}), 400
-    root = readable_path(folder)
+        return _json_error("Invalid path", 400, normalized_root=str(paths["project_root"]))
+    root = paths["dataset_root"]
     if not root.exists() or not root.is_dir():
-        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
+        return _json_error(f"Dataset folder not found: {root}", 400, normalized_root=str(paths["project_root"]), needs_init=True)
     result, code = _move_file_with_sidecars(root, src_rel, dst_rel)
+    result.setdefault("normalized_root", str(paths["project_root"]))
+    result.setdefault("needs_init", False)
+    result.setdefault("warnings", [])
+    result.setdefault("info", [])
     return jsonify(result), code
 
 @app.post("/api/tags/move-files")
 def api_tags_move_files():
     payload = request.get_json(silent=True) or {}
-    folder = (payload.get("folder") or "").strip()
     dst_rel = (payload.get("dst") or "").strip()
     srcs_raw = payload.get("srcs")
-    if not folder:
-        return jsonify({"ok": False, "error": "folder is required"}), 400
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
     if _bad_rel(dst_rel):
-        return jsonify({"ok": False, "error": "Invalid path"}), 400
+        return _json_error("Invalid path", 400, normalized_root=str(paths["project_root"]))
     if not isinstance(srcs_raw, list) or not srcs_raw:
-        return jsonify({"ok": False, "error": "srcs must be a non-empty list"}), 400
+        return _json_error("srcs must be a non-empty list", 400, normalized_root=str(paths["project_root"]))
     srcs = []
     seen = set()
     for raw in srcs_raw:
@@ -982,14 +2920,14 @@ def api_tags_move_files():
         if not src_rel or src_rel in seen:
             continue
         if _bad_rel(src_rel):
-            return jsonify({"ok": False, "error": f"Invalid path: {src_rel}"}), 400
+            return _json_error(f"Invalid path: {src_rel}", 400, normalized_root=str(paths["project_root"]))
         seen.add(src_rel)
         srcs.append(src_rel)
     if not srcs:
-        return jsonify({"ok": False, "error": "No valid source files provided"}), 400
-    root = readable_path(folder)
+        return _json_error("No valid source files provided", 400, normalized_root=str(paths["project_root"]))
+    root = paths["dataset_root"]
     if not root.exists() or not root.is_dir():
-        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
+        return _json_error(f"Dataset folder not found: {root}", 400, normalized_root=str(paths["project_root"]), needs_init=True)
 
     moved = []
     errors = []
@@ -1012,6 +2950,10 @@ def api_tags_move_files():
             "ok": len(errors) == 0,
             "moved": moved,
             "errors": errors,
+            "normalized_root": str(paths["project_root"]),
+            "needs_init": False,
+            "warnings": [],
+            "info": [],
         }
     )
 
@@ -1019,31 +2961,35 @@ def api_tags_move_files():
 @app.post("/api/tags/return-temp")
 def api_tags_return_temp():
     payload = request.get_json(silent=True) or {}
-    folder = (payload.get("folder") or "").strip()
-    if not folder:
-        return jsonify({"ok": False, "error": "folder is required"}), 400
-    root = readable_path(folder)
-    if not root.exists() or not root.is_dir():
-        return jsonify({"ok": False, "error": f"Folder not found: {root}"}), 400
-
-    temp_dir = root / "_temp"
-    if not temp_dir.exists() or not temp_dir.is_dir():
-        return jsonify({"ok": False, "error": "_temp folder not found"}), 404
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    root = paths["dataset_root"]
+    temp_dir = paths["temp_root"]
+    source_scope = str(payload.get("source") or "temp").strip().lower()
+    if source_scope not in {"temp", "all"}:
+        source_scope = "temp"
+    if source_scope == "temp" and (not temp_dir.exists() or not temp_dir.is_dir()):
+        return _json_error("_temp folder not found", 404, normalized_root=str(paths["project_root"]), needs_init=True)
 
     exts = _parse_exts(payload.get("exts"))
     extset = {ext.lower() for ext in exts or []}
-    temp_images: List[Path] = []
-    for path in temp_dir.rglob("*"):
+    source_images: List[Path] = []
+    image_iter = root.rglob("*") if source_scope == "all" else temp_dir.rglob("*")
+    for path in image_iter:
         if not path.is_file():
             continue
         if extset and path.suffix.lower() not in extset:
             continue
-        temp_images.append(path)
-    temp_images.sort(key=lambda p: _rel_to_root(root, p).lower())
+        if source_scope == "all" and path.parent == root:
+            # Root-level files are already in the destination folder.
+            continue
+        source_images.append(path)
+    source_images.sort(key=lambda p: _rel_to_root(root, p).lower())
 
     moved = []
     errors = []
-    for path in temp_images:
+    for path in source_images:
         src_rel = _rel_to_root(root, path)
         result, code = _move_file_with_sidecars(root, src_rel, "")
         if code == 200 and result.get("ok"):
@@ -1058,13 +3004,19 @@ def api_tags_return_temp():
         else:
             errors.append({"src": src_rel, "error": result.get("error") or f"HTTP {code}"})
 
-    _remove_empty_dirs(temp_dir, keep=temp_dir)
+    if temp_dir.exists() and temp_dir.is_dir():
+        _remove_empty_dirs(temp_dir, keep=temp_dir)
     return jsonify(
         {
             "ok": len(errors) == 0,
             "moved": moved,
             "errors": errors,
-            "total": len(temp_images),
+            "total": len(source_images),
+            "source": source_scope,
+            "normalized_root": str(paths["project_root"]),
+            "needs_init": False,
+            "warnings": [],
+            "info": [],
         }
     )
 
@@ -1173,6 +3125,23 @@ def api_pipeline_start():
     return jsonify({"ok": True, "job_id": job_id})
 
 
+@app.post("/api/pipeline/plan")
+def api_pipeline_plan():
+    payload = request.get_json(silent=True) or {}
+    payload["preset_root"] = str(NORMALIZE_PRESET_ROOT)
+    payload["preset_library"] = PRESET_FILES
+    payload["dataset_path"] = (payload.get("dataset_path") or "").strip()
+    payload["working_dir"] = (payload.get("working_dir") or str(WORK_DIR)).strip()
+    payload["output_dir"] = (payload.get("output_dir") or "").strip()
+    payload["image_exts"] = _parse_exts(payload.get("image_exts"))
+    payload["recursive"] = _parse_bool(payload.get("recursive"))
+    payload["copy_mode"] = (payload.get("copy_mode") or "copy")
+    ok, data, err = PIPELINE_MANAGER.plan_workflow(payload)
+    if not ok:
+        return jsonify({"ok": False, "error": err or "plan failed"}), 400
+    return jsonify(data)
+
+
 @app.post("/api/pipeline/pause")
 def api_pipeline_pause():
     payload = request.get_json(silent=True) or {}
@@ -1211,8 +3180,16 @@ def api_pipeline_status():
         except Exception:
             since_log_id = None
     ok, data, err = PIPELINE_MANAGER.get_status(job_id, since_log_id=since_log_id)
-    code = 200 if ok else 404
+    code = 200 if ok or err == "job not found" else 404
     return jsonify({"ok": ok, "job": data, "error": err if not ok else ""}), code
+
+
+@app.get("/api/pipeline/review-context")
+def api_pipeline_review_context():
+    job_id = request.args.get("job_id", "")
+    ok, data, err = PIPELINE_MANAGER.get_review_context(job_id)
+    code = 200 if ok else 404
+    return jsonify({"ok": ok, **data, "error": err if not ok else ""}), code
 
 
 @app.post("/api/pipeline/open-path")
@@ -1236,6 +3213,34 @@ def api_pipeline_open_path():
         return jsonify({"ok": False, "error": str(exc)}), 500
     return jsonify({"ok": True})
 
+
+@app.post("/api/discord-presence/activity")
+def api_discord_presence_activity():
+    payload = request.get_json(silent=True) or {}
+    try:
+        service = get_discord_presence()
+        requested_tool = str(payload.get("tool") or "").strip()
+        if requested_tool:
+            tool_key = requested_tool if requested_tool in ACTIVITY_PAYLOADS else "home"
+            context = {
+                "phase": payload.get("phase"),
+                "current": payload.get("current"),
+                "total": payload.get("total"),
+                "step_key": payload.get("step_key"),
+            }
+            if hasattr(service, "report_activity"):
+                service.report_activity(tool_key, **context)
+            else:
+                service.set_activity(tool_key)
+        else:
+            requested_activity = str(payload.get("activity") or "").strip()
+            activity_key = requested_activity if requested_activity in ACTIVITY_PAYLOADS else normalize_activity_key(requested_activity)
+            service.set_activity(activity_key)
+    except Exception:
+        pass
+    return jsonify({"ok": True})
+
+
 # -------- Main page (dispatch via registry) --------
 @app.route("/", methods=["GET", "POST"])
 def index():
@@ -1252,12 +3257,12 @@ def index():
         if not handler:
             request_ok = False
             request_error = f"Unknown tool: {tool}"
-            flash(request_error)
         else:
             ctx = {
                 "presets": PRESET_FILES,
                 "normalize_preset_root": str(NORMALIZE_PRESET_ROOT),
                 "work_dir": str(WORK_DIR),
+                "discord_presence": get_discord_presence(),
             }
             try:
                 raw_result = handler(request.form, ctx)
@@ -1268,9 +3273,8 @@ def index():
             except Exception as e:
                 request_ok = False
                 request_error = f"Error running tool '{tool}': {e}"
-                flash(request_error)
-            if not request_ok and request_error:
-                flash(request_error)
+        if (not is_ajax) and (not request_ok) and request_error:
+            flash(request_error)
 
         if is_ajax:
             code = 200 if request_ok else 400
@@ -1291,9 +3295,10 @@ def index():
         active_tab=active_tab,
         log=log,
         presets=PRESET_FILES,
-        work_dir=str(WORK_DIR)
+        work_dir=str(WORK_DIR),
+        workflow_guide_items=_readme_workflow_guide_items(),
     )
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    run_batchbench_server(open_browser=False)
