@@ -359,6 +359,8 @@
   .quiz-progress-percent { min-width:3.3rem; color:#f3f8ff; font-weight:700; }
   .quiz-selected-list, .quiz-recommended-list { display:flex; flex-wrap:wrap; align-content:flex-start; gap:.25rem; max-height:180px; overflow:auto; border:1px solid var(--bb-border); border-radius:.45rem; padding:.45rem; background:rgba(0,0,0,.12); }
   .quiz-recommended-list { min-height:116px; max-height:320px; }
+  .quiz-context-row { display:flex; align-items:center; flex-wrap:wrap; gap:.3rem; min-height:1.7rem; }
+  .quiz-context-chip { border:1px solid #4b6f8d; border-radius:999px; background:#102336; color:#dceeff; padding:.18rem .52rem; font-size:.76rem; }
   .quiz-segment-legend { display:flex; flex-wrap:wrap; gap:.35rem .65rem; margin-top:.42rem; color:#d8e6f2; font-size:.75rem; }
   .quiz-segment-legend-item { display:inline-flex; align-items:center; gap:.32rem; min-width:0; }
   .quiz-segment-mode-badge { border:1px solid #4b6f8d; border-radius:999px; background:#102336; color:#dceeff; font-size:.72rem; line-height:1.2; padding:.16rem .48rem; }
@@ -669,6 +671,18 @@
             </div>
           </div>
           <div class="tagging-quiz-status mt-2" id="tagging-quiz-status">No active guided tagging session loaded.</div>
+          <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+            <select class="form-select form-select-sm" id="tagging-context-model" style="max-width:230px" aria-label="Context suggestion model"></select>
+            <select class="form-select form-select-sm" id="tagging-context-sensitivity" style="max-width:150px" aria-label="Suggestion sensitivity">
+              <option value="conservative">Conservative</option>
+              <option value="normal" selected>Normal</option>
+              <option value="broad">Broad</option>
+            </select>
+            <button type="button" class="btn btn-sm btn-outline-info" id="tagging-context-inspect">Inspect Dataset</button>
+            <button type="button" class="btn btn-sm btn-outline-light" id="tagging-context-download">Download Model</button>
+            <button type="button" class="btn btn-sm btn-outline-warning d-none" id="tagging-context-cancel">Cancel</button>
+            <span class="small text-muted" id="tagging-context-status">Suggestions not generated</span>
+          </div>
           <div class="tagging-quiz-resume mt-2 d-none" id="tagging-quiz-resume-banner"></div>
         </div>
       </div>
@@ -1381,6 +1395,10 @@
                 </div>
                 <div class="quiz-recommended-list" id="tagging-quiz-recommended"></div>
               </div>
+              <div class="quiz-context-row d-none" id="tagging-context-row" aria-live="polite">
+                <span class="small text-muted me-1">Detected</span>
+                <span id="tagging-context-chips" class="d-flex flex-wrap gap-1"></span>
+              </div>
               <div class="quiz-manual-box" id="tagging-quiz-manual-box">
                 <div class="quiz-tag-panel-head">
                   <div class="quiz-tag-panel-title">Manual Tags</div>
@@ -1806,7 +1824,15 @@
     overviewStats: 'tagging-quiz-overview-stats',
     overviewList: 'tagging-quiz-overview-list',
     deleteSession: 'tagging-quiz-delete-session',
-    archiveSession: 'tagging-quiz-archive-session'
+    archiveSession: 'tagging-quiz-archive-session',
+    contextModel: 'tagging-context-model',
+    contextSensitivity: 'tagging-context-sensitivity',
+    contextInspect: 'tagging-context-inspect',
+    contextDownload: 'tagging-context-download',
+    contextCancel: 'tagging-context-cancel',
+    contextStatus: 'tagging-context-status',
+    contextRow: 'tagging-context-row',
+    contextChips: 'tagging-context-chips'
   };
   const quizState = {
     settings: null,
@@ -1843,7 +1869,12 @@
     lastSegmentWheelAt: 0,
     setupModal: null,
     quizModal: null,
-    overviewModal: null
+    overviewModal: null,
+    contextJobId: '',
+    contextEntries: new Map(),
+    contextLoadingRel: '',
+    contextShowAll: false,
+    contextModels: []
   };
   const workdirState = {
     root: '',
@@ -3115,6 +3146,8 @@
       }
     }
     qRenderQuizChips();
+    quizState.contextShowAll = false;
+    qLoadCurrentContextSuggestions();
     qRenderManualUndo();
     qRenderGlossaryTags();
   }
@@ -3324,11 +3357,172 @@
     return 'Comma separated. Suggestions use this segment, recent tags, settings, and your glossary.';
   }
 
+  async function qLoadContextModels(){
+    const select = get(QUIZ.contextModel);
+    if (!select) return;
+    try {
+      const response = await fetch('/api/tagger-models');
+      const data = await response.json();
+      quizState.contextModels = data.models || [];
+      select.innerHTML = '';
+      quizState.contextModels.forEach(model => {
+        const option = document.createElement('option');
+        option.value = model.key;
+        option.textContent = `${model.display_name}${model.recommended ? ' · Recommended' : ''}${model.ready ? '' : ' · Not downloaded'}`;
+        option.selected = model.key === 'caformer_s36_dbv4';
+        select.appendChild(option);
+      });
+      qRenderContextModelStatus();
+    } catch (error) {
+      qSetStatus(`Model list unavailable: ${error.message}`, QUIZ.contextStatus);
+    }
+  }
+
+  function qRenderContextModelStatus(){
+    const selected = quizState.contextModels.find(model => model.key === get(QUIZ.contextModel)?.value);
+    const button = get(QUIZ.contextDownload);
+    if (button) button.classList.toggle('d-none', !selected || selected.ready);
+  }
+
+  async function qDownloadContextModel(){
+    const modelProfile = get(QUIZ.contextModel)?.value || '';
+    if (!modelProfile) return;
+    const response = await fetch('/api/tagger-models/download', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({model_profile:modelProfile})});
+    const data = await response.json();
+    if (!data.ok) {
+      qSetStatus(data.error || 'Model download could not start.', QUIZ.contextStatus);
+      return;
+    }
+    if (!data.job) { await qLoadContextModels(); return; }
+    const poll = async () => {
+      const statusResponse = await fetch(`/api/tagger-models/download/${data.job.job_id}`);
+      const statusData = await statusResponse.json();
+      const job = statusData.job;
+      if (!job) return;
+      qSetStatus(job.error || `Downloading ${job.completed_files} / ${job.total_files}${job.current_file ? ` · ${job.current_file}` : ''}`, QUIZ.contextStatus);
+      if (['queued', 'running'].includes(job.status)) setTimeout(poll, 1000);
+      else await qLoadContextModels();
+    };
+    poll();
+  }
+
+  async function qStartContextInspection(){
+    if (!qSessionRequestRoot()) {
+      qSetStatus('Open a Tag Editor project first.', QUIZ.contextStatus);
+      return;
+    }
+    const data = await qPost('/api/tagging-quiz/suggestions/inspect', {
+      project_root: qSessionRequestRoot(),
+      model_profile: get(QUIZ.contextModel)?.value || 'caformer_s36_dbv4',
+      sensitivity: get(QUIZ.contextSensitivity)?.value || 'normal',
+      segments: qSegments(),
+    });
+    quizState.contextJobId = data.job?.job_id || '';
+    get(QUIZ.contextCancel)?.classList.remove('d-none');
+    qPollContextInspection();
+  }
+
+  async function qPollContextInspection(){
+    if (!quizState.contextJobId) return;
+    try {
+      const data = await qPost('/api/tagging-quiz/suggestions/status', {project_root:qSessionRequestRoot(), job_id:quizState.contextJobId});
+      const job = data.job;
+      if (!job) return;
+      let statusText = job.error || '';
+      if (!statusText && job.status === 'completed') statusText = `Suggestions ready · ${job.profile}`;
+      else if (!statusText && job.phase === 'queued') statusText = 'Preparing inspection…';
+      else if (!statusText && job.phase === 'discovering') statusText = 'Finding images…';
+      else if (!statusText && job.phase === 'loading_classifier') statusText = `Loading tag classifications · ${job.total} images found`;
+      else if (!statusText && job.phase === 'loading_model') statusText = `Loading ${job.profile} · ${job.total} images found`;
+      else if (!statusText) statusText = `Inspecting ${job.processed} / ${job.total}${job.current ? ` · ${job.current}` : ''}`;
+      qSetStatus(statusText, QUIZ.contextStatus);
+      const active = ['queued', 'running'].includes(job.status);
+      get(QUIZ.contextCancel)?.classList.toggle('d-none', !active);
+      if (active) setTimeout(qPollContextInspection, 800);
+      else {
+        quizState.contextEntries.clear();
+        qLoadCurrentContextSuggestions(true);
+      }
+    } catch (error) {
+      qSetStatus(`Context suggestions unavailable: ${error.message}. Manual tagging is still available.`, QUIZ.contextStatus);
+      get(QUIZ.contextCancel)?.classList.add('d-none');
+    }
+  }
+
+  async function qCancelContextInspection(){
+    if (!quizState.contextJobId) return;
+    try {
+      await qPost('/api/tagging-quiz/suggestions/cancel', {job_id:quizState.contextJobId});
+      qSetStatus('Cancelling inspection…', QUIZ.contextStatus);
+    } catch (error) {
+      qSetStatus(error.message, QUIZ.contextStatus);
+    }
+  }
+
+  async function qLoadCurrentContextSuggestions(force=false){
+    const rel = qCurrentImageRel();
+    if (!rel || !qSessionRequestRoot()) return;
+    if (!force && quizState.contextEntries.has(rel)) {
+      qRenderContextSuggestions();
+      return;
+    }
+    if (quizState.contextLoadingRel === rel) return;
+    quizState.contextLoadingRel = rel;
+    try {
+      const data = await qPost('/api/tagging-quiz/suggestions/image', {
+        project_root:qSessionRequestRoot(),
+        image_rel:rel,
+        model_profile:get(QUIZ.contextModel)?.value || 'caformer_s36_dbv4',
+        sensitivity:get(QUIZ.contextSensitivity)?.value || 'normal'
+      });
+      quizState.contextEntries.set(rel, data.entry || null);
+      qRenderContextSuggestions();
+    } catch (_) {
+      quizState.contextEntries.set(rel, null);
+      qRenderContextSuggestions();
+    } finally {
+      if (quizState.contextLoadingRel === rel) quizState.contextLoadingRel = '';
+    }
+  }
+
+  function qRenderContextSuggestions(){
+    const rowHost = get(QUIZ.contextRow);
+    const chipHost = get(QUIZ.contextChips);
+    if (!rowHost || !chipHost) return;
+    chipHost.innerHTML = '';
+    const rel = qCurrentImageRel();
+    const segment = qCurrentSegment();
+    const entry = quizState.contextEntries.get(rel);
+    const unavailable = qImageTagSet(qCurrentImageEntry());
+    const rows = (entry?.segments?.[segment?.id] || []).filter(item => !unavailable.has(normalizeDanbooruTag(item.tag)));
+    rowHost.classList.toggle('d-none', !rows.length || qIsFreeTaggingMode());
+    if (!rows.length || qIsFreeTaggingMode()) return;
+    const visible = quizState.contextShowAll ? rows : rows.slice(0, 6);
+    visible.forEach(item => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'quiz-context-chip';
+      chip.textContent = item.tag;
+      chip.title = `${Math.round(Number(item.score || 0) * 100)}% · ${item.semantic_category}`;
+      chip.addEventListener('click', () => qAddRecommendedTag(item.tag));
+      chipHost.appendChild(chip);
+    });
+    if (rows.length > 6) {
+      const more = document.createElement('button');
+      more.type = 'button';
+      more.className = 'btn btn-sm btn-link py-0';
+      more.textContent = quizState.contextShowAll ? 'Less' : `More (${rows.length - 6})`;
+      more.addEventListener('click', () => { quizState.contextShowAll = !quizState.contextShowAll; qRenderContextSuggestions(); });
+      chipHost.appendChild(more);
+    }
+  }
+
   function qRenderQuizChips(){
     const seg = qCurrentSegment();
     const state = qCurrentSegmentState();
     if (!state) {
       qRenderQuizProgress();
+      qRenderContextSuggestions();
       return;
     }
     const selectedHost = get(QUIZ.selected);
@@ -3395,6 +3589,7 @@
       frag.appendChild(chip);
     });
     recHost.appendChild(frag);
+    qRenderContextSuggestions();
     qRenderQuizProgress();
   }
 
@@ -4504,11 +4699,17 @@
     quizState.setupModal = qModal(QUIZ.setupModal);
     quizState.quizModal = qModal(QUIZ.quizModal);
     quizState.overviewModal = qModal(QUIZ.overviewModal);
+    qLoadContextModels();
     document.querySelectorAll('[data-tagging-quiz-open="1"]').forEach(button => button.addEventListener('click', qOpenQuizEntry));
     get(QUIZ.setup)?.addEventListener('click', qOpenSetup);
     get(QUIZ.start)?.addEventListener('click', qOpenQuizEntry);
     get(QUIZ.cont)?.addEventListener('click', qOpenQuizEntry);
     get(QUIZ.overview)?.addEventListener('click', () => { qRenderOverview(); qModal(QUIZ.overviewModal)?.show(); });
+    get(QUIZ.contextInspect)?.addEventListener('click', () => qStartContextInspection().catch(err => qSetStatus(err.message, QUIZ.contextStatus)));
+    get(QUIZ.contextDownload)?.addEventListener('click', () => qDownloadContextModel().catch(err => qSetStatus(err.message, QUIZ.contextStatus)));
+    get(QUIZ.contextCancel)?.addEventListener('click', qCancelContextInspection);
+    get(QUIZ.contextModel)?.addEventListener('change', () => { quizState.contextEntries.clear(); qRenderContextSuggestions(); qRenderContextModelStatus(); qSetStatus('Model changed · inspect to refresh suggestions.', QUIZ.contextStatus); });
+    get(QUIZ.contextSensitivity)?.addEventListener('change', () => { quizState.contextEntries.clear(); qRenderContextSuggestions(); qSetStatus('Sensitivity changed · inspect to refresh suggestions.', QUIZ.contextStatus); });
     get(QUIZ.parse)?.addEventListener('click', qParseCheatsheet);
     get(QUIZ.danbooruCheck)?.addEventListener('click', qValidateCheatsheetDanbooru);
     get(QUIZ.addRow)?.addEventListener('click', () => { quizState.mappingRows.push({left_sections: [], right_segment: null}); qRenderMappingBoard(); });

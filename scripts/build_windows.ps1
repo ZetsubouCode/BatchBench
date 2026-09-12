@@ -63,7 +63,7 @@ try {
         ""
     )
     Write-BuildLogLine "Build log: $BuildLog"
-    Invoke-Logged -CommandPath $Python -Arguments @("-c", "import importlib.util, sys; mods=['flask','werkzeug','dotenv','PIL','numpy','torch','transformers','huggingface_hub','safetensors','tokenizers','timm','hf_xet','httpx','httpcore','fsspec','requests','urllib3','charset_normalizer','pypresence','pystray']; missing=[m for m in mods if importlib.util.find_spec(m) is None]; print('Missing dependencies: ' + ', '.join(missing)) if missing else None; sys.exit(1 if missing else 0)") -FailureMessage "Python cannot import required dependencies."
+    Invoke-Logged -CommandPath $Python -Arguments @("-c", "import importlib.util, sys; mods=['flask','werkzeug','dotenv','PIL','numpy','onnxruntime','torch','transformers','huggingface_hub','safetensors','tokenizers','timm','hf_xet','httpx','httpcore','fsspec','requests','urllib3','charset_normalizer','pypresence','pystray']; missing=[m for m in mods if importlib.util.find_spec(m) is None]; print('Missing dependencies: ' + ', '.join(missing)) if missing else None; sys.exit(1 if missing else 0)") -FailureMessage "Python cannot import required dependencies."
 
     Invoke-Logged -CommandPath $Python -Arguments @("-c", "from transformers import AutoConfig, AutoImageProcessor, AutoModelForImageClassification; import torch; import huggingface_hub; import safetensors; import tokenizers; import timm; print('Offline tagger dependencies OK')") -FailureMessage "Python cannot import required dependencies."
 
@@ -85,7 +85,7 @@ try {
         "templates;templates",
         "static;static"
     )
-    foreach ($Optional in @("presets")) {
+    foreach ($Optional in @("presets", "data\jio7")) {
         if (Test-Path (Join-Path $Root $Optional)) {
             $AddData += "$Optional;$Optional"
         }
@@ -120,6 +120,7 @@ try {
     )
     $CollectAll = @(
         "transformers",
+        "onnxruntime",
         "huggingface_hub",
         "safetensors",
         "tokenizers",

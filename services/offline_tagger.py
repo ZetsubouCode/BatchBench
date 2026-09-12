@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import fnmatch
 import json
 from pathlib import Path
@@ -40,6 +40,14 @@ from services.offline_tagger_rules import (
     normalize_rule_tag,
 )
 from services import tag_policy
+from services import jio7_tags
+from services.tagger_model_manager import model_dir as managed_model_dir
+from services.tagger_models.base import TagPrediction
+from services.tagger_models.registry import (
+    CAFORMER_PROFILE,
+    LEGACY_WD_PROFILE,
+    resolve_model_profile,
+)
 from utils.io import readable_path
 from utils.dataset import split_tags, join_tags
 from utils.tags import normalize_caption_tags, tag_compare_key, to_caption_tag
@@ -56,6 +64,7 @@ from utils.tool_result import build_tool_result
 
 
 DEFAULT_MODEL_ID = "SmilingWolf/wd-swinv2-tagger-v3"
+DEFAULT_MODEL_PROFILE = LEGACY_WD_PROFILE
 DEFAULT_IMAGE_EXTS = [".jpg", ".jpeg", ".png", ".webp", ".bmp"]
 
 DEFAULT_GENERAL_THRESHOLD = 0.35
@@ -115,8 +124,12 @@ VALID_OUTPUT_PROFILES = {
 }
 
 TAGGER_POLICY = {
-    "force_wd_bgr_fix": True,
     "model_id": DEFAULT_MODEL_ID,
+    "model_profile": DEFAULT_MODEL_PROFILE,
+    "threshold_strategy": "optimized",
+    "jio7_enabled": True,
+    "jio7_strict": False,
+    "jio7_categories": sorted(jio7_tags.DEFAULT_INCLUDED),
     "device": "auto",
     "backend": DEFAULT_BACKEND,
     "use_amp": False,
@@ -200,6 +213,7 @@ TAGGER_POLICY = {
 }
 
 DEPRECATED_KEYS = {
+    "force_wd_bgr_fix",
     "device",
     "backend",
     "use_amp",
@@ -359,6 +373,11 @@ class TaggerOptions:
     color_downscale: int
     debug_color_sanity: bool
     danbooru_safenet: bool
+    model_profile: str = ""
+    threshold_strategy: str = "optimized"
+    jio7_enabled: bool = False
+    jio7_strict: bool = False
+    jio7_categories: List[str] = field(default_factory=lambda: sorted(jio7_tags.DEFAULT_INCLUDED))
 
 
 @dataclass
@@ -444,18 +463,6 @@ def _parse_blocked_tag_patterns(raw: Any) -> List[str]:
     return out
 
 
-def _is_wd_family(model_id: str) -> bool:
-    text = (model_id or "").strip().lower()
-    if not text:
-        return False
-    if "wd" in text and "tagger" in text:
-        return True
-    for token in ("wd14", "wd-swinv2", "wd-v3", "wd-v4", "smilingwolf/wd"):
-        if token in text:
-            return True
-    return False
-
-
 def _find_deprecated_keys(form_opts: Dict[str, Any]) -> List[str]:
     return sorted({k for k in (form_opts or {}).keys() if k in DEPRECATED_KEYS})
 
@@ -477,6 +484,11 @@ def _tagger_options_from_payload(payload: Dict[str, Any]) -> TaggerOptions:
     data["dataset_path"] = readable_path(str(data.get("dataset_path") or "."))
     root = data.get("normalizer_preset_root")
     data["normalizer_preset_root"] = readable_path(str(root)) if root else None
+    data.setdefault("model_profile", "")
+    data.setdefault("threshold_strategy", "optimized")
+    data.setdefault("jio7_enabled", False)
+    data.setdefault("jio7_strict", False)
+    data.setdefault("jio7_categories", sorted(jio7_tags.DEFAULT_INCLUDED))
     return TaggerOptions(**data)
 
 
@@ -838,14 +850,22 @@ def _effective_opts(form_opts: Dict[str, Any], policy: Dict[str, Any]) -> Tagger
         else int(policy.get("mcut_min_general_tags", DEFAULT_MCUT_MIN_GENERAL_TAGS))
     )
 
+    profile = resolve_model_profile(form_opts.get("model_profile"), form_opts.get("model_id") or policy.get("model_id"))
+    raw_jio7_categories = form_opts.get("jio7_categories")
+    if raw_jio7_categories in (None, ""):
+        raw_jio7_categories = policy.get("jio7_categories") or sorted(jio7_tags.DEFAULT_INCLUDED)
+    jio7_categories = [
+        item for item in _parse_tag_list(raw_jio7_categories)
+        if item in jio7_tags.ALL_CATEGORIES
+    ] or sorted(jio7_tags.DEFAULT_INCLUDED)
+
     return TaggerOptions(
         dataset_path=dataset_path,
         recursive=_parse_bool(_fallback("recursive")) if "recursive" in form_opts else bool(policy.get("recursive", False)),
         image_exts=_parse_exts(policy.get("image_exts") or DEFAULT_IMAGE_EXTS),
-        model_id=(form_opts.get("model_id") or policy.get("model_id") or DEFAULT_MODEL_ID).strip()
-        or DEFAULT_MODEL_ID,
+        model_id=profile.repo_id,
         device=(policy.get("device") or "auto").strip(),
-        batch_size=batch_size,
+        batch_size=1 if profile.key == CAFORMER_PROFILE else batch_size,
         general_threshold=general_threshold,
         character_threshold=character_threshold,
         threshold_mode=threshold_mode,
@@ -951,7 +971,7 @@ def _effective_opts(form_opts: Dict[str, Any], policy: Dict[str, Any]) -> Tagger
             _fallback("non_character_regex") or policy.get("non_character_regex") or DEFAULT_NON_CHARACTER_REGEX
         ),
         use_normalizer_remove_as_exclude=bool(policy.get("use_normalizer_remove_as_exclude", False)),
-        backend=(_fallback("backend") or DEFAULT_BACKEND).strip().lower(),
+        backend=profile.runtime,
         use_amp=_parse_bool(_fallback("use_amp")) if "use_amp" in form_opts else bool(policy.get("use_amp", False)),
         trigger_tag=legacy_trigger,
         prefix_tags=prefix_tags,
@@ -984,6 +1004,15 @@ def _effective_opts(form_opts: Dict[str, Any], policy: Dict[str, Any]) -> Tagger
         danbooru_safenet=_parse_bool(_fallback("danbooru_safenet"))
         if "danbooru_safenet" in form_opts
         else bool(policy.get("danbooru_safenet", DEFAULT_ENABLE_DANBOORU_SAFENET)),
+        model_profile=profile.key,
+        threshold_strategy=str(_fallback("threshold_strategy") or "optimized").strip().lower(),
+        jio7_enabled=_parse_bool(_fallback("jio7_enabled"))
+        if "jio7_enabled" in form_opts
+        else bool(policy.get("jio7_enabled", True)),
+        jio7_strict=_parse_bool(_fallback("jio7_strict"))
+        if "jio7_strict" in form_opts
+        else bool(policy.get("jio7_strict", False)),
+        jio7_categories=jio7_categories,
     )
 
 
@@ -1171,118 +1200,48 @@ def _torch_import_diagnostics() -> str:
 
 
 def _load_model_bundle(model_id: str, device: str, local_only: bool, backend: str):
-    backend = (backend or DEFAULT_BACKEND).strip().lower()
-    cache_key = (model_id, device, backend)
-    cached_bundle = _cache_lookup_model_bundle(model_id, device, backend)
-    if cached_bundle is not None:
-        return cached_bundle
-
-    try:
-        from transformers import AutoConfig, AutoImageProcessor, AutoModelForImageClassification
-    except Exception as exc:
-        raise RuntimeError(
-            "Failed to import Offline Tagger dependencies "
-            f"(transformers/torch stack): {type(exc).__name__}: {exc}. "
-            "If this is the EXE build, rebuild it with compile_exe.bat so PyInstaller bundles the ML packages. "
-            f"Diagnostics: {_torch_import_diagnostics()}"
-        ) from exc
-
-    model_path = _ensure_model_local(model_id, local_only)
-    processor = AutoImageProcessor.from_pretrained(str(model_path), local_files_only=True)
-
-    config = AutoConfig.from_pretrained(str(model_path), local_files_only=True)
-    num_labels = int(getattr(config, "num_labels", 0)) or len(getattr(config, "id2label", {}))
-    id2label = getattr(config, "id2label", {}) or {}
-    labels = [str(id2label.get(i) or id2label.get(str(i)) or f"tag_{i}") for i in range(num_labels)]
-
-    categories: Optional[List[Optional[int]]] = None
-    tag_rows = _load_tag_metadata(model_path)
-    tag_meta_count = len(tag_rows) if tag_rows else 0
-    if tag_rows and len(tag_rows) == len(labels):
-        labels = [row[0] for row in tag_rows]
-        categories = [row[1] for row in tag_rows]
-
-    warn: List[str] = []
-    torch = None
-    model = None
-    onnx_session = None
-    onnx_input = None
-    onnx_path = None
-    resolved_device = device
-    provider = None
-
-    if backend == "onnx":
-        try:
-            import onnxruntime as ort
-        except Exception:
-            warn.append("onnxruntime not available; falling back to transformers.")
-            backend = "transformers"
-        else:
-            onnx_path = _find_onnx_model(model_path)
-            if not onnx_path:
-                warn.append("ONNX model file not found; falling back to transformers.")
-                backend = "transformers"
-            else:
-                providers = ort.get_available_providers()
-                if str(device).lower().startswith("cuda") and "CUDAExecutionProvider" in providers:
-                    provider = "CUDAExecutionProvider"
-                    provider_list = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-                    resolved_device = "cuda"
-                else:
-                    provider = "CPUExecutionProvider"
-                    provider_list = ["CPUExecutionProvider"]
-                    if str(device).lower().startswith("cuda"):
-                        warn.append("CUDA provider not available for ONNX; using CPU.")
-                    resolved_device = "cpu"
-                onnx_session = ort.InferenceSession(str(onnx_path), providers=provider_list)
-                onnx_input = onnx_session.get_inputs()[0].name if onnx_session.get_inputs() else None
-
-    if backend != "onnx":
-        try:
-            import torch
-        except Exception as exc:
-            raise RuntimeError(
-                "Failed to import torch for the Offline Tagger: "
-                f"{type(exc).__name__}: {exc}. "
-                "If this is the EXE build, rebuild it with compile_exe.bat. "
-                f"Diagnostics: {_torch_import_diagnostics()}"
-            ) from exc
-        resolved_device, device_warn = _resolve_device(device, torch)
-        if device_warn:
-            warn.append(device_warn)
-        model = AutoModelForImageClassification.from_pretrained(
-            str(model_path),
-            local_files_only=True,
-            use_safetensors=True,
-        )
-        model.eval()
-        model.to(resolved_device)
-        provider = None
-
-    actual_key = (model_id, resolved_device, backend)
-    if actual_key in _MODEL_CACHE:
-        cached = _MODEL_CACHE[actual_key]
-        _MODEL_CACHE[cache_key] = cached
+    profile = resolve_model_profile(None, model_id)
+    backend = profile.runtime
+    cache_key = (profile.key, device, backend)
+    cached = _MODEL_CACHE.get(cache_key)
+    if cached is not None:
         return cached
 
+    adapter = profile.adapter()
+    model_path = managed_model_dir(profile.key)
+    if adapter.validate_model_dir(model_path):
+        if profile.key == CAFORMER_PROFILE:
+            raise RuntimeError(
+                "CAFormer is not installed in BatchBench model storage. Use Download or Install from local folder first."
+            )
+        # Preserve WD legacy cache/download compatibility while all new UI choices
+        # remain curated profiles.
+        model_path = _ensure_model_local(profile.repo_id, local_only)
+    loaded = adapter.load(model_path, device=device)
+    metadata = adapter.tag_metadata(model_path)
+    labels = [item.tag_key for item in metadata]
+    categories = [item.category_id for item in metadata]
     bundle = {
-        "backend": backend,
-        "model": model,
-        "onnx_session": onnx_session,
-        "onnx_input": onnx_input,
-        "onnx_path": str(onnx_path) if onnx_path else None,
-        "processor": processor,
+        "backend": profile.runtime,
+        "adapter": adapter,
+        "adapter_loaded": loaded,
+        "model": loaded.get("model") if isinstance(loaded, dict) else None,
+        "processor": loaded.get("processor") if isinstance(loaded, dict) else None,
+        "onnx_session": loaded.get("session") if isinstance(loaded, dict) else None,
+        "onnx_input": loaded.get("input_name") if isinstance(loaded, dict) else None,
         "labels": labels,
         "categories": categories,
-        "device": resolved_device,
-        "warn": warn,
-        "torch": torch,
-        "provider": provider,
+        "recommended_thresholds": [item.recommended_threshold for item in metadata],
+        "device": loaded.get("device", "cpu") if isinstance(loaded, dict) else "cpu",
+        "warn": [],
+        "torch": loaded.get("torch") if isinstance(loaded, dict) else None,
+        "provider": "CPUExecutionProvider" if profile.runtime == "onnx" else None,
         "model_path": str(model_path),
-        "tag_meta_loaded": bool(categories),
-        "tag_meta_count": tag_meta_count,
+        "tag_meta_loaded": bool(metadata),
+        "tag_meta_count": len(metadata),
+        "profile": profile,
+        "category_ids": {"general": 0, "character": 4 if profile.key == CAFORMER_PROFILE else 3, "rating": 9},
     }
-    _MODEL_CACHE[actual_key] = bundle
     _MODEL_CACHE[cache_key] = bundle
     return bundle
 
@@ -1374,16 +1333,6 @@ def _format_tag(tag: str, replace_underscore: bool) -> str:
     if not _WORD_TAG_RE.match(tag):
         return tag
     return tag.replace("_", " ")
-
-
-def _swap_rgb_bgr(im):
-    import numpy as np
-    from PIL import Image
-
-    arr = np.array(im)
-    if arr.ndim == 3 and arr.shape[2] >= 3:
-        arr = arr[..., ::-1]
-    return Image.fromarray(arr, mode="RGB")
 
 
 def _normalize_tag_for_color(tag: str) -> str:
@@ -2512,12 +2461,57 @@ def _format_active_cleanup_summary(opts: TaggerOptions, rules: Optional[Selectiv
     return lines
 
 
+def filter_prediction_scores_with_jio7(
+    scores,
+    labels: List[str],
+    categories: Optional[List[Optional[int]]],
+    opts: TaggerOptions,
+    category_ids: CategoryIds,
+    classifier: Optional[jio7_tags.Jio7Classification],
+) -> Tuple[List[float], int]:
+    values = [float(score) for score in scores]
+    if not opts.jio7_enabled or classifier is None:
+        return values, 0
+    protected = list(opts.policy_keep_tags or []) + list(opts.prefix_tags or [])
+    if opts.trigger_tag:
+        protected.append(opts.trigger_tag)
+    dropped = 0
+    for index, label in enumerate(labels):
+        category_id = categories[index] if categories is not None and index < len(categories) else None
+        model_category = "general"
+        if category_ids.character is not None and category_id == category_ids.character:
+            model_category = "character"
+        elif category_ids.rating is not None and category_id == category_ids.rating:
+            model_category = "rating"
+        elif category_ids.meta is not None and category_id == category_ids.meta:
+            model_category = "meta"
+        elif category_ids.artist is not None and category_id == category_ids.artist:
+            model_category = "artist"
+        elif category_ids.copyright is not None and category_id == category_ids.copyright:
+            model_category = "copyright"
+        if not classifier.is_allowed(
+            label,
+            included=opts.jio7_categories,
+            strict=opts.jio7_strict,
+            model_category=model_category,
+            explicit_keep=protected,
+        ):
+            values[index] = -1.0
+            if float(scores[index]) >= min(opts.general_threshold, opts.character_threshold):
+                dropped += 1
+    return values, dropped
+
+
 def run_tagger(
     opts: TaggerOptions,
     deprecated_keys: Optional[List[str]] = None,
     progress_callback=None,
 ) -> Tuple[bool, List[str]]:
     lines: List[str] = []
+    profile = resolve_model_profile(getattr(opts, "model_profile", ""), opts.model_id)
+    opts.model_profile = profile.key
+    opts.model_id = profile.repo_id
+    opts.backend = profile.runtime
     if deprecated_keys:
         lines.append(f"Ignored deprecated options: {', '.join(deprecated_keys)}")
 
@@ -2566,7 +2560,7 @@ def run_tagger(
         opts.max_general_tags = opts.max_auto_tags
     if (opts.tag_focus_mode or "").strip().lower() not in {"all", "character", "non_character"}:
         opts.tag_focus_mode = DEFAULT_TAG_FOCUS_MODE
-    if (opts.backend or "").strip().lower() not in {"transformers", "onnx"}:
+    if (opts.backend or "").strip().lower() not in {"transformers", "timm", "onnx"}:
         opts.backend = DEFAULT_BACKEND
     opts.min_threshold_floor = max(0.0, min(float(opts.min_threshold_floor), 1.0))
     opts.mcut_relax_general = max(0.0, min(float(opts.mcut_relax_general), 1.0))
@@ -2610,10 +2604,10 @@ def run_tagger(
         max_lookups=DEFAULT_DANBOORU_SAFENET_MAX_LOOKUPS,
     )
 
-    worker_result = _run_external_worker(opts, deprecated_keys)
+    worker_result = _run_external_worker(opts, deprecated_keys) if profile.runtime in {"transformers", "timm"} else None
     if worker_result is not None:
         return worker_result
-    if getattr(sys, "frozen", False) and os.environ.get(_WORKER_ENV_FLAG) != "1":
+    if profile.runtime in {"transformers", "timm"} and getattr(sys, "frozen", False) and os.environ.get(_WORKER_ENV_FLAG) != "1":
         roots = ", ".join(str(root) for root in _candidate_source_roots()) or "(none)"
         lines.append(
             "Offline Tagger in the EXE build runs through an external Python worker "
@@ -2621,7 +2615,7 @@ def run_tagger(
         )
         lines.append("No usable worker Python was found.")
         lines.append("Expected one of: .venv\\Scripts\\python.exe or venv\\Scripts\\python.exe in the BatchBench source folder.")
-        lines.append("Set BATCHBENCH_SOURCE_ROOT to the BatchBench source folder or BATCHBENCH_OFFLINE_TAGGER_PYTHON to a Python that can import torch and transformers.")
+        lines.append("Set BATCHBENCH_SOURCE_ROOT to the BatchBench source folder or BATCHBENCH_OFFLINE_TAGGER_PYTHON to a Python that can import torch and timm.")
         lines.append(f"Detected source roots: {roots}")
         return False, lines
 
@@ -2630,7 +2624,8 @@ def run_tagger(
         return False, lines
 
     lines.append(f"Dataset: {opts.dataset_path}")
-    lines.append(f"Model: {opts.model_id}")
+    lines.append(f"[model] Selected: {profile.display_name}")
+    lines.append(f"Model profile: {profile.key}")
     active_profile = tag_policy.get_profile(opts.tag_policy)
     lines.append(f"Tag policy: {active_profile.label}")
     lines.append(f"Policy version: {active_profile.version}")
@@ -2646,8 +2641,7 @@ def run_tagger(
     lines.append(f"Preview only: {'on' if opts.preview_only else 'off'}")
     if opts.write_mode == "append":
         lines.append("[WARN] Legacy append write_mode is active; new Offline Tagger runs default to replacement.")
-    wd_fix = bool(opts.force_wd_bgr_fix) and _is_wd_family(opts.model_id)
-    lines.append(f"WD color fix {'ON (RGB->BGR)' if wd_fix else 'OFF'}")
+    lines.append(f"[model] Preprocessor: {profile.adapter().preprocessing_label}")
     if opts.simple_mode:
         lines.append("Mode: Auto Tag Assist")
         lines.append(f"Minimum confidence: {opts.general_threshold:.2f}")
@@ -2700,6 +2694,9 @@ def run_tagger(
     categories = bundle["categories"]
     device = bundle["device"]
     torch = bundle["torch"]
+    adapter = bundle.get("adapter")
+    adapter_loaded = bundle.get("adapter_loaded")
+    recommended_thresholds = bundle.get("recommended_thresholds") or []
     if bundle.get("model_path"):
         lines.append(f"Model path: {bundle['model_path']}")
 
@@ -2707,7 +2704,7 @@ def run_tagger(
     lines.append(f"Device: {device}")
     if bundle.get("provider"):
         lines.append(f"ONNX provider: {bundle.get('provider')}")
-    if bundle.get("backend") == "transformers":
+    if bundle.get("backend") in {"transformers", "timm"}:
         lines.append(f"AMP: {'on' if opts.use_amp else 'off'}")
     for warn in bundle.get("warn", []) or []:
         if warn:
@@ -2716,7 +2713,12 @@ def run_tagger(
         lines.append(f"Tag categories: loaded ({bundle.get('tag_meta_count', 0)} tags).")
     else:
         lines.append("Tag categories: not loaded (missing tag CSV or length mismatch).")
-    category_ids, category_warnings = resolve_category_ids(labels, categories, opts)
+    bundle_category_ids = bundle.get("category_ids") or {}
+    if bundle_category_ids:
+        category_ids = CategoryIds(**bundle_category_ids)
+        category_warnings = []
+    else:
+        category_ids, category_warnings = resolve_category_ids(labels, categories, opts)
     if category_warnings:
         for warn in category_warnings:
             lines.append(f"[WARN] {warn}")
@@ -2792,6 +2794,18 @@ def run_tagger(
     non_character_regex = _compile_regex(opts.non_character_regex)
     lines.append(f"Exclude tags: {len(exclude_tags)} | Exclude regex: {len(exclude_regex)}")
     lines.append(f"Non-character regex: {len(non_character_regex)}")
+    classifier = jio7_tags.load() if getattr(opts, "jio7_enabled", False) else None
+    jio7_dropped_total = 0
+    if opts.jio7_enabled and classifier is not None:
+        lines.append(
+            f"[classifier] Jio7 loaded: {classifier.source_rows or len(classifier.categories)} classified rows "
+            f"(version {classifier.version})"
+        )
+        lines.append(f"[classifier] Enabled categories: {', '.join(opts.jio7_categories)}")
+        if classifier.missing_categories:
+            lines.append(f"[classifier] [WARN] Missing categories: {', '.join(classifier.missing_categories)}")
+    elif opts.jio7_enabled:
+        lines.append("[classifier] [WARN] Jio7 unavailable; continuing with existing tag policy.")
 
     paths = _iter_images(opts.dataset_path, opts.recursive, opts.image_exts)
     if opts.limit > 0:
@@ -2898,8 +2912,6 @@ def run_tagger(
                             presence = None
                     else:
                         presence = None
-                    if wd_fix:
-                        im_rgb = _swap_rgb_bgr(im_rgb)
                     images.append(im_rgb)
                     color_presence_list.append(presence)
                 batch_paths.append(path)
@@ -2911,7 +2923,11 @@ def run_tagger(
             continue
 
         try:
-            if backend == "onnx":
+            prediction_rows = None
+            if adapter is not None:
+                prediction_rows = adapter.predict(adapter_loaded, images)
+                probs = [[prediction.score for prediction in row] for row in prediction_rows]
+            elif backend == "onnx":
                 import numpy as np
 
                 inputs = processor(images=images, return_tensors="np")
@@ -2940,11 +2956,28 @@ def run_tagger(
             color_presence = color_presence_list[idx] if idx < len(color_presence_list) else None
             color_debug = [] if opts.debug_color_sanity else None
             image_debug: Dict[str, Any] = {}
-            tags = _build_tags(
-                row,
+            effective_row = list(row)
+            build_opts = opts
+            if profile.key == CAFORMER_PROFILE and opts.threshold_strategy == "optimized" and recommended_thresholds:
+                effective_row = [
+                    float(score) if threshold is None or float(score) >= float(threshold) else -1.0
+                    for score, threshold in zip(effective_row, recommended_thresholds)
+                ]
+                build_opts = replace(opts, threshold_mode="fixed", general_threshold=0.0, character_threshold=0.0)
+            effective_row, jio7_dropped = filter_prediction_scores_with_jio7(
+                effective_row,
                 labels,
                 categories,
                 opts,
+                category_ids,
+                classifier,
+            )
+            jio7_dropped_total += jio7_dropped
+            tags = _build_tags(
+                effective_row,
+                labels,
+                categories,
+                build_opts,
                 category_ids,
                 exclude_tags,
                 exclude_regex,
@@ -3181,6 +3214,8 @@ def run_tagger(
         ):
             lines.append(f"  {group}: {tag_stats.get('policy_drop_' + group, 0)}")
         lines.append(f"Images with policy drops: {tag_stats.get('policy_images_with_drops', 0)}")
+    if opts.jio7_enabled:
+        lines.append(f"Jio7 semantic drops: {jio7_dropped_total}")
     if policy_leak_details:
         lines.append("Final policy leak details:")
         lines.extend(policy_leak_details[:50])

@@ -9,7 +9,7 @@ Current feature set:
 - **Workflow Guide** generated from this README.
 - **Image Tools**: Image to PNG Converter, Photo Adjust, Brush Blur, Color Brush, Manga Palette Helper.
 - **Dataset Assembly**: EPUB Image Extractor, Webtoon Panel Splitter, Stitch Groups, Flatten and Renumber, Combine Dataset.
-- **Tag Tools**: Dataset Tag Editor, Dataset Normalization, Auto Tag Assist (WD v3), CLIP Token Check.
+- **Tag Tools**: Dataset Tag Editor, Dataset Normalization, multi-model Auto Tag Assist, CLIP Token Check.
 - **Dataset Workflow** with reorderable step cards and pause/resume controls.
 - **Tag Glossary Wiki** with reusable glossary categories and Danbooru reference lookup.
 - **Settings** for Guided Tagging Flow, local Danbooru tag suggestions, and tag catalog sync/import.
@@ -22,7 +22,7 @@ Runs on Windows, Linux, and macOS.
 
 - Install **Python 3.11+**: <https://www.python.org/downloads/>
 - Make sure Python runs from a terminal with `python --version` or `python3 --version`.
-- For the Offline Tagger, install a PyTorch build that matches your CPU or CUDA setup.
+- Auto Tag Assist supports the included Timm/PyTorch WD runtime and the CPU-oriented ONNX Runtime CAFormer path.
 
 ---
 
@@ -175,23 +175,16 @@ This prints MD5 values and writes `checksums.md`.
 
 ## Offline Tagger Models
 
-The Offline Tagger accepts either a Hugging Face repo ID such as `org/model` or
-a local model folder path.
+Auto Tag Assist uses a curated model registry rather than arbitrary Hugging Face IDs:
 
-Requirements:
+- **CAFormer S36 dbv4** (`animetimm/caformer_s36.dbv4-full`) uses ONNX Runtime with `CPUExecutionProvider`, RGB input, white padding, 384×384 crops, ImageNet normalization, and per-tag optimized thresholds. It is recommended for Guided Flow Context Suggestions.
+- **WD SwinV2 Tagger v3** (`SmilingWolf/wd-swinv2-tagger-v3`) remains the legacy-compatible model and retains its WD-specific RGB-to-BGR preprocessing and MCUT/fixed thresholds.
 
-- The model must work with `AutoModelForImageClassification` for multi-label image tagging.
-- Safetensors weights are required because the app loads models with `use_safetensors=True`.
-- A tag list file should exist as `selected_tags.csv` or `tags.csv`; otherwise the app falls back to `id2label`.
+Use the model controls in Auto Tag Assist to download a model or install it from an existing local folder. Files are validated and copied into BatchBench writable data under `models/taggers/`; the source folder is not modified. Downloads are explicit background jobs and use normal cached Hugging Face credentials or `HF_TOKEN` without logging tokens.
 
-How to switch models:
+CAFormer may require accepting its model conditions on Hugging Face. If access is gated, accept the conditions and authenticate Hugging Face before retrying. Manual tagging remains available when any model/download/runtime fails.
 
-1. Open **Offline Tagger (WD v3)**.
-2. Set **Model ID or local path** to another model repo or local folder.
-3. Run the tagger. The app downloads required files into the Hugging Face cache unless **Local files only** is checked.
-
-Tip: if you keep models inside this repo, store them under `models/`; that
-folder is ignored by git.
+Jio7 semantic classification is bundled as versioned application data. The recommended filter keeps `action`, `expression`, `object`, `setting`, and `other`, while excluding `attire`, `feature`, `meta`, `meme`, `style`, and `count`. Auto Tag Assist permits unclassified tags to fall through to its existing policy unless strict classification is selected; Context Suggestions hide unclassified tags by default.
 
 ---
 
@@ -388,6 +381,9 @@ Guided Tagging Flow:
 - Sibling propagation uses explicit groups and a preview. The default mode is append-only; replace modes must be selected deliberately by API callers.
 - **Caption Lint** is advisory and never edits captions. It can report unknown tags, aliases, deprecated tags when known locally, duplicates, malformed tags, missing triggers, rare one-off tags, simple conflicts, grayscale/color advisories, and related quality-control issues.
 - Optional machine suggestions are stored separately per image with model and threshold metadata. They do not change captions or completion status until the user adds a suggestion.
+- **Inspect Dataset** runs the selected curated model as a resumable background job and stores Context Suggestions under `dataset/_temp/tag_suggestions/`.
+- Context Suggestions are routed to the useful active segment (for example expression, pose/action, background, or camera), appear as compact **Detected** chips, and never write captions until clicked.
+- Unchanged images reuse cached predictions. Image, model, threshold/sensitivity, classification-data, and suggestion-policy changes invalidate the relevant cache entries.
 Watch out:
 - Bulk Tag CRUD works in `dataset/_temp`.
 - **Undo** restores files from `_temp` to `dataset/`.
@@ -433,15 +429,17 @@ Watch out:
 
 #### Auto Tag Assist
 How to use:
-- Fill Dataset Folder, choose a WD model or local model path, configure the trigger tag and policy, then run **Preview** first.
+- Fill Dataset Folder, choose a curated model, configure the trigger tag and policy, then run **Preview** first.
 - Review kept tags, removed tags, policy drops, and final leak counts in the log.
 - Run tagging only after the preview looks correct.
 Parameters:
 - Dataset Folder: folder containing images and optional `.txt` captions.
-- Model ID or local path: Hugging Face repo ID or local folder compatible with `AutoModelForImageClassification`.
+- Model: CAFormer S36 dbv4 (ONNX/CPU) or WD SwinV2 Tagger v3 (Timm/PyTorch).
+- Model manager: explicit Download or Install from local folder; no model is downloaded silently.
 - Trigger tag: inserted first and protected from filtering.
 - Character policy: default is `Character - omit identity`, which removes recurring identity traits while keeping promptable expression, pose, outfit, and scene tags.
-- Threshold mode: `fixed` uses configured confidence thresholds; `mcut` estimates per-image thresholds from score gaps.
+- Threshold: optimized uses CAFormer `best_threshold` per tag or WD model-specific MCUT/default behavior; custom settings remain under Advanced.
+- Jio7 semantic categories: the recommended defaults keep action, expression, object, setting, and other.
 - Replacement mode: replaces selected existing captions after creating a timestamped backup; preview writes nothing.
 - Color sanity: can drop weak color-attribute tags when the image does not support them.
 Watch out:
@@ -532,16 +530,18 @@ Watch out:
 
 ### What the autotagger does
 
-The Offline Autotagger uses the selected WD model to produce probabilities for known Danbooru tags. It does not generate arbitrary natural-language captions, and it cannot invent tags outside the model vocabulary. Accepted tags are written as comma-separated sidecar `.txt` captions with spaces (`long hair`). Danbooru lookups and policy matching continue to use underscore keys internally (`long_hair`).
+The Offline Autotagger uses the selected curated model to produce probabilities for known Danbooru tags. It does not generate arbitrary natural-language captions, and it cannot invent tags outside the model vocabulary. Accepted tags are written as comma-separated sidecar `.txt` captions with spaces (`long hair`). Jio7, model metadata, Danbooru lookups, and policy matching continue to use underscore keys internally (`long_hair`).
 
 ### Processing order
 
 ```text
-WD inference
+profile adapter inference
+-> model-aware optimized/custom threshold
+-> model category/rating filter
+-> Jio7 semantic filter
 -> semantic policy
 -> color sanity
--> WD category split
--> MCUT/fixed threshold
+-> model category split
 -> tag limits
 -> custom exclusions
 -> final policy safety filter
@@ -603,7 +603,7 @@ The Dataset Workflow Offline Tagger uses the same `services/offline_tagger.py` a
 ### Limitations
 
 - Semantic groups are deterministic rules, not perfect visual understanding.
-- WD can only return tags from its known vocabulary.
+- Each supported model can only return tags from its known vocabulary.
 - Low-confidence or visually ambiguous content may still require manual correction.
 - Policy leak audit verifies tags, but you should still review samples.
 - Outfit details that are also permanent character design elements may need custom keep/block overrides depending on the dataset.

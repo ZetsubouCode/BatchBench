@@ -29,6 +29,9 @@ from services import tagging_assist
 from services import blur_brush
 from services import color_brush
 from services import trigger_safety
+from services import context_suggestions
+from services import jio7_tags
+from services import tagger_model_manager
 from services.discord_presence import (
     ACTIVITY_PAYLOADS,
     DiscordPresenceService,
@@ -1692,6 +1695,91 @@ def api_tagging_quiz_cheatsheet_validate_danbooru():
             "normalized_root": str(paths["project_root"]),
         }
     )
+
+
+@app.get("/api/tagger-models")
+def api_tagger_models():
+    return jsonify({"ok": True, "models": tagger_model_manager.list_status(), "classifier": jio7_tags.status()})
+
+
+@app.post("/api/tagger-models/install-local")
+def api_tagger_models_install_local():
+    payload = request.get_json(silent=True) or {}
+    profile = str(payload.get("model_profile") or "").strip()
+    source = str(payload.get("source_folder") or "").strip()
+    if not profile or not source:
+        return _json_error("model_profile and source_folder are required", 400)
+    try:
+        result = tagger_model_manager.install_from_local(profile, readable_path(source))
+    except ValueError as exc:
+        return _json_error(str(exc), 400)
+    return jsonify(result), (200 if result.get("ok") else 400)
+
+
+@app.post("/api/tagger-models/download")
+def api_tagger_models_download():
+    payload = request.get_json(silent=True) or {}
+    try:
+        result = tagger_model_manager.start_download(str(payload.get("model_profile") or ""))
+    except ValueError as exc:
+        return _json_error(str(exc), 400)
+    return jsonify(result)
+
+
+@app.get("/api/tagger-models/download/<job_id>")
+def api_tagger_models_download_status(job_id: str):
+    result = tagger_model_manager.download_status(job_id)
+    return jsonify({"ok": bool(result), "job": result, "error": "Download job not found" if not result else ""}), (200 if result else 404)
+
+
+@app.post("/api/tagging-quiz/suggestions/inspect")
+def api_tagging_quiz_suggestions_inspect():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_quiz_project_from_payload(payload)
+    if error:
+        return error
+    try:
+        result = context_suggestions.start_inspection(
+            paths["project_root"],
+            str(payload.get("model_profile") or context_suggestions.CAFORMER_PROFILE),
+            str(payload.get("sensitivity") or "normal"),
+            payload.get("segments") if isinstance(payload.get("segments"), list) else [],
+        )
+    except ValueError as exc:
+        return _json_error(str(exc), 400, normalized_root=str(paths["project_root"]))
+    return jsonify(result), (200 if result.get("ok") else 400)
+
+
+@app.post("/api/tagging-quiz/suggestions/status")
+def api_tagging_quiz_suggestions_status():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_quiz_project_from_payload(payload)
+    if error:
+        return error
+    result = context_suggestions.inspection_status(str(payload.get("job_id") or ""), paths["project_root"])
+    return jsonify({"ok": True, "job": result})
+
+
+@app.post("/api/tagging-quiz/suggestions/cancel")
+def api_tagging_quiz_suggestions_cancel():
+    payload = request.get_json(silent=True) or {}
+    cancelled = context_suggestions.cancel_inspection(str(payload.get("job_id") or ""))
+    return jsonify({"ok": cancelled, "error": "Active inspection job not found" if not cancelled else ""}), (200 if cancelled else 404)
+
+
+@app.post("/api/tagging-quiz/suggestions/image")
+def api_tagging_quiz_suggestions_image():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_quiz_project_from_payload(payload)
+    if error:
+        return error
+    result = context_suggestions.suggestions_for_image(
+        paths["project_root"],
+        str(payload.get("image_rel") or ""),
+        expected_profile=str(payload.get("model_profile") or ""),
+        expected_sensitivity=str(payload.get("sensitivity") or ""),
+    )
+    return jsonify(result), (200 if result.get("ok") else 400)
 
 
 @app.post("/api/tagging-quiz/recommendations/build")

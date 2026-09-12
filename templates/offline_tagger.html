@@ -1,7 +1,7 @@
 <div class="card p-4">
   <div class="d-flex flex-column gap-1 mb-3">
     <h2 class="h5 mb-0">Offline Tagger</h2>
-    <div class="text-muted small">WD v3 Danbooru tag captions for image datasets.</div>
+    <div class="text-muted small">Curated local models with preview-first semantic filtering.</div>
   </div>
 
   <form method="post" data-tool-label="Offline Tagger">
@@ -29,6 +29,33 @@
           <input class="form-check-input" type="checkbox" id="offline_recursive" name="recursive" value="1">
           <span class="form-check-label">Recursive</span>
         </label>
+      </div>
+
+      <div class="col-lg-6">
+        <label class="form-label" for="offline_model_profile">Model</label>
+        <select class="form-select" id="offline_model_profile" name="model_profile">
+          <option value="wd_swinv2_v3">Loading curated models…</option>
+        </select>
+        <div class="form-text" id="offline_model_status">Checking managed model status…</div>
+      </div>
+      <div class="col-lg-3">
+        <label class="form-label" for="offline_threshold_strategy">Threshold</label>
+        <select class="form-select" id="offline_threshold_strategy" name="threshold_strategy">
+          <option value="optimized" selected>Optimized (Recommended)</option>
+          <option value="custom">Custom</option>
+        </select>
+      </div>
+      <div class="col-lg-3 d-flex align-items-end gap-2">
+        <button type="button" class="btn btn-outline-info" id="offline_model_download">Download</button>
+        <button type="button" class="btn btn-outline-light" id="offline_model_local_toggle">Install local</button>
+      </div>
+      <div class="col-12 d-none" id="offline_model_local_row">
+        <label class="form-label" for="offline_model_local_folder">Local model folder</label>
+        <div class="input-group">
+          <input class="form-control" id="offline_model_local_folder" placeholder="D:\path\to\model">
+          <button type="button" class="btn btn-outline-light btn-browse" data-target="offline_model_local_folder">Browse</button>
+          <button type="button" class="btn btn-outline-info" id="offline_model_local_install">Install</button>
+        </div>
       </div>
 
       <div class="col-lg-5">
@@ -66,15 +93,22 @@
     <details class="mt-3">
       <summary class="fw-semibold">Advanced autotagger settings</summary>
       <div class="row g-3 mt-1">
-        <div class="col-lg-6">
-          <label class="form-label" for="offline_model_id">Model ID</label>
-          <input class="form-control" id="offline_model_id" name="model_id" value="SmilingWolf/wd-swinv2-tagger-v3">
+        <div class="col-12">
+          <div class="fw-semibold mb-1">Jio7 semantic filtering</div>
+          <input type="hidden" name="jio7_enabled" value="1">
+          <input type="hidden" name="jio7_categories" id="offline_jio7_categories" value="action,expression,object,setting,other">
+          <div class="d-flex flex-wrap gap-3">
+            {% for category in ['action', 'expression', 'object', 'setting', 'other'] %}
+            <label class="form-check"><input class="form-check-input offline-jio7-category" type="checkbox" value="{{ category }}" checked> <span class="form-check-label">{{ category }}</span></label>
+            {% endfor %}
+          </div>
+          <div class="form-text">Appearance, attire, meta, meme, style, and count are excluded by the recommended preset. Unclassified tags retain existing Auto Tag Assist behavior.</div>
         </div>
-        <div class="col-lg-2">
+        <div class="col-lg-2 offline-wd-only">
           <label class="form-label" for="offline_batch_size">Batch size</label>
           <input class="form-control" id="offline_batch_size" type="number" min="1" name="batch_size" value="4">
         </div>
-        <div class="col-lg-2">
+        <div class="col-lg-2 offline-wd-only">
           <label class="form-label" for="offline_threshold_mode">Threshold mode</label>
           <select class="form-select" id="offline_threshold_mode" name="threshold_mode">
             <option value="mcut" selected>MCUT</option>
@@ -90,41 +124,41 @@
           <label class="form-label" for="offline_general_threshold">General threshold</label>
           <input class="form-control" id="offline_general_threshold" type="number" min="0" max="1" step="0.01" name="general_threshold" value="0.35">
         </div>
-        <div class="col-lg-3">
+        <div class="col-lg-3 offline-wd-only">
           <label class="form-label" for="offline_character_threshold">Character threshold</label>
           <input class="form-control" id="offline_character_threshold" type="number" min="0" max="1" step="0.01" name="character_threshold" value="0.75">
         </div>
-        <div class="col-lg-3">
+        <div class="col-lg-3 offline-wd-only">
           <label class="form-label" for="offline_min_threshold_floor">Minimum threshold floor</label>
           <input class="form-control" id="offline_min_threshold_floor" type="number" min="0" max="1" step="0.01" name="min_threshold_floor" value="0.2">
         </div>
-        <div class="col-lg-3">
+        <div class="col-lg-3 offline-wd-only">
           <label class="form-label" for="offline_policy_min_general">Policy MCUT minimum general tags</label>
           <input class="form-control" id="offline_policy_min_general" type="number" min="0" name="policy_mcut_min_general_tags" value="0">
           <div class="form-text text-muted">Use 0 for strict output after identity groups are removed.</div>
         </div>
 
-        <div class="col-lg-2">
+        <div class="col-lg-2 offline-wd-only">
           <label class="form-label" for="offline_mcut_relax_general">MCUT relax general</label>
           <input class="form-control" id="offline_mcut_relax_general" type="number" min="0" max="1" step="0.01" name="mcut_relax_general" value="0.08">
         </div>
-        <div class="col-lg-2">
+        <div class="col-lg-2 offline-wd-only">
           <label class="form-label" for="offline_mcut_relax_character">MCUT relax character</label>
           <input class="form-control" id="offline_mcut_relax_character" type="number" min="0" max="1" step="0.01" name="mcut_relax_character" value="0.02">
         </div>
-        <div class="col-lg-2">
+        <div class="col-lg-2 offline-wd-only">
           <label class="form-label" for="offline_mcut_relax_meta">MCUT relax meta</label>
           <input class="form-control" id="offline_mcut_relax_meta" type="number" min="0" max="1" step="0.01" name="mcut_relax_meta" value="0.05">
         </div>
-        <div class="col-lg-2">
+        <div class="col-lg-2 offline-wd-only">
           <label class="form-label" for="offline_mcut_min_general">MCUT minimum general tags</label>
           <input class="form-control" id="offline_mcut_min_general" type="number" min="0" name="mcut_min_general_tags" value="8">
         </div>
-        <div class="col-lg-2">
+        <div class="col-lg-2 offline-wd-only">
           <label class="form-label" for="offline_mcut_min_character">MCUT minimum character tags</label>
           <input class="form-control" id="offline_mcut_min_character" type="number" min="0" name="mcut_min_character_tags" value="0">
         </div>
-        <div class="col-lg-2">
+        <div class="col-lg-2 offline-wd-only">
           <label class="form-label" for="offline_mcut_min_meta">MCUT minimum meta tags</label>
           <input class="form-control" id="offline_mcut_min_meta" type="number" min="0" name="mcut_min_meta_tags" value="0">
         </div>
@@ -239,3 +273,73 @@
     </div>
   </form>
 </div>
+
+<script>
+(() => {
+  const profile = document.getElementById('offline_model_profile');
+  const status = document.getElementById('offline_model_status');
+  const download = document.getElementById('offline_model_download');
+  const toggle = document.getElementById('offline_model_local_toggle');
+  const localRow = document.getElementById('offline_model_local_row');
+  const install = document.getElementById('offline_model_local_install');
+  const localFolder = document.getElementById('offline_model_local_folder');
+  const semanticValue = document.getElementById('offline_jio7_categories');
+  if (!profile || !status) return;
+  let models = [];
+  const current = () => models.find(item => item.key === profile.value);
+  const render = () => {
+    const item = current();
+    status.textContent = item ? `${item.ready ? 'Ready' : `Not installed · missing ${item.missing.join(', ')}`} · ${item.runtime}` : 'Status unavailable';
+    download.disabled = !!item?.ready;
+    document.querySelectorAll('.offline-wd-only').forEach(element => element.classList.toggle('d-none', item?.family !== 'smilingwolf_wd'));
+  };
+  async function refresh(){
+    try {
+      const response = await fetch('/api/tagger-models');
+      const data = await response.json();
+      models = data.models || [];
+      const previous = profile.value;
+      profile.innerHTML = '';
+      models.forEach(item => {
+        const option = document.createElement('option');
+        option.value = item.key;
+        option.textContent = `${item.display_name}${item.recommended ? ' · Recommended' : ''}`;
+        profile.appendChild(option);
+      });
+      profile.value = models.some(item => item.key === previous)
+        ? previous
+        : (models.find(item => item.legacy_default)?.key || models[0]?.key || '');
+      render();
+    } catch (error) { status.textContent = `Model status unavailable: ${error.message}`; }
+  }
+  async function poll(jobId){
+    const response = await fetch(`/api/tagger-models/download/${jobId}`);
+    const data = await response.json();
+    const job = data.job;
+    if (!job) return;
+    status.textContent = job.error || `${job.status}: ${job.completed_files}/${job.total_files} ${job.current_file || ''}`;
+    if (['queued', 'running'].includes(job.status)) setTimeout(() => poll(jobId), 1000);
+    else refresh();
+  }
+  profile.addEventListener('change', render);
+  document.querySelectorAll('.offline-jio7-category').forEach(box => box.addEventListener('change', () => {
+    semanticValue.value = Array.from(document.querySelectorAll('.offline-jio7-category:checked')).map(item => item.value).join(',');
+  }));
+  toggle?.addEventListener('click', () => localRow?.classList.toggle('d-none'));
+  download?.addEventListener('click', async () => {
+    status.textContent = 'Starting download…';
+    const response = await fetch('/api/tagger-models/download', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({model_profile:profile.value})});
+    const data = await response.json();
+    if (!data.ok) { status.textContent = data.error || 'Download could not start.'; return; }
+    if (data.job) poll(data.job.job_id); else refresh();
+  });
+  install?.addEventListener('click', async () => {
+    status.textContent = 'Installing local model…';
+    const response = await fetch('/api/tagger-models/install-local', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({model_profile:profile.value, source_folder:localFolder.value})});
+    const data = await response.json();
+    status.textContent = data.ok ? 'Model ready.' : (data.error || 'Install failed.');
+    if (data.ok) refresh();
+  });
+  refresh();
+})();
+</script>
