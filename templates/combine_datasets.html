@@ -1,34 +1,99 @@
 <div class="card p-4">
-    <form method="post" data-tool-label="Combine dataset">
+    <form method="post" data-tool-label="Combine dataset" data-no-busy="true">
       <input type="hidden" name="tool" value="combine">
+      <input type="hidden" name="move_plan_token" id="combine-move-token">
       <div class="row g-3">
         <div class="col-md-6">
-          <label class="form-label">Source folders (one per line)</label>
-          <textarea id="source_folders" name="source_folders" class="form-control" rows="3" placeholder="D:\path\to\datasetA&#10;D:\path\to\datasetB&#10;D:\path\to\datasetC" data-bs-toggle="tooltip" data-bs-title="List all dataset source folders here"></textarea>
+          <label class="form-label" for="combine-source-0">Source folders</label>
+          <div id="combine-source-list" class="d-grid gap-2"></div>
+          <button type="button" class="btn btn-sm btn-outline-light mt-2" id="combine-add-source">+ Add folder</button>
+          <textarea id="source_folders" name="source_folders" class="visually-hidden" tabindex="-1" aria-hidden="true" data-no-persist></textarea>
         </div>
         <div class="col-md-6">
-          <label class="form-label">Output Folder</label>
+          <label class="form-label" for="out_dir">Output Folder</label>
           <div class="input-group">
-            <input id="out_dir" name="out_dir" type="text" class="form-control" placeholder="D:\path\to\merged_output" data-bs-toggle="tooltip" data-bs-title="All combined files will be placed here">
+            <input id="out_dir" name="out_dir" type="text" class="form-control" placeholder="D:\path\to\merged_output" data-bs-toggle="tooltip" data-bs-title="All combined files will be placed here" data-path-role="output">
             <button class="btn btn-outline-light btn-browse" type="button" data-target="out_dir" data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
           </div>
         </div>
         <div class="col-md-3">
+          <div class="form-check" data-bs-toggle="tooltip" data-bs-title="Move image + caption pairs instead of copying">
+            <input class="form-check-input" type="checkbox" id="move_instead" name="move_instead">
+            <label class="form-check-label" for="move_instead">Move pairs</label>
+          </div>
+        </div>
+        <div class="col-12"><details><summary>Advanced naming and scan options</summary><div class="row g-2 mt-1">
+        <div class="col-md-6">
           <label class="form-label">Suffix for non-base sets</label>
           <input class="form-control" name="suffix_combine" value="_B" data-bs-toggle="tooltip" data-bs-title="Applied to non-base dataset filenames to avoid collisions. Auto increments for multiple sets (_B, _C, _D...)">
         </div>
-        <div class="col-md-3">
+        <div class="col-md-6">
           <label class="form-label">Image ext (comma)</label>
           <input class="form-control" name="exts_combine" value=".jpg,.jpeg,.png,.webp" data-bs-toggle="tooltip" data-bs-title="Image types to treat as pairs with .txt">
         </div>
-        <div class="col-md-3 d-flex align-items-end">
-          <div class="form-check" data-bs-toggle="tooltip" data-bs-title="Move files instead of copying">
-            <input class="form-check-input" type="checkbox" id="move_instead" name="move_instead">
-            <label class="form-check-label" for="move_instead">Move (not copy)</label>
-          </div>
-        </div>
+        </div></details></div>
       </div>
-      <div class="mt-3"><button class="btn btn-primary">Combine</button></div>
+      <div class="small mt-2" id="combine-scope" role="status">Image + caption pairs are copied by default.</div>
+      <div class="small mt-2" id="combine-move-preview" role="status"></div>
+      <div class="mt-3"><button class="btn btn-primary" id="combine-submit">Combine datasets</button></div>
     </form>
   </div>
+<script>
+(() => {
+  const form = document.querySelector('form[data-tool-label="Combine dataset"]');
+  const list = document.getElementById('combine-source-list');
+  const hidden = document.getElementById('source_folders');
+  const move = document.getElementById('move_instead');
+  const scope = document.getElementById('combine-scope');
+  const token = document.getElementById('combine-move-token');
+  const preview = document.getElementById('combine-move-preview');
+  const submit = document.getElementById('combine-submit');
+  if (!form || !list) return;
+  let nextId = 0;
+  function sync() {
+    const values = [...list.querySelectorAll('input')].map(input => input.value.trim()).filter(Boolean);
+    hidden.value = values.join('\n');
+    try { localStorage.setItem('bb-combine-sources', JSON.stringify(values)); } catch (_) {}
+    scope.textContent = `${values.length} source folder${values.length === 1 ? '' : 's'} · ${move.checked ? 'Move' : 'Copy'} image + caption pairs to ${form.querySelector('#out_dir').value.trim() || 'the output folder'}.`;
+  }
+  function invalidate() {
+    token.value = '';
+    preview.textContent = '';
+    submit.textContent = move.checked ? 'Preview move pairs' : 'Combine datasets';
+  }
+  function add(value = '') {
+    const row = document.createElement('div'); row.className = 'input-group';
+    const input = document.createElement('input'); input.id = `combine-source-${nextId++}`; input.name = input.id; input.type = 'text'; input.className = 'form-control'; input.placeholder = 'Dataset folder'; input.value = value; input.addEventListener('input', sync);
+    const browse = document.createElement('button'); browse.type = 'button'; browse.className = 'btn btn-outline-light btn-browse'; browse.dataset.target = input.id; browse.textContent = 'Browse';
+    const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'btn btn-outline-secondary'; remove.textContent = 'Remove'; remove.setAttribute('aria-label', 'Remove source folder'); remove.addEventListener('click', () => {row.remove(); sync(); invalidate();});
+    row.append(input, browse, remove); list.appendChild(row); sync(); invalidate();
+  }
+  let saved = [];
+  try { saved = JSON.parse(localStorage.getItem('bb-combine-sources') || '[]'); } catch (_) {}
+  if (!Array.isArray(saved) || saved.length < 2) saved = [...(Array.isArray(saved) ? saved : []), '', ''].slice(0, 2);
+  saved.forEach(value => add(String(value || '')));
+  document.getElementById('combine-add-source').addEventListener('click', () => add());
+  move.addEventListener('change', sync);
+  form.querySelector('#out_dir').addEventListener('input', sync);
+  form.addEventListener('input', invalidate);
+  form.addEventListener('change', invalidate);
+  form.addEventListener('submit', async event => {
+    sync();
+    if (!move.checked || token.value) return;
+    event.preventDefault();
+    submit.disabled = true;
+    submit.textContent = 'Preparing move preview…';
+    try {
+      const response = await fetch('/api/combine/preview-move', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(Object.fromEntries(new FormData(form)))});
+      const data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data.error || 'Move preview failed.');
+      token.value = data.plan_token;
+      preview.textContent = `${data.pairs} image + caption pairs will move from ${data.sources.length} folders to ${data.output_path}. ${data.conflicts} name conflicts will be renamed. ${data.missing_sidecars_skipped} images without captions will be skipped.`;
+      submit.textContent = 'Move reviewed pairs';
+    } catch (error) { preview.textContent = error.message; submit.textContent = 'Preview move pairs'; }
+    finally { submit.disabled = false; }
+  });
+  invalidate();
+})();
+</script>
   

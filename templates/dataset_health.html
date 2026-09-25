@@ -1,0 +1,130 @@
+<section class="card p-3" aria-labelledby="health-title">
+  <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
+    <div><h2 class="h5 mb-1" id="health-title">Dataset Health</h2><p class="text-muted small mb-0">Inspect image and caption issues before editing or export.</p></div>
+    <button type="button" class="btn btn-primary" id="health-scan">Inspect dataset</button>
+  </div>
+  <div class="row g-2 align-items-end">
+    <div class="col-md-9"><label class="form-label" for="health-dataset">Dataset folder</label><div class="input-group"><input class="form-control" id="health-dataset" data-path-role="dataset" placeholder="D:\path\to\dataset"><button type="button" class="btn btn-outline-light btn-browse" data-target="health-dataset">Browse</button></div></div>
+    <div class="col-md-3"><label class="form-check mb-2"><input type="checkbox" class="form-check-input" id="health-recursive" checked><span class="form-check-label">Include subfolders</span></label></div>
+  </div>
+  <div id="health-status" class="small mt-3" role="status">Select a dataset to inspect.</div>
+  <div id="health-summary" class="bb-operation-counts mt-2"></div>
+  <div id="health-issues" class="mt-3 d-grid gap-2"></div>
+</section>
+<dialog id="health-caption-dialog" class="bb-health-dialog">
+  <div class="d-flex justify-content-between align-items-start gap-2 mb-2"><div><h3 class="h6 mb-1">Inspect caption</h3><div class="small text-muted" id="health-caption-path"></div></div><button type="button" class="btn btn-sm btn-outline-secondary" id="health-caption-close">Close</button></div>
+  <label class="form-label" for="health-caption-content">Caption text</label>
+  <img id="health-pair-image" alt="Paired dataset image" class="d-none mb-2" style="max-width:100%;max-height:35vh;object-fit:contain">
+  <textarea class="form-control font-monospace" id="health-caption-content" rows="8" spellcheck="false"></textarea>
+  <div class="small text-muted mt-2">Write comma-separated tags with spaces. Check other caption blocks before saving.</div>
+  <div class="small mt-2" id="health-caption-status" role="status"></div>
+  <div class="d-flex justify-content-end mt-3"><button type="button" class="btn btn-primary" id="health-caption-save">Save caption</button></div>
+</dialog>
+<style>.bb-health-dialog{width:min(42rem,calc(100vw - 1rem));max-width:none;border:1px solid var(--bb-border);border-radius:.5rem;background:var(--bb-card);color:var(--bb-text);padding:1rem}.bb-health-dialog::backdrop{background:rgba(0,0,0,.7)}</style>
+<script>
+(() => {
+  const q = id => document.getElementById(id);
+  let lastReport = null;
+  let selectedIssue = '';
+  let openRelative = '';
+  let openFingerprint = null;
+  async function inspect() {
+    const path = q('health-dataset').value.trim();
+    q('health-status').textContent = 'Inspecting dataset…';
+    q('health-scan').disabled = true;
+    try {
+      const response = await fetch('/api/dataset-health/scan', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({dataset_path:path, recursive:q('health-recursive').checked})});
+      const data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data.error || 'Dataset scan failed.');
+      lastReport = data.report;
+      const summary = data.report.summary || {};
+      q('health-status').textContent = `Inspected ${data.dataset_path}. ${data.report.errors.length} error groups, ${data.report.warnings.length} warning groups.`;
+      q('health-summary').replaceChildren();
+      for (const [name, count] of Object.entries(summary)) {
+        const cell = document.createElement('div');
+        const label = document.createElement('dt'); label.textContent = name.replaceAll('_', ' ');
+        const value = document.createElement('dd'); value.textContent = String(count);
+        cell.append(label, value); q('health-summary').appendChild(cell);
+      }
+      renderIssues();
+    } catch (error) {
+      q('health-status').textContent = error.message;
+      q('health-issues').replaceChildren();
+    } finally { q('health-scan').disabled = false; }
+  }
+  function renderIssues() {
+    const wrap = q('health-issues'); wrap.replaceChildren();
+    const issues = [...(lastReport?.errors || []), ...(lastReport?.warnings || [])];
+    if (!issues.length) { wrap.textContent = 'No dataset issues found.'; return; }
+    issues.forEach(issue => {
+      const section = document.createElement('details');
+      section.className = 'border rounded p-2'; section.open = issue.code === selectedIssue;
+      const head = document.createElement('summary'); head.textContent = issue.message;
+      head.addEventListener('click', () => { selectedIssue = issue.code; });
+      section.appendChild(head);
+      const list = document.createElement('ul'); list.className = 'small mt-2 mb-0';
+      const items = Array.isArray(issue.items) ? issue.items : Object.values(issue.items || {}).flat();
+      items.forEach(item => {
+        const path = typeof item === 'string' ? item : item.path || JSON.stringify(item);
+        const li = document.createElement('li'); li.className = 'mb-1';
+        const name = document.createElement('span'); name.textContent = path + ' ';
+        li.appendChild(name);
+        if (typeof path === 'string' && /\.(txt|png|jpe?g|webp|bmp)$/i.test(path)) {
+          const button = document.createElement('button');
+          button.type = 'button'; button.className = 'btn btn-sm btn-outline-info';
+          button.textContent = issue.code === 'missing_captions' ? 'Create caption for review' : 'Open caption';
+          button.addEventListener('click', () => openCaption(path));
+          li.appendChild(button);
+        }
+        list.appendChild(li);
+      });
+      section.appendChild(list); wrap.appendChild(section);
+    });
+  }
+  async function openCaption(relative) {
+    q('health-caption-status').textContent = 'Opening caption…';
+    try {
+      const response = await fetch('/api/dataset-health/caption', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({dataset_path:q('health-dataset').value.trim(), relative_path:relative})});
+      const data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data.error || 'Could not open caption.');
+      openRelative = data.relative_path;
+      openFingerprint = data.fingerprint;
+      q('health-caption-path').textContent = data.relative_path;
+      q('health-caption-content').value = data.content;
+      const image = q('health-pair-image');
+      image.classList.add('d-none');
+      image.onload = () => image.classList.remove('d-none');
+      image.onerror = () => image.classList.add('d-none');
+      image.src = '/api/dataset-health/image?' + new URLSearchParams({dataset_path:q('health-dataset').value.trim(), relative_path:relative});
+      q('health-caption-save').textContent = data.exists ? 'Save caption' : 'Create empty TXT for review';
+      q('health-caption-status').textContent = data.exists ? 'Review and edit the caption.' : 'Caption is missing. Add tags, or explicitly create an empty TXT for review.';
+      q('health-caption-dialog').showModal();
+    } catch (error) { q('health-status').textContent = error.message; }
+  }
+  q('health-caption-close')?.addEventListener('click', () => q('health-caption-dialog').close());
+  q('health-caption-save')?.addEventListener('click', async () => {
+    const button = q('health-caption-save'); button.disabled = true;
+    q('health-caption-status').textContent = 'Saving caption…';
+    try {
+      const response = await fetch('/api/dataset-health/caption/save', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({dataset_path:q('health-dataset').value.trim(), relative_path:openRelative, content:q('health-caption-content').value, fingerprint:openFingerprint})});
+      const data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data.error || 'Could not save caption.');
+      q('health-caption-dialog').close();
+      q('health-status').textContent = `Saved ${data.relative_path}. Inspect dataset again to update findings.`;
+    } catch (error) { q('health-caption-status').textContent = error.message; }
+    finally { button.disabled = false; }
+  });
+  q('health-scan')?.addEventListener('click', inspect);
+  const deepLink = new URLSearchParams(location.search);
+  if (deepLink.get('tab') === 'health' && deepLink.get('dataset')) {
+    q('health-dataset').value = deepLink.get('dataset');
+    window.bbOnToolReady(async () => {
+      await inspect();
+      if (deepLink.get('caption')) await openCaption(deepLink.get('caption'));
+    });
+  }
+  document.addEventListener('bb:path-context', event => {
+    if (event.detail.role === 'dataset' && !q('health-dataset').value.trim()) q('health-dataset').value = event.detail.value;
+  });
+})();
+</script>

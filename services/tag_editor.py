@@ -2610,6 +2610,38 @@ def export_dataset_zip(project_root: Path) -> Dict[str, Any]:
     }
 
 
+def resolve_dataset_zip_download(project_root: Path, zip_name: str) -> Dict[str, Any]:
+    """Resolve one generated dataset ZIP without exposing a generic file endpoint."""
+    paths = resolve_project_paths(project_root)
+    parent_dir = paths["dataset_root"].parent
+    name = str(zip_name or "").strip()
+    expected_prefix = re.escape(f"{paths['dataset_root'].name}__")
+    expected_name = re.compile(rf"^{expected_prefix}\d{{8}}-\d{{6}}(?:_\d+)?\.zip$", re.IGNORECASE)
+
+    if (
+        not name
+        or name != Path(name).name
+        or Path(name).is_absolute()
+        or "/" in name
+        or "\\" in name
+        or ".." in name
+        or not expected_name.fullmatch(name)
+    ):
+        return {"ok": False, "error": "Invalid dataset ZIP filename", "status": 400}
+
+    target = parent_dir / name
+    try:
+        resolved_parent = parent_dir.resolve()
+        resolved_target = target.resolve()
+    except Exception:
+        return {"ok": False, "error": "Invalid dataset ZIP path", "status": 400}
+    if resolved_target.parent != resolved_parent:
+        return {"ok": False, "error": "Invalid dataset ZIP path", "status": 400}
+    if not resolved_target.exists() or not resolved_target.is_file():
+        return {"ok": False, "error": "Dataset ZIP not found", "status": 404}
+    return {"ok": True, "path": resolved_target, "name": name}
+
+
 def list_database_images(project_root: Path, exts: List[str], recursive: bool, limit: int, tag_limit: int) -> Dict[str, Any]:
     paths = resolve_project_paths(project_root)
     result = list_images_with_tags(paths["database_root"], exts, recursive=recursive, limit=limit, tag_limit=tag_limit)

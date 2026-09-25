@@ -1,10 +1,10 @@
 <div class="card p-4">
   <div class="d-flex flex-column gap-1 mb-3">
-    <h2 class="h5 mb-0">Offline Tagger</h2>
+    <h2 class="h5 mb-0">Auto Tag Assist</h2>
     <div class="text-muted small">Curated local models with preview-first semantic filtering.</div>
   </div>
 
-  <form method="post" data-tool-label="Offline Tagger">
+  <form id="offline-proposal-form" method="post" data-tool-label="Auto Tag Assist" data-no-busy="true">
     <input type="hidden" name="tool" value="offline_tagger">
     <input type="hidden" name="active_tab" value="offline_tagger">
 
@@ -12,7 +12,7 @@
       <div class="col-lg-8">
         <label class="form-label" for="offline_folder">Dataset folder</label>
         <div class="input-group">
-          <input id="offline_folder" name="folder" type="text" class="form-control" data-root-sync="1" placeholder="D:\path\to\dataset">
+          <input id="offline_folder" name="folder" type="text" class="form-control" data-path-role="dataset" placeholder="D:\path\to\dataset">
           <button class="btn btn-outline-light btn-browse" type="button" data-target="offline_folder" data-bs-toggle="tooltip" data-bs-title="Browse folders">
             Browse
           </button>
@@ -82,12 +82,6 @@
         </label>
       </div>
 
-      <div class="col-lg-4 d-flex align-items-end">
-        <label class="form-check mb-2">
-          <input class="form-check-input" type="checkbox" id="offline_preview_only" name="preview_only" value="1">
-          <span class="form-check-label">Preview only</span>
-        </label>
-      </div>
     </div>
 
     <details class="mt-3">
@@ -269,9 +263,18 @@
     </details>
 
     <div class="d-flex flex-wrap gap-2 mt-3">
-      <button class="btn btn-primary" type="submit">Run</button>
+      <button class="btn btn-primary" type="submit" id="offline-generate">Generate proposals</button>
+      <span class="small text-muted align-self-center" id="offline-proposal-status" role="status">Captions are only written after review and Apply.</span>
     </div>
   </form>
+  <section id="offline-review" class="mt-3 d-none" aria-label="Review auto tag proposals">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+      <div><h3 class="h6 mb-1">Review proposals</h3><div class="small text-muted" id="offline-review-summary"></div></div>
+      <button type="button" class="btn btn-primary" id="offline-apply" disabled>Apply reviewed proposals</button>
+    </div>
+    <div id="offline-review-list" class="d-grid gap-2"></div>
+    <details class="mt-3"><summary>Technical details</summary><pre id="offline-technical-log" class="mt-2"></pre></details>
+  </section>
 </div>
 
 <script>
@@ -284,6 +287,16 @@
   const install = document.getElementById('offline_model_local_install');
   const localFolder = document.getElementById('offline_model_local_folder');
   const semanticValue = document.getElementById('offline_jio7_categories');
+  const form = document.getElementById('offline-proposal-form');
+  const review = document.getElementById('offline-review');
+  const reviewList = document.getElementById('offline-review-list');
+  const reviewSummary = document.getElementById('offline-review-summary');
+  const proposalStatus = document.getElementById('offline-proposal-status');
+  const generate = document.getElementById('offline-generate');
+  const apply = document.getElementById('offline-apply');
+  let proposalToken = '';
+  let proposals = [];
+  let reviewCounts = {};
   if (!profile || !status) return;
   let models = [];
   const current = () => models.find(item => item.key === profile.value);
@@ -322,6 +335,89 @@
     else refresh();
   }
   profile.addEventListener('change', render);
+  form.addEventListener('input', () => { proposalToken = ''; review.classList.add('d-none'); });
+  form.addEventListener('change', () => { proposalToken = ''; review.classList.add('d-none'); });
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    proposalToken = '';
+    review.classList.add('d-none');
+    generate.disabled = true;
+    generate.textContent = 'Generating proposals…';
+    proposalStatus.textContent = 'Generating proposals; captions are unchanged.';
+    try {
+      const response = await fetch('/', {method:'POST', headers:{'X-Requested-With':'fetch'}, body:new FormData(form)});
+      const data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data.error || 'Proposal generation failed.');
+      const artifacts = data.result?.artifacts || {};
+      reviewCounts = artifacts;
+      proposals = artifacts.proposals || [];
+      proposalToken = artifacts.proposal_token || '';
+      reviewList.replaceChildren();
+      proposals.forEach((item, index) => {
+        const row = document.createElement('div');
+        row.className = 'border rounded p-2';
+        const header = document.createElement('label');
+        header.className = 'd-flex gap-2 align-items-center fw-semibold';
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox'; checkbox.className = 'form-check-input'; checkbox.dataset.proposalIndex = String(index);
+        checkbox.checked = !!item.changed; checkbox.disabled = !item.changed;
+        checkbox.addEventListener('change', updateApply);
+        header.append(checkbox, document.createTextNode(item.image.split(/[\\/]/).pop()));
+        const details = document.createElement('div');
+        details.className = 'small mt-1';
+        const fields = [
+          ['Existing', item.existing_tags], ['Proposed', item.proposed_tags],
+          ['Kept', item.kept_tags], ['Added', item.added_tags], ['Dropped', item.dropped_tags],
+        ];
+        fields.forEach(([label, tags]) => {
+          const line = document.createElement('div');
+          const key = document.createElement('strong'); key.textContent = label + ': ';
+          line.append(key, document.createTextNode((tags || []).join(', ') || '—'));
+          details.appendChild(line);
+        });
+        if (item.excluded_tags?.length) {
+          const excluded = document.createElement('div');
+          excluded.textContent = `Excluded by policy: ${item.excluded_tags.map(entry => `${entry.tag} (${entry.reason})`).join(', ')}`;
+          details.appendChild(excluded);
+        }
+        const policy = document.createElement('div');
+        policy.className = 'text-muted';
+        policy.textContent = `Write mode: ${item.write_mode}. ${item.reason}`;
+        details.appendChild(policy);
+        row.append(header, details);
+        reviewList.appendChild(row);
+      });
+      review.classList.remove('d-none');
+      document.getElementById('offline-technical-log').textContent = data.log || '';
+      proposalStatus.textContent = 'Proposals ready. Review the selected captions before applying.';
+      updateApply();
+    } catch (error) { proposalStatus.textContent = error.message; }
+    finally { generate.disabled = false; generate.textContent = 'Generate proposals'; }
+  });
+  function updateApply() {
+    const selected = [...reviewList.querySelectorAll('[data-proposal-index]:checked')].map(box => Number(box.dataset.proposalIndex));
+    reviewSummary.textContent = `${reviewCounts.scanned ?? proposals.length} scanned · ${reviewCounts.generated ?? proposals.length} proposals · ${reviewCounts.unchanged ?? 0} unchanged · ${reviewCounts.warnings ?? 0} warnings · ${reviewCounts.errors ?? 0} errors. Apply scope: ${selected.length} captions will change, ${proposals.length - selected.length} unchanged or unselected. Write mode: ${proposals[0]?.write_mode || '—'}.`;
+    apply.disabled = !proposalToken || selected.length === 0;
+  }
+  apply.addEventListener('click', async () => {
+    if (!proposalToken) return;
+    const selected = [...reviewList.querySelectorAll('[data-proposal-index]:checked')].map(box => Number(box.dataset.proposalIndex));
+    apply.disabled = true;
+    apply.textContent = 'Applying reviewed proposals…';
+    try {
+      const response = await fetch('/api/offline-tagger/apply-proposals', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({proposal_token:proposalToken, selected})});
+      const data = await response.json();
+      if (data.state === 'partial') {
+        proposalStatus.textContent = `Applied ${data.changed} captions; ${data.errors} failed. ${data.issues.join(' ')}`;
+      } else if (!response.ok || !data.ok) {
+        throw new Error(data.error || data.issues?.join('\n') || 'Apply failed.');
+      } else {
+        proposalStatus.textContent = `Applied ${data.changed} captions. ${data.skipped} unchanged or unselected. Output: ${data.output_path}`;
+      }
+      document.getElementById('offline-technical-log').textContent += '\n' + JSON.stringify(data, null, 2);
+    } catch (error) { proposalStatus.textContent = error.message; }
+    finally { proposalToken = ''; apply.textContent = 'Apply reviewed proposals'; updateApply(); }
+  });
   document.querySelectorAll('.offline-jio7-category').forEach(box => box.addEventListener('change', () => {
     semanticValue.value = Array.from(document.querySelectorAll('.offline-jio7-category:checked')).map(item => item.value).join(',');
   }));

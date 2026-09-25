@@ -7,21 +7,23 @@ from app import app
 
 
 WORKFLOW_MENU_TABS = {
-    "guide": ("#tab-guide", "Workflow Guide", None),
-    "webp": ("#tab-webp", "Image -> PNG Converter", "Image Tools"),
-    "batch": ("#tab-batch", "Photo Adjust (preset)", "Image Tools"),
-    "blur_brush": ("#tab-blur-brush", "Brush Blur", "Image Tools"),
-    "color_brush": ("#tab-color-brush", "Color Brush", "Image Tools"),
-    "palette_helper": ("#tab-palette-helper", "Manga Palette Helper", "Image Tools"),
-    "epub_extractor": ("#tab-epub-extractor", "EPUB Extractor", "Dataset Assembly"),
-    "webtoon": ("#tab-webtoon", "Webtoon Panel Splitter", "Dataset Assembly"),
-    "merge": ("#tab-merge", "Stitch Groups", "Dataset Assembly"),
-    "rename": ("#tab-rename", "Flatten & Renumber", "Dataset Assembly"),
-    "combine": ("#tab-combine", "Combine Dataset", "Dataset Assembly"),
-    "tags": ("#tab-tags", "Dataset Tag Editor", "Tag Tools"),
-    "normalize": ("#tab-normalize", "Dataset Normalization", "Tag Tools"),
-    "offline_tagger": ("#tab-offline-tagger", "Auto Tag Assist", "Tag Tools"),
-    "clip_tokens": ("#tab-clip-tokens", "CLIP Token Check", "Tag Tools"),
+    "home": ("#tab-home", "Home", None),
+    "health": ("#tab-health", "Dataset Health", None),
+    "guide": ("#tab-guide", "Guide", None),
+    "webp": ("#tab-webp", "Image → PNG", None),
+    "batch": ("#tab-batch", "Photo Adjust", None),
+    "blur_brush": ("#tab-blur-brush", "Brush Blur", None),
+    "color_brush": ("#tab-color-brush", "Color Brush", None),
+    "palette_helper": ("#tab-palette-helper", "Manga Palette Helper", None),
+    "epub_extractor": ("#tab-epub-extractor", "EPUB Extractor", None),
+    "webtoon": ("#tab-webtoon", "Webtoon Splitter", None),
+    "merge": ("#tab-merge", "Stitch Groups", None),
+    "rename": ("#tab-rename", "Flatten & Renumber", None),
+    "combine": ("#tab-combine", "Combine Dataset", None),
+    "tags": ("#tab-tags", "Tag Editor", None),
+    "normalize": ("#tab-normalize", "Normalization", None),
+    "offline_tagger": ("#tab-offline-tagger", "Auto Tag Assist", None),
+    "clip_tokens": ("#tab-clip-tokens", "CLIP Token Check", None),
     "pipeline": ("#tab-pipeline", "Dataset Workflow", None),
     "tag_wiki": ("#tab-tag-wiki", "Tag Glossary Wiki", None),
     "settings": ("#tab-settings", "Settings", None),
@@ -173,7 +175,7 @@ class WorkflowMenuTests(unittest.TestCase):
             self.assertIn(label, _text(matching_controls[0]))
 
     def test_each_workflow_menu_tab_round_trips_to_one_active_control_and_pane(self):
-        for tab, (target, _, dropdown_label) in WORKFLOW_MENU_TABS.items():
+        for tab, (target, _, _) in WORKFLOW_MENU_TABS.items():
             with self.subTest(tab=tab):
                 response = self.client.get(f"/?tab={tab}")
                 self.assertEqual(response.status_code, 200)
@@ -196,24 +198,7 @@ class WorkflowMenuTests(unittest.TestCase):
                 )
                 self.assertEqual([pane["attrs"].get("id") for pane in active_panes], [target[1:]])
 
-                active_control = active_controls[0]
-                active_dropdown = parsed.closest(
-                    active_control, lambda el: "dropdown" in _classes(el)
-                )
-                if dropdown_label is None:
-                    self.assertIsNone(active_dropdown)
-                    continue
-
-                self.assertIsNotNone(active_dropdown)
-                toggles = [
-                    el
-                    for el in parsed.descendants_of(active_dropdown)
-                    if el["attrs"].get("data-bs-toggle") == "dropdown"
-                    and "dropdown-toggle" in _classes(el)
-                ]
-                self.assertEqual(len(toggles), 1)
-                self.assertIn("active", _classes(toggles[0]))
-                self.assertIn(dropdown_label, _text(toggles[0]))
+                self.assertIsNone(parsed.closest(active_controls[0], lambda el: "dropdown" in _classes(el)))
 
     def test_dataset_workflow_menu_opens_complete_guided_workflow_surface(self):
         response = self.client.get("/?tab=pipeline")

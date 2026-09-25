@@ -14,15 +14,6 @@
       </div>
     </div>
 
-    <div class="rn-help mb-3">
-      <div class="rn-help-title"><i class="bi bi-info-circle" aria-hidden="true"></i> Typical workflow</div>
-      <div class="rn-help-grid">
-        <div><strong>1. Pick Root</strong><span>Choose the chapter or dataset folder that contains loose images and/or image subfolders.</span></div>
-        <div><strong>2. Preview</strong><span>Keep Dry run on first to review the planned names in the log.</span></div>
-        <div><strong>3. Run</strong><span>Use Copy for a safe new folder, or Move when you intentionally want to empty the source.</span></div>
-      </div>
-    </div>
-
     <div class="bb-section">
       <div class="bb-section-title">Source &amp; Output</div>
       <div class="row g-3">
@@ -32,7 +23,7 @@
             <i class="bi bi-info-circle rn-tip" data-bs-toggle="tooltip" data-bs-title="The scanner reads images directly inside this folder, then each immediate child folder. It does not recurse deeper than one subfolder level."></i>
           </label>
           <div class="input-group">
-            <input id="rn_root" name="rn_root" type="text" class="form-control" placeholder="D:\manhwa\chapter-001" data-root-sync="1" aria-describedby="rn-root-help" data-bs-toggle="tooltip" data-bs-title="Required. Paste a folder path or use Browse.">
+            <input id="rn_root" name="rn_root" type="text" class="form-control" placeholder="D:\manhwa\chapter-001" data-path-role="source" aria-describedby="rn-root-help" data-bs-toggle="tooltip" data-bs-title="Required. Paste a folder path or use Browse.">
             <button class="btn btn-outline-light btn-browse" type="button" data-target="rn_root" data-bs-toggle="tooltip" data-bs-title="Open the folder picker for the root folder"><i class="bi bi-folder2-open" aria-hidden="true"></i> Browse</button>
           </div>
           <div class="form-text" id="rn-root-help">Top-level images become single numbers. Images inside each subfolder share one prefix with part numbers.</div>
@@ -44,7 +35,7 @@
             <i class="bi bi-info-circle rn-tip" data-bs-toggle="tooltip" data-bs-title="Leave this empty for the safest default: a new _renamed folder inside Root Folder. Existing files are never overwritten; collisions receive -1, -2, and so on."></i>
           </label>
           <div class="input-group">
-            <input id="rn_out" name="rn_out" type="text" class="form-control" placeholder="(default: &lt;root&gt;\_renamed)" aria-describedby="rn-out-help" data-bs-toggle="tooltip" data-bs-title="Optional. Choose where flattened files will be written.">
+          <input id="rn_out" name="rn_out" type="text" class="form-control" data-path-role="output" placeholder="(default: &lt;root&gt;\_renamed)" aria-describedby="rn-out-help" data-bs-toggle="tooltip" data-bs-title="Optional. Choose where flattened files will be written.">
             <button class="btn btn-outline-light btn-browse" type="button" data-target="rn_out" data-bs-toggle="tooltip" data-bs-title="Open the folder picker for the output folder"><i class="bi bi-folder2-open" aria-hidden="true"></i> Browse</button>
           </div>
           <div class="form-text" id="rn-out-help">Leave empty to write into <code>_renamed</code> inside the root.</div>
@@ -58,7 +49,9 @@
       </div>
     </div>
 
-    <div class="bb-section">
+    <details class="bb-advanced mb-3">
+      <summary>Advanced numbering and ordering</summary>
+    <div class="bb-section mt-3">
       <div class="bb-section-title">Numbering</div>
       <div class="row g-3 align-items-end">
         <div class="col-6 col-sm-3 col-lg-2">
@@ -123,6 +116,8 @@
         <strong>Name (natural)</strong> is usually best for manga/webtoon pages because <code>2.png</code> sorts before <code>10.png</code>.
       </div>
     </div>
+
+    </details>
 
     <div class="bb-section">
       <div class="bb-section-title">Options</div>

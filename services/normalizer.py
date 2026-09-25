@@ -1,6 +1,11 @@
 import json
+import hashlib
 import re
 import shutil
+import time
+import secrets
+import threading
+from dataclasses import asdict
 from collections import Counter, OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -76,6 +81,74 @@ class _ScanCacheEntry:
 
 _SCAN_CONTEXT_CACHE: "OrderedDict[str, _ScanCacheEntry]" = OrderedDict()
 _SCAN_CONTEXT_CACHE_MAX = 8
+
+_PREVIEW_PLANS: "OrderedDict[str, Tuple[float, str]]" = OrderedDict()
+_PREVIEW_PLAN_LOCK = threading.Lock()
+_PREVIEW_PLAN_TTL = 30 * 60
+
+
+def _plan_fingerprint(opts: NormalizeOptions, preset_root: Path) -> str:
+    """Bind a reviewed plan to options, preset bytes, and the relevant folder state."""
+    root = readable_path(str(opts.dataset_path)).resolve()
+    options = asdict(opts)
+    options["dataset_path"] = str(root)
+    for key in ("extra_remove", "extra_keep", "identity_tags"):
+        options[key] = sorted(options[key])
+    digest = hashlib.sha256(json.dumps(options, sort_keys=True, default=str).encode("utf-8"))
+    preset = load_preset(preset_root, opts.preset_type, opts.preset_file)
+    digest.update(json.dumps(preset, sort_keys=True).encode("utf-8"))
+    if not root.is_dir():
+        raise ValueError(f"Dataset folder not found: {root}")
+    walker = root.rglob("*") if opts.recursive else root.iterdir()
+    relevant = sorted(
+        (path for path in walker if path.is_file() and
+         path.suffix.lower() in set(opts.image_exts) | {".txt"}),
+        key=lambda path: str(path.relative_to(root)).lower(),
+    )
+    for path in relevant:
+        digest.update(str(path.relative_to(root)).encode("utf-8"))
+        if path.suffix.lower() == ".txt":
+            digest.update(hashlib.sha256(path.read_bytes()).digest())
+        else:
+            stat = path.stat()
+            digest.update(f"{stat.st_size}:{stat.st_mtime_ns}".encode("ascii"))
+    return digest.hexdigest()
+
+
+def preview_plan(opts: NormalizeOptions, preset_root: Path) -> Dict:
+    _invalidate_scan_cache_for_root(readable_path(str(opts.dataset_path)))
+    result = dry_run(opts, preset_root)
+    if not result.get("ok"):
+        return result
+    try:
+        fingerprint = _plan_fingerprint(opts, preset_root)
+    except (OSError, ValueError) as exc:
+        return {"ok": False, "error": str(exc)}
+    token = secrets.token_urlsafe(32)
+    with _PREVIEW_PLAN_LOCK:
+        now = time.monotonic()
+        for old, (created, _) in list(_PREVIEW_PLANS.items()):
+            if now - created > _PREVIEW_PLAN_TTL:
+                _PREVIEW_PLANS.pop(old, None)
+        _PREVIEW_PLANS[token] = (now, fingerprint)
+        while len(_PREVIEW_PLANS) > 64:
+            _PREVIEW_PLANS.popitem(last=False)
+    result["plan_token"] = token
+    return result
+
+
+def apply_preview_plan(opts: NormalizeOptions, preset_root: Path, token: str) -> Dict:
+    with _PREVIEW_PLAN_LOCK:
+        saved = _PREVIEW_PLANS.pop(token, None)
+    if not saved or time.monotonic() - saved[0] > _PREVIEW_PLAN_TTL:
+        return {"ok": False, "error": "Preview expired or already applied. Generate a new preview."}
+    try:
+        current = _plan_fingerprint(opts, preset_root)
+    except (OSError, ValueError) as exc:
+        return {"ok": False, "error": f"Preview outdated: {exc}"}
+    if current != saved[1]:
+        return {"ok": False, "error": "Preview outdated: options or dataset changed. Generate a new preview."}
+    return apply_normalization(opts, preset_root)
 
 
 def clean_input_list(raw: str) -> Set[str]:
@@ -618,21 +691,30 @@ def dry_run(opts: NormalizeOptions, preset_root: Path, preset_payload: Optional[
     }
 
     previews = []
-    for tf in context.parsed[: opts.preview_limit]:
+    changed_count = 0
+    action_totals = Counter()
+    for tf in context.parsed:
         after, meta = normalize_record(tf, context.preset, opts, stats)
-        previews.append(
-            {
-                "file": str(tf.path),
-                "before": meta["before"],
-                "after": meta["after"],
-                "changed": meta["changed"],
-                "actions": meta["actions"],
-            }
-        )
+        if meta["changed"]:
+            changed_count += 1
+            action_totals.update(meta["actions"])
+        if meta["changed"] and len(previews) < opts.preview_limit:
+            previews.append(
+                {
+                    "file": str(tf.path),
+                    "before": meta["before"],
+                    "after": meta["after"],
+                    "changed": meta["changed"],
+                    "actions": meta["actions"],
+                }
+            )
 
     return {
         "ok": True,
         "stats": {"total_files": stats["total_files"], "tag_files": len(context.tag_files)},
+        "changed_files": changed_count,
+        "unchanged_files": len(context.parsed) - changed_count,
+        "actions": dict(action_totals),
         "previews": previews,
     }
 

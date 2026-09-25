@@ -127,13 +127,14 @@
     }
   }
   @media (max-width: 767.98px) {
-    .bb-batch-preview-grid {
-      grid-template-columns: 1fr;
-    }
+    .bb-batch-top{display:contents}
+    .bb-batch-top > .bb-batch-panel:first-child{order:3}
+    .bb-batch-top > .bb-batch-panel:last-child{order:1}
+    .bb-batch-workspace > .bb-batch-panel{order:2}
+    .bb-batch-preview-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
     .bb-batch-preview-frame,
-    .bb-batch-empty {
-      min-height: 260px;
-    }
+    .bb-batch-empty { min-height:170px; }
+    .bb-batch-preview-frame img{max-height:240px;}
     .bb-batch-control-top {
       grid-template-columns: minmax(0, 1fr) auto;
     }
@@ -159,11 +160,11 @@
           </div>
           <div class="bb-batch-panel-body">
             <div class="vstack gap-3">
-              <div>
+              <div id="bb-batch-source-row">
                 <label class="form-label" for="src_batch">Source Folder</label>
                 <div class="input-group">
                   <input id="src_batch" name="src_batch" type="text" class="form-control"
-                         placeholder="{{ work_dir }}" data-root-sync="1"
+                         placeholder="{{ work_dir }}" data-path-role="source"
                          data-bs-toggle="tooltip" data-bs-title="Images to process. Empty uses WORK_DIR.">
                   <button class="btn btn-outline-light" type="button" id="btn-src-workdir"
                           data-bs-toggle="tooltip" data-bs-title="Use WORK_DIR"><i class="bi bi-house-door" aria-hidden="true"></i></button>
@@ -172,7 +173,7 @@
                 </div>
               </div>
 
-              <div>
+              <div id="bb-batch-output-row">
                 <label class="form-label" for="dst_batch">Output Folder</label>
                 <div class="input-group">
                   <input id="dst_batch" name="dst_batch" type="text" class="form-control"
@@ -183,7 +184,7 @@
                 </div>
               </div>
 
-              <div>
+              <div id="bb-batch-preset-row">
                 <label class="form-label" for="preset_batch">Preset</label>
                 <div class="input-group">
                   <select class="form-select" id="preset_batch" name="preset"
@@ -348,6 +349,24 @@
 
 <script>
 (() => {
+  const batchTop = document.querySelector('.bb-batch-top');
+  const batchMainFields = batchTop?.querySelector('.bb-batch-panel:first-child .vstack');
+  const batchPreviewBody = batchTop?.querySelector('.bb-batch-panel:last-child .bb-batch-panel-body');
+  const batchSourceRow = document.getElementById('bb-batch-source-row');
+  const batchPresetRow = document.getElementById('bb-batch-preset-row');
+  const batchOutputRow = document.getElementById('bb-batch-output-row');
+  const arrangeBatchMobile = () => {
+    if (!batchMainFields || !batchPreviewBody || !batchSourceRow || !batchPresetRow) return;
+    if (window.matchMedia('(max-width:767.98px)').matches) {
+      batchPreviewBody.prepend(batchPresetRow);
+      batchPreviewBody.prepend(batchSourceRow);
+    } else {
+      batchMainFields.insertBefore(batchSourceRow, batchOutputRow);
+      batchMainFields.insertBefore(batchPresetRow, batchOutputRow.nextElementSibling);
+    }
+  };
+  arrangeBatchMobile();
+  window.addEventListener('resize', arrangeBatchMobile);
   const presetEl = document.getElementById('preset_batch');
   const srcEl = document.getElementById('src_batch');
   const recursiveEl = document.getElementById('recursive_batch');

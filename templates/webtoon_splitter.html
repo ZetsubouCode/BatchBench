@@ -16,7 +16,7 @@
         <div class="col-lg-6">
           <label class="form-label">Source folder (pages)</label>
           <div class="input-group">
-            <input id="wt_folder" name="wt_folder" type="text" class="form-control" placeholder="D:\path\to\chapter-root" data-root-sync="1" data-bs-toggle="tooltip" data-bs-title="Point to a chapter folder, or a root that has chapter subfolders (e.g., Chapter 1, 2...).">
+            <input id="wt_folder" name="wt_folder" type="text" class="form-control" placeholder="D:\path\to\chapter-root" data-path-role="source" data-bs-toggle="tooltip" data-bs-title="Point to a chapter folder, or a root that has chapter subfolders (e.g., Chapter 1, 2...).">
             <button class="btn btn-outline-light btn-browse" type="button" data-target="wt_folder">Browse</button>
           </div>
           <div class="form-text">If subfolders exist (Chapter 1, 2, etc.), each is processed separately.</div>
@@ -24,11 +24,19 @@
         <div class="col-lg-6">
           <label class="form-label">Output folder (slices)</label>
           <div class="input-group">
-            <input id="wt_out_dir" name="wt_out_dir" type="text" class="form-control" placeholder="(default: per-folder &lt;source&gt;\_panels)" data-bs-toggle="tooltip" data-bs-title="Leave blank to write into _panels inside each folder. If set, results go to &lt;output&gt;\&lt;chapter&gt;\_panels.">
+            <input id="wt_out_dir" name="wt_out_dir" type="text" class="form-control" placeholder="(default: per-folder &lt;source&gt;\_panels)" data-bs-toggle="tooltip" data-bs-title="Leave blank to write into _panels inside each folder. If set, results go to &lt;output&gt;\&lt;chapter&gt;\_panels." data-path-role="output">
             <button class="btn btn-outline-light btn-browse" type="button" data-target="wt_out_dir">Browse</button>
           </div>
         </div>
 
+      </div>
+    </div>
+
+    <details class="bb-advanced mb-3">
+      <summary>Advanced input and stripe settings</summary>
+      <div class="wt-section mt-3">
+        <div class="wt-section-title">Input filters and order</div>
+        <div class="row g-3">
         <div class="col-md-4">
           <label class="form-label">Filename glob</label>
           <input name="wt_glob" class="form-control" value="*.*" data-bs-toggle="tooltip" data-bs-title="Apply first, before extension filtering. Examples: *.png or *_page*.*">
@@ -100,6 +108,7 @@
         </div>
       </div>
     </div>
+    </details>
 
     <div class="wt-section">
       <div class="wt-section-title">Options</div>

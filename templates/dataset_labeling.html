@@ -1,3 +1,4 @@
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dataset_tag_editor_mobile.css') }}">
 <style>
   .mode-banner { border:1px solid var(--bb-border); padding:.75rem 1rem; border-radius:.5rem; margin-bottom:1rem; }
   .mode-insert  { background:#0d2d1f; color:#e6fff1; border-color:#1f6f4a; }
@@ -42,7 +43,7 @@
   .path-flag.is-active { color:#e6f0ff; border-color:#2d4f86; background:#1b2b4a; }
   .tag-editor-layout { position:relative; --bb-left-drawer-left:4.85rem; --bb-left-drawer-max:calc(100vw - 6rem); }
   .tag-editor-shell { position:relative; }
-  .tag-editor-content { display:grid; grid-template-columns:minmax(0,1fr) minmax(460px, 620px); gap:1.1rem; align-items:start; }
+  .tag-editor-content { display:grid; grid-template-columns:minmax(0,1fr) minmax(290px, 360px); gap:1.1rem; align-items:start; }
   .tag-editor-main { min-width:0; display:flex; flex-direction:column; gap:1rem; padding-bottom:1rem; }
   .tag-editor-right { position:static; align-self:start; display:flex; flex-direction:column; gap:1rem; max-height:none; overflow:visible; padding-right:0; }
   .tag-editor-right .tag-explorer { background:rgba(10,16,28,.86); }
@@ -152,7 +153,7 @@
   .workspace-locked .workspace-lock-target { pointer-events:none; opacity:.5; filter:saturate(.8); user-select:none; }
   .workspace-locked .tag-composer-stick { position:static; bottom:auto; z-index:auto; background:transparent; }
   .workspace-locked .tag-composer-stick .mode-panel { position:static; }
-  .project-setup-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:.75rem; }
+  .project-setup-grid { display:grid; grid-template-columns:minmax(360px, 2fr) minmax(150px, 1fr) minmax(150px, 1fr); gap:.75rem; }
   .project-setup-grid > * { min-width:0; }
   .project-setup-grid > [class*="col-"],
   .workflow-top-grid > [class*="col-"] { width:auto; padding:0; }
@@ -340,7 +341,16 @@
   .quiz-fullscreen-dialog .modal-body { overflow:auto; }
   .quiz-workspace-grid { display:grid; grid-template-columns:minmax(360px,.82fr) minmax(560px,1.18fr); gap:1rem; align-items:start; }
   .quiz-image-stage { min-height:58vh; border:0; border-radius:0; background:transparent; display:flex; align-items:center; justify-content:center; overflow:hidden; position:relative; }
+  .quiz-complete-caption { border-top:1px solid var(--bb-border); padding:.55rem .25rem; max-height:8rem; overflow:auto; }
+  .quiz-complete-caption-tags { font-size:.82rem; line-height:1.45; overflow-wrap:anywhere; }
+  .quiz-desktop-more { position:relative; }
+  .quiz-desktop-more summary { cursor:pointer; list-style:none; padding:.4rem .7rem; border:1px solid var(--bb-border); border-radius:.35rem; }
+  .quiz-desktop-more-menu { position:absolute;bottom:calc(100% + .3rem);right:0;z-index:5;display:grid;gap:.3rem;width:13rem;padding:.5rem;border:1px solid var(--bb-border);border-radius:.4rem;background:var(--bb-card);box-shadow:0 .5rem 1.25rem rgba(0,0,0,.3); }
   .quiz-image-stage img { max-width:100%; max-height:72vh; object-fit:contain; cursor:zoom-in; transform-origin:center; transition:transform .12s ease, filter .12s ease; user-select:none; }
+  @media (min-width:992px){
+    .quiz-image-stage{min-height:0;height:min(44vh,390px)}
+    .quiz-image-stage img{max-height:100%}
+  }
   .quiz-image-stage.is-quiz-zoomed img { cursor:zoom-out; }
   .quiz-image-stage.is-quiz-pannable img { cursor:grab; }
   .quiz-image-stage.is-quiz-panning img { cursor:grabbing; transition:none; }
@@ -587,11 +597,9 @@
   .danbooru-carousel-empty { color:var(--bb-muted); font-size:.78rem; text-align:center; padding:.5rem; }
   .danbooru-preview-meta { font-size:.75rem; color:var(--bb-muted); margin-top:.35rem; min-height:1rem; display:flex; justify-content:space-between; gap:.35rem; }
   @media (max-width: 991.98px) {
-    .tag-editor-content { grid-template-columns:1fr; }
     .tag-editor-main { padding-bottom:1rem; }
     .tag-editor-right { position:static; max-height:none; padding-right:0; }
     .gallery-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
-    .project-setup-grid,
     .workflow-top-grid,
     .workflow-bottom-grid { grid-template-columns:1fr; }
     .mode-layout { grid-template-columns:1fr; }
@@ -609,6 +617,7 @@
   }
 
   @media (max-width: 767.98px) {
+    .tag-editor-content, .project-setup-grid { grid-template-columns:1fr; }
     .gallery-grid { grid-template-columns:1fr; }
     .left-rail-btn { min-width:auto; }
     .gallery-modal-stage { min-height:54vh; }
@@ -625,19 +634,22 @@
     <input type="hidden" name="tool" value="tags">
     <input type="hidden" name="active_tab" value="tags">
     <div class="pipeline-review-banner d-none" id="pipeline-review-banner">
-      Pipeline review mode: you are editing an isolated working copy. Your original source dataset is safe. Return to Dataset Workflow and resume when finished.
+      Pipeline review mode: you are editing an isolated working copy. Your original source dataset is safe.
+      <button type="button" class="btn btn-sm btn-outline-light ms-2" id="pipeline-return-workflow">Return to Workflow</button>
     </div>
 
     <div class="row g-3">
       <div class="col-md-4">
         <label class="form-label">Project Root</label>
         <div class="input-group">
-          <input id="folder_tags" name="folder" type="text" class="form-control" data-root-sync="1"
+          <input id="folder_tags" name="folder" type="text" class="form-control" data-path-role="project"
                  placeholder="Paste image folder path (this becomes Project Root)" data-bs-toggle="tooltip"
                  data-bs-title="Paste the source image folder path. The app uses it as project root and checks database/, dataset/, dataset/_temp, and prompt.txt.">
           <button class="btn btn-outline-light btn-browse" type="button" data-target="folder_tags"
+                  data-browse-start="{{ tag_editor_project_base|e }}"
                   data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
         </div>
+        <div class="form-text">Default browse location: <span class="monospace">{{ tag_editor_project_base }}</span></div>
       </div>
 
       <input type="hidden" name="mode" id="mode-select" value="">
@@ -859,7 +871,7 @@
                 <option value="created_desc">Created newest</option>
               </select>
             </div>
-            <div class="input-group input-group-sm" style="min-width:180px;max-width:220px;">
+            <div class="input-group input-group-sm gallery-grid-control" style="min-width:180px;max-width:220px;">
               <span class="input-group-text">Grid</span>
               <select class="form-select" id="gallery-grid-cols">
                 <option value="2">2 / row</option>
@@ -871,6 +883,7 @@
           </div>
           <div class="gallery-selection-toolbar mt-2">
             <button type="button" class="btn btn-sm btn-outline-light gallery-selection-toggle" id="gallery-select-toggle">Select All</button>
+            <button type="button" class="btn btn-sm btn-warning d-md-none" id="gallery-send-selected-mobile">Send selected to _temp</button>
             <span class="gallery-selection-count" id="gallery-selection-count">0 selected</span>
             <span class="gallery-selection-note">Drag selected cards to any folder in Dataset Workspace.</span>
           </div>
@@ -974,6 +987,10 @@
                   data-bs-toggle="tooltip" data-bs-title="Zip dataset/ to project root (exclude dataset/_temp)">
             Zip Dataset
           </button>
+          <div class="dataset-zip-download-wrap d-none" id="dataset-zip-download-wrap" aria-live="polite">
+            <span class="dataset-zip-download-name" id="dataset-zip-download-name"></span>
+            <a class="btn btn-success" id="dataset-zip-download" href="#" download>Download ZIP</a>
+          </div>
           <button type="button" class="btn btn-outline-warning d-none" id="btn-undo"
                   data-bs-toggle="tooltip" data-bs-title="Restore files from dataset/_temp back to dataset/">â†¶</button>
           <button type="button" class="btn btn-outline-secondary" id="btn-clear"
@@ -1051,6 +1068,12 @@
     </div>
   </aside>
   </div>
+  <nav class="dataset-mobile-dock" id="dataset-mobile-dock" aria-label="Dataset Tag Editor mobile navigation">
+    <button type="button" class="dataset-mobile-dock-btn" id="dataset-mobile-tag"><i class="bi bi-tags"></i><span id="dataset-mobile-tag-label">Start Tagging</span></button>
+    <button type="button" class="dataset-mobile-dock-btn" id="dataset-mobile-dataset"><i class="bi bi-images"></i><span>Dataset</span></button>
+    <button type="button" class="dataset-mobile-dock-btn" id="dataset-mobile-workspace"><i class="bi bi-folder2-open"></i><span>Workspace</span></button>
+    <button type="button" class="dataset-mobile-dock-btn" id="dataset-mobile-zip"><i class="bi bi-file-earmark-zip"></i><span>ZIP</span></button>
+  </nav>
 </div>
 
 <div class="modal fade" id="tagsConfirmModal" tabindex="-1" aria-hidden="true">
@@ -1263,6 +1286,7 @@
               <div>
                 <div class="small text-muted">Mapping Board</div>
                 <div class="small">Left cells accept multiple cheatsheet sections. Right cells accept one tagging segment.</div>
+                <div class="small text-info d-lg-none">On touch screens, use the controls inside each row to assign items and change row order.</div>
               </div>
               <div class="d-flex gap-1 flex-wrap">
                 <button type="button" class="btn btn-sm btn-outline-light" id="tagging-quiz-add-row">Add Row</button>
@@ -1366,7 +1390,7 @@
       </div>
       <div class="modal-body">
         <div class="quiz-workspace-grid">
-          <div>
+          <div class="quiz-image-pane">
             <div class="d-flex align-items-start justify-content-between gap-2 mb-2">
               <div>
                 <div class="small text-muted">Current image</div>
@@ -1375,8 +1399,23 @@
               <div class="small text-muted" id="tagging-quiz-autosave">Autosave idle</div>
             </div>
             <div class="quiz-image-stage" id="tagging-quiz-image-stage"></div>
+            <div class="quiz-complete-caption" aria-live="polite">
+              <div class="small text-muted">Complete caption · all segments</div>
+              <div class="quiz-complete-caption-tags" id="tagging-quiz-complete-caption">No tags selected yet.</div>
+              <div class="small text-muted" id="tagging-quiz-prior-decisions"></div>
+            </div>
+            <div class="quiz-mobile-image-controls" aria-label="Image controls">
+              <button type="button" class="btn btn-outline-light" id="tagging-mobile-zoom-out" aria-label="Zoom out">&minus;</button>
+              <button type="button" class="btn btn-outline-secondary" id="tagging-mobile-zoom-fit">Fit</button>
+              <button type="button" class="btn btn-outline-light" id="tagging-mobile-zoom-in" aria-label="Zoom in">+</button>
+              <button type="button" class="btn btn-outline-info" id="tagging-mobile-fullscreen">Fullscreen</button>
+            </div>
           </div>
-          <div>
+          <div class="quiz-tag-pane">
+            <div class="quiz-mobile-segment-selector" id="tagging-mobile-segment-wrap">
+              <label for="tagging-mobile-segment-select" id="tagging-mobile-segment-label">Segment</label>
+              <select class="form-select" id="tagging-mobile-segment-select"></select>
+            </div>
             <div class="quiz-segment-banner">
               <div class="quiz-segment-banner-label">Current Segment</div>
               <div class="quiz-segment-banner-title" id="tagging-quiz-segment-title">-</div>
@@ -1444,19 +1483,37 @@
             </div>
           </div>
         </div>
-      </div>
-      <div class="modal-footer justify-content-between">
-        <div class="d-flex gap-2 flex-wrap">
-          <button type="button" class="btn btn-outline-info" id="tagging-quiz-prev-image">Previous Image</button>
-          <button type="button" class="btn btn-outline-warning d-none" id="tagging-quiz-retry-guided">Retry Guided Tagging</button>
-          <button type="button" class="btn btn-outline-light" id="tagging-quiz-prev-segment">Previous Segment</button>
-          <button type="button" class="btn btn-outline-light" id="tagging-quiz-next-segment">Next Segment</button>
-          <button type="button" class="btn btn-outline-secondary" id="tagging-quiz-skip">Skip Segment</button>
+        <div class="modal-footer quiz-mobile-footer">
+          <div class="quiz-mobile-primary-actions">
+            <button type="button" class="btn btn-outline-info" id="tagging-mobile-prev-image">&larr; Image</button>
+            <button type="button" class="btn btn-warning" id="tagging-mobile-save-image">Save &amp; Next</button>
+          </div>
+          <details class="quiz-mobile-more">
+            <summary>More</summary>
+            <div class="quiz-mobile-more-actions">
+              <button type="button" class="btn btn-outline-light" id="tagging-mobile-prev-segment">&larr; Segment</button>
+              <button type="button" class="btn btn-outline-light" id="tagging-mobile-next-segment">Segment &rarr;</button>
+              <button type="button" class="btn btn-outline-secondary" id="tagging-mobile-skip">Skip Segment</button>
+              <button type="button" class="btn btn-outline-warning" id="tagging-mobile-retry">Retry Guided Tagging</button>
+              <button type="button" class="btn btn-outline-info" id="tagging-mobile-later">Continue Later</button>
+              <button type="button" class="btn btn-outline-light" id="tagging-mobile-overview">Session Overview</button>
+              <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Close</button>
+            </div>
+          </details>
         </div>
+      </div>
+      <div class="modal-footer justify-content-between quiz-desktop-footer">
+        <button type="button" class="btn btn-outline-info" id="tagging-quiz-prev-image">Previous</button>
         <div class="d-flex gap-2 flex-wrap">
-          <button type="button" class="btn btn-outline-warning" id="tagging-quiz-save-image">Save Image</button>
-          <button type="button" class="btn btn-outline-info" id="tagging-quiz-continue-later">Continue Later</button>
-          <button type="button" class="btn btn-outline-light" id="tagging-quiz-open-overview">Session Overview</button>
+          <details class="quiz-desktop-more"><summary>More</summary><div class="quiz-desktop-more-menu">
+            <button type="button" class="btn btn-sm btn-outline-light" id="tagging-quiz-prev-segment">Previous segment</button>
+            <button type="button" class="btn btn-sm btn-outline-light" id="tagging-quiz-next-segment">Next segment</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="tagging-quiz-skip">Skip segment</button>
+            <button type="button" class="btn btn-sm btn-outline-warning d-none" id="tagging-quiz-retry-guided">Retry Guided Tagging</button>
+            <button type="button" class="btn btn-sm btn-outline-info" id="tagging-quiz-continue-later">Continue later</button>
+            <button type="button" class="btn btn-sm btn-outline-light" id="tagging-quiz-open-overview">Session overview</button>
+          </div></details>
+          <button type="button" class="btn btn-primary" id="tagging-quiz-save-image">Save &amp; Next</button>
         </div>
       </div>
     </div>
@@ -1471,6 +1528,14 @@
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
+        <div class="quiz-completion-panel d-none mb-3" id="tagging-quiz-completion" aria-live="polite">
+          <div class="fw-semibold">Dataset tagging completed</div>
+          <div class="small text-muted" id="tagging-quiz-completion-summary"></div>
+          <div class="d-flex gap-2 flex-wrap mt-2">
+            <button type="button" class="btn btn-info" id="tagging-quiz-completion-zip">Generate ZIP</button>
+            <a class="btn btn-success d-none" id="tagging-quiz-completion-download" href="#" download>Download ZIP</a>
+          </div>
+        </div>
         <div class="quiz-overview-grid" id="tagging-quiz-overview-stats"></div>
         <div class="quiz-reco-preview mt-3" id="tagging-quiz-overview-list"></div>
       </div>
@@ -2520,6 +2585,122 @@
     });
   }
 
+  function qMobileMappingControls(row, rowIndex){
+    const controls = document.createElement('div');
+    controls.className = 'quiz-map-mobile-controls';
+    controls.setAttribute('aria-label', `Touch controls for mapping row ${rowIndex + 1}`);
+
+    const title = document.createElement('div');
+    title.className = 'quiz-map-mobile-title';
+    title.textContent = `Row ${rowIndex + 1} touch controls`;
+
+    const sectionLabel = document.createElement('label');
+    sectionLabel.className = 'form-label small mb-1';
+    sectionLabel.textContent = 'Add or move cheatsheet section';
+    const sectionGroup = document.createElement('div');
+    sectionGroup.className = 'input-group input-group-sm';
+    const sectionSelect = document.createElement('select');
+    sectionSelect.className = 'form-select quiz-map-mobile-section-select';
+    sectionSelect.setAttribute('aria-label', `Cheatsheet section for row ${rowIndex + 1}`);
+    sectionSelect.innerHTML = '<option value="">Choose section...</option>';
+    qSectionNames().forEach(name => {
+      const option = document.createElement('option');
+      option.value = name;
+      option.textContent = name;
+      sectionSelect.appendChild(option);
+    });
+    const addSection = document.createElement('button');
+    addSection.type = 'button';
+    addSection.className = 'btn btn-outline-info';
+    addSection.textContent = 'Add';
+    addSection.addEventListener('click', () => {
+      const name = sectionSelect.value;
+      if (!name) return;
+      quizState.mappingRows.forEach(other => {
+        other.left_sections = (other.left_sections || []).filter(value => value !== name);
+      });
+      row.left_sections = [...(row.left_sections || []), name];
+      qRenderMappingBoard();
+      qScheduleSessionSave();
+    });
+    sectionGroup.append(sectionSelect, addSection);
+
+    const selected = document.createElement('div');
+    selected.className = 'quiz-map-mobile-selected';
+    if (!(row.left_sections || []).length){
+      const empty = document.createElement('span');
+      empty.className = 'small text-muted';
+      empty.textContent = 'No cheatsheet sections assigned.';
+      selected.appendChild(empty);
+    } else {
+      (row.left_sections || []).forEach(name => {
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'btn btn-sm btn-outline-light';
+        remove.textContent = `${name} ×`;
+        remove.setAttribute('aria-label', `Remove ${name} from row ${rowIndex + 1}`);
+        remove.addEventListener('click', () => {
+          row.left_sections = (row.left_sections || []).filter(value => value !== name);
+          qRenderMappingBoard();
+          qScheduleSessionSave();
+        });
+        selected.appendChild(remove);
+      });
+    }
+
+    const segmentLabel = document.createElement('label');
+    segmentLabel.className = 'form-label small mb-1';
+    segmentLabel.textContent = 'Tagging segment';
+    const segmentSelect = document.createElement('select');
+    segmentSelect.className = 'form-select form-select-sm quiz-map-mobile-segment-select';
+    segmentSelect.setAttribute('aria-label', `Tagging segment for row ${rowIndex + 1}`);
+    segmentSelect.innerHTML = '<option value="">No segment</option>';
+    qSegments().forEach(segment => {
+      const option = document.createElement('option');
+      option.value = segment.id;
+      option.textContent = segment.label || segment.id;
+      option.selected = segment.id === row.right_segment;
+      segmentSelect.appendChild(option);
+    });
+    segmentSelect.addEventListener('change', () => {
+      const segmentId = segmentSelect.value || null;
+      if (segmentId){
+        quizState.mappingRows.forEach(other => {
+          if (other.right_segment === segmentId) other.right_segment = null;
+        });
+      }
+      row.right_segment = segmentId;
+      qRenderMappingBoard();
+      qScheduleSessionSave();
+    });
+
+    const rowActions = document.createElement('div');
+    rowActions.className = 'quiz-map-mobile-row-actions';
+    [
+      ['up', '↑ Move up', rowIndex <= 0],
+      ['down', '↓ Move down', rowIndex >= quizState.mappingRows.length - 1]
+    ].forEach(([action, label, disabled]) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'btn btn-sm btn-outline-light';
+      button.dataset.act = action;
+      button.textContent = label;
+      button.disabled = disabled;
+      button.addEventListener('click', () => {
+        const targetIndex = action === 'up' ? rowIndex - 1 : rowIndex + 1;
+        if (targetIndex < 0 || targetIndex >= quizState.mappingRows.length) return;
+        const [moving] = quizState.mappingRows.splice(rowIndex, 1);
+        quizState.mappingRows.splice(targetIndex, 0, moving);
+        qRenderMappingBoard();
+        qScheduleSessionSave();
+      });
+      rowActions.appendChild(button);
+    });
+
+    controls.append(title, sectionLabel, sectionGroup, selected, segmentLabel, segmentSelect, rowActions);
+    return controls;
+  }
+
   function qRenderMappingBoard(){
     const board = get(QUIZ.board);
     if (!board) return;
@@ -2559,6 +2740,7 @@
       wrap.appendChild(left);
       wrap.appendChild(right);
       wrap.appendChild(tools);
+      wrap.appendChild(qMobileMappingControls(row, idx));
       wrap.draggable = true;
       wrap.addEventListener('dragstart', e => {
         quizState.rowDragIndex = idx;
@@ -2882,6 +3064,7 @@
     if (!session){
       banner.classList.add('d-none');
       banner.textContent = '';
+      qNotifyMobileState();
       return;
     }
     const images = qSessionImageEntries(false);
@@ -2894,6 +3077,7 @@
     const currentEntry = current.image_rel ? session.images?.[current.image_rel] : null;
     const tagCount = qImageTagRows(currentEntry).length;
     banner.textContent = `Resume: ${current.image_rel || '-'} / ${currentStep} | ${tagCount} image tag${tagCount === 1 ? '' : 's'} | ${completed}/${total} done${warnings.length ? ' | ' + warnings.join(' | ') : ''}`;
+    qNotifyMobileState();
   }
 
   function qCurrentImageRel(){
@@ -3150,6 +3334,7 @@
     qLoadCurrentContextSuggestions();
     qRenderManualUndo();
     qRenderGlossaryTags();
+    qNotifyMobileState();
   }
 
   const QUIZ_SEGMENT_COLORS = [
@@ -3518,6 +3703,7 @@
   }
 
   function qRenderQuizChips(){
+    qRenderCompleteCaption();
     const seg = qCurrentSegment();
     const state = qCurrentSegmentState();
     if (!state) {
@@ -3667,6 +3853,18 @@
     return out;
   }
 
+  function qRenderCompleteCaption(){
+    const rows = qImageTagRows(qCurrentImageEntry());
+    const caption = get('tagging-quiz-complete-caption');
+    const prior = get('tagging-quiz-prior-decisions');
+    if (caption) caption.textContent = rows.length ? rows.map(row => row.tag).join(', ') : 'No tags selected yet.';
+    if (prior) {
+      const currentId = qCurrentSegment()?.id;
+      const previous = rows.filter(row => row.segment_id !== currentId);
+      prior.textContent = previous.length ? `${previous.length} tag${previous.length === 1 ? '' : 's'} from other segments` : 'No prior segment tags.';
+    }
+  }
+
   function qCurrentFreeTagRows(){
     return qImageTagRows(qCurrentImageEntry());
   }
@@ -3746,7 +3944,10 @@
   }
 
   function qStartQuizImagePan(event){
-    if (!event || event.defaultPrevented || event.button !== 2 || !qCanPanQuizImage()) return;
+    const pointerType = String(event?.pointerType || 'mouse');
+    const mousePan = pointerType === 'mouse' && event?.button === 2;
+    const touchPan = (pointerType === 'touch' || pointerType === 'pen') && event?.button === 0 && event?.isPrimary !== false;
+    if (!event || event.defaultPrevented || (!mousePan && !touchPan) || !qCanPanQuizImage()) return;
     const stage = get(QUIZ.imageStage);
     if (!stage) return;
     event.preventDefault();
@@ -4248,22 +4449,22 @@
     const saveVersion = qMarkSessionDirty();
     const saveSeq = ++quizState.saveSeq;
     const autosaveEl = get(QUIZ.autosave);
-    if (autosaveEl) autosaveEl.textContent = 'Autosaving...';
+    if (autosaveEl) autosaveEl.textContent = 'Saving session…';
     try{
       const data = await qPost('/api/tagging-quiz/session/save', {project_root: qSessionRequestRoot(), session: quizState.session});
       if (saveVersion === quizState.sessionVersion && saveSeq === quizState.saveSeq){
         quizState.session = data.session || quizState.session;
         quizState.lastAcceptedSaveSeq = saveSeq;
-        if (autosaveEl) autosaveEl.textContent = 'Autosaved';
+        if (autosaveEl) autosaveEl.textContent = 'Session autosaved';
       } else {
-        if (autosaveEl) autosaveEl.textContent = 'Autosave pending';
+        if (autosaveEl) autosaveEl.textContent = 'Session save pending';
         if (!quizState.saveTimer && saveSeq < (quizState.lastAcceptedSaveSeq || 0)){
           qScheduleSessionSave(true);
         }
       }
       qUpdateResumeBanner();
     }catch(err){
-      if (autosaveEl) autosaveEl.textContent = `Autosave failed: ${err.message}`;
+      if (autosaveEl) autosaveEl.textContent = `Session save failed: ${err.message}`;
     }
   }
 
@@ -4278,7 +4479,7 @@
       return;
     }
     const autosaveEl = get(QUIZ.autosave);
-    if (autosaveEl) autosaveEl.textContent = 'Autosave pending';
+    if (autosaveEl) autosaveEl.textContent = 'Session save pending';
     quizState.saveTimer = setTimeout(qSaveSessionNow, 500);
   }
 
@@ -4634,6 +4835,9 @@
     });
     qAcceptServerSession(data.session || quizState.session);
     qSetStatus((data.logs || [`Saved ${rel}`]).join(' | '));
+    const captionName = rel.replace(/\.[^.]+$/, '.txt');
+    const saveCue = get(QUIZ.autosave);
+    if (saveCue) saveCue.textContent = `Caption written to ${captionName}`;
     qUpdateResumeBanner();
     if (quizState.session.status === 'completed'){
       qRenderOverview();
@@ -4653,6 +4857,7 @@
     if (!session){
       stats.innerHTML = '';
       list.innerHTML = '<span class="small text-muted">No session loaded.</span>';
+      get('tagging-quiz-completion')?.classList.add('d-none');
       return;
     }
     const images = Object.entries(session.images || {});
@@ -4660,6 +4865,15 @@
     const missing = images.filter(([, it]) => it && it.missing).length;
     const skipped = images.reduce((n, [, it]) => n + Object.values((it && it.segments) || {}).filter(st => st && st.skipped).length, 0);
     const txtWritten = images.filter(([, it]) => it && it.final_tags_written).length;
+    const completion = get('tagging-quiz-completion');
+    const completionSummary = get('tagging-quiz-completion-summary');
+    const isCompleted = session.status === 'completed';
+    completion?.classList.toggle('d-none', !isCompleted);
+    if (completionSummary){
+      completionSummary.textContent = isCompleted
+        ? `Completed: ${completed} / ${images.length} · TXT written: ${txtWritten}`
+        : '';
+    }
     stats.innerHTML = [
       ['Total images', images.length],
       ['Completed', completed],
@@ -4772,8 +4986,8 @@
     get(QUIZ.imageStage)?.addEventListener('pointercancel', qStopQuizImagePan);
     get(QUIZ.imageStage)?.addEventListener('lostpointercapture', qStopQuizImagePan);
     get(QUIZ.quizModal)?.addEventListener('wheel', qHandleQuizSegmentWheel, {passive: false});
-    get(QUIZ.later)?.addEventListener('click', async () => { await qSaveSessionNow(); quizState.quizModal?.hide(); qSetStatus('Session saved. Continue later is ready.'); });
-    get(QUIZ.openOverview)?.addEventListener('click', () => { qRenderOverview(); qModal(QUIZ.overviewModal)?.show(); });
+    get(QUIZ.later)?.addEventListener('click', qContinueLater);
+    get(QUIZ.openOverview)?.addEventListener('click', qOpenOverview);
     get(QUIZ.deleteSession)?.addEventListener('click', qDeleteSession);
     get(QUIZ.archiveSession)?.addEventListener('click', qArchiveSession);
     get(QUIZ.setupModal)?.addEventListener('hidden.bs.modal', () => { quizState.setupUsesCurrentSettings = false; });
@@ -4781,6 +4995,69 @@
       get(QUIZ.hotkeys)?.removeAttribute('open');
       qResetQuizImageZoom();
       qScheduleSessionSave(true);
+    });
+  }
+
+  async function qContinueLater(){
+    await qSaveSessionNow();
+    quizState.quizModal?.hide();
+    qSetStatus('Session saved. Continue later is ready.');
+  }
+
+  function qOpenOverview(){
+    qRenderOverview();
+    qModal(QUIZ.overviewModal)?.show();
+  }
+
+  function qMobileState(){
+    const session = quizState.session;
+    const segments = qSegments();
+    const images = Object.entries(session?.images || {});
+    return {
+      hasSession: !!session,
+      resumable: qHasActiveCurrentSession(),
+      status: session?.status || '',
+      freeMode: qIsFreeTaggingMode(),
+      segmentIndex: Math.max(0, Number(session?.current?.segment_index || 0)),
+      segments: segments.map((segment, index) => ({
+        index,
+        id: segment.id || '',
+        label: segment.label || segment.id || `Segment ${index + 1}`,
+      })),
+      zoom: Number(quizState.quizImageZoom || 1),
+      fullscreenAvailable: !!(
+        get(QUIZ.imageStage)?.requestFullscreen
+        || get(QUIZ.imageStage)?.webkitRequestFullscreen
+      ),
+      canPreviousImage: qHasFreeModeTarget(-1),
+      completed: images.filter(([, entry]) => entry?.status === 'completed').length,
+      total: images.filter(([, entry]) => !entry?.missing).length,
+      txtWritten: images.filter(([, entry]) => entry?.final_tags_written).length,
+    };
+  }
+
+  function qNotifyMobileState(){
+    if (!window.BatchBenchDatasetTagEditor) return;
+    window.dispatchEvent(new CustomEvent('bb:dataset-tag-editor-state', {detail: qMobileState()}));
+  }
+
+  function qInstallMobileBridge(){
+    window.BatchBenchDatasetTagEditor = Object.freeze({
+      startTagging: qOpenQuizEntry,
+      previousImage: qGoPreviousImageFree,
+      previousSegment: () => qMoveSegment(-1),
+      nextSegment: () => qMoveSegment(1),
+      jumpToSegment: qMoveToSegmentNumber,
+      skipSegment: qSkipSegment,
+      saveImage: qSaveImage,
+      retryGuided: qRetryCurrentImageGuided,
+      continueLater: qContinueLater,
+      showOverview: qOpenOverview,
+      setImageZoom: qSetQuizImageZoom,
+      resetImageZoom: qResetQuizImageZoom,
+      toggleImageFullscreen: qToggleImageFullscreen,
+      generateZip: zipDatasetFolder,
+      getState: qMobileState,
     });
   }
 
@@ -5558,6 +5835,8 @@
         </div>
       `;
       exportPanel.appendChild(zipBtn);
+      const zipDownload = get('dataset-zip-download-wrap');
+      if (zipDownload) exportPanel.appendChild(zipDownload);
       rightCol.appendChild(exportPanel);
     }
     const bulkPanel = document.createElement('details');
@@ -5659,7 +5938,7 @@
 
     const mainCol = document.createElement('div');
     mainCol.className = 'tag-editor-main';
-    mainCol.append(lockBanner, inlineProjectHost, quizCol, gallerySection);
+    mainCol.append(lockBanner, gallerySection);
 
     const content = document.createElement('div');
     content.className = 'tag-editor-content';
@@ -5667,7 +5946,7 @@
 
     const shell = document.createElement('div');
     shell.className = 'tag-editor-shell';
-    shell.appendChild(content);
+    shell.append(quizCol, inlineProjectHost, content);
 
     if (topCard && topCard.parentElement){
       topCard.parentElement.insertBefore(form, topCard);
@@ -8145,11 +8424,28 @@
     const isTempTarget = dstNormalized === '_temp' || dstNormalized.startsWith('_temp/');
     const targetLabel = dstNormalized ? (isTempTarget ? 'dataset/_temp' : `dataset/${dstNormalized}`) : 'dataset root';
     const actionVerb = isTempTarget ? 'Sending' : 'Moving';
+    let movePreview;
+    try {
+      const previewResponse = await fetch('/api/tags/move-files/preview', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({folder:root, srcs:srcRels, dst:dstRel || ''})
+      });
+      movePreview = await previewResponse.json();
+      if (!previewResponse.ok || !movePreview.ok) throw new Error(movePreview.error || 'Move preview failed.');
+    } catch (error) {
+      setWorkdirStatus(`Cannot preview move: ${error.message}`);
+      return;
+    }
+    const scope = `${movePreview.images} images and ${movePreview.paired_captions} paired captions will move to ${movePreview.destination}.\n${movePreview.missing_captions} captions missing; ${movePreview.conflicts} name conflicts will be renamed.`;
+    if (!window.confirm(`${scope}\n\nContinue with this pair move?`)) {
+      setWorkdirStatus('Move cancelled.');
+      return;
+    }
     setWorkdirStatus(srcRels.length > 1 ? `${actionVerb} ${srcRels.length} files to ${targetLabel}...` : `${actionVerb} file to ${targetLabel}...`);
     const res = await fetch('/api/tags/move-files', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ folder: root, srcs: srcRels, dst: dstRel || '' })
+      body: JSON.stringify({ folder: root, srcs: srcRels, dst: dstRel || '', preview_token: movePreview.preview_token })
     });
     let data = null;
     try{ data = await res.json(); }catch(_){}
@@ -8365,6 +8661,7 @@
     }
     setFormBusy(true);
     showStatus('Creating dataset zip...');
+    get('dataset-zip-download-wrap')?.classList.add('d-none');
     try{
       const res = await fetch('/api/tags/dataset-zip', {
         method: 'POST',
@@ -8376,17 +8673,40 @@
       if (!res.ok || !data || !data.ok){
         const err = (data && data.error) ? data.error : `HTTP ${res.status}`;
         showStatus(`Zip failed: ${err}`);
-        return;
+        return null;
       }
       (data.logs || []).forEach(line => appendTagsLog(line));
       const zipName = data.zip_name || data.zip_path || 'dataset zip';
       showStatus(`Zip created: ${zipName}`);
       setWorkdirStatus(`Dataset zip ready: ${zipName}`);
+      showDatasetZipDownload(data);
+      return data;
     } catch (err) {
       console.error(err);
       showStatus(`Zip failed: ${err && err.message ? err.message : 'Unknown error'}`);
+      return null;
     } finally {
       setFormBusy(false);
+    }
+  }
+
+  function showDatasetZipDownload(data){
+    const url = String(data?.download_url || '');
+    const name = String(data?.zip_name || 'dataset.zip');
+    const wrap = get('dataset-zip-download-wrap');
+    const nameEl = get('dataset-zip-download-name');
+    const link = get('dataset-zip-download');
+    if (nameEl) nameEl.textContent = `ZIP ready: ${name}`;
+    if (link){
+      link.href = url || '#';
+      link.setAttribute('download', name);
+    }
+    wrap?.classList.toggle('d-none', !url);
+    const completionLink = get('tagging-quiz-completion-download');
+    if (completionLink){
+      completionLink.href = url || '#';
+      completionLink.setAttribute('download', name);
+      completionLink.classList.toggle('d-none', !url);
     }
   }
 
@@ -9358,9 +9678,24 @@
   function positionGlossarySuggest(entry){
     if (!entry.box.classList.contains('is-open')) return;
     const rect = entry.input.getBoundingClientRect();
-    entry.box.style.left = `${Math.max(8, rect.left)}px`;
-    entry.box.style.top = `${Math.max(8, Math.min(window.innerHeight - 285, rect.bottom + 4))}px`;
-    entry.box.style.width = `${Math.min(Math.max(280, rect.width), window.innerWidth - 16)}px`;
+    const viewport = window.visualViewport;
+    const viewLeft = Number(viewport?.offsetLeft || 0);
+    const viewTop = Number(viewport?.offsetTop || 0);
+    const viewWidth = Number(viewport?.width || window.innerWidth);
+    const viewHeight = Number(viewport?.height || window.innerHeight);
+    const width = Math.min(Math.max(280, rect.width), Math.max(220, viewWidth - 16));
+    const left = Math.max(viewLeft + 8, Math.min(rect.left, viewLeft + viewWidth - width - 8));
+    const below = Math.max(96, viewTop + viewHeight - rect.bottom - 8);
+    const above = Math.max(96, rect.top - viewTop - 8);
+    const useAbove = below < 160 && above > below;
+    const maxHeight = Math.min(270, useAbove ? above : below);
+    const top = useAbove
+      ? Math.max(viewTop + 8, rect.top - maxHeight - 4)
+      : Math.max(viewTop + 8, rect.bottom + 4);
+    entry.box.style.left = `${left}px`;
+    entry.box.style.top = `${top}px`;
+    entry.box.style.width = `${width}px`;
+    entry.box.style.maxHeight = `${maxHeight}px`;
   }
 
   function closeGlossarySuggest(entry){
@@ -9442,6 +9777,7 @@
       btn.appendChild(main);
       btn.appendChild(detail);
       btn.addEventListener('mousedown', e=> e.preventDefault());
+      btn.addEventListener('pointerdown', e=> e.preventDefault());
       btn.addEventListener('click', ()=> applyGlossarySuggest(entry, row));
       entry.box.appendChild(btn);
     });
@@ -9491,6 +9827,8 @@
     });
     window.addEventListener('resize', ()=> positionGlossarySuggest(entry));
     window.addEventListener('scroll', ()=> positionGlossarySuggest(entry), true);
+    window.visualViewport?.addEventListener('resize', ()=> positionGlossarySuggest(entry));
+    window.visualViewport?.addEventListener('scroll', ()=> positionGlossarySuggest(entry));
   }
 
   function glossaryPayloadKey(payload){
@@ -10472,6 +10810,7 @@
       if(folderInput){
         folderInput.value = data.review_project_root || '';
         try{ localStorage.setItem(LSKEY + 'folder', folderInput.value); }catch(_){}
+        window.bbPathContext?.remember('project', folderInput.value);
       }
       const banner = get('pipeline-review-banner');
       if(banner) banner.classList.remove('d-none');
@@ -10505,6 +10844,7 @@
     localStorage.removeItem(LSKEY + 'tags');
     localStorage.removeItem(MODE_STORAGE_KEY);
     localStorage.removeItem(LSKEY + 'mode');
+    get(IDS.folder).value = '';
     get(IDS.tags).value = '';
     get(IDS.exts).value = '.jpg,.jpeg,.png,.webp';
     get(IDS.backup).checked = false;
@@ -10533,10 +10873,14 @@
     const zipBtn = get('btn-dataset-zip');
     const clearBtn = get('btn-clear');
     const moveAllBtn = get(WORKDIR.moveAllTemp);
+    const completionZipBtn = get('tagging-quiz-completion-zip');
+    const mobileZipBtn = get('dataset-mobile-zip');
     if (runBtn) runBtn.disabled = formBusy;
     if (zipBtn) zipBtn.disabled = formBusy;
     if (clearBtn) clearBtn.disabled = formBusy;
     if (moveAllBtn) moveAllBtn.disabled = formBusy;
+    if (completionZipBtn) completionZipBtn.disabled = formBusy;
+    if (mobileZipBtn) mobileZipBtn.disabled = formBusy;
   }
   function showLog(text){
     const wrap = get(IDS.logWrap), pre = get(IDS.logPre), meta = get(IDS.logMeta);
@@ -10770,7 +11114,8 @@
     }
   }
 
-  document.addEventListener('DOMContentLoaded', ()=>{
+  window.bbOnToolReady( ()=>{
+    get('pipeline-return-workflow')?.addEventListener('click', () => { window.location.href = '/?tab=pipeline'; });
     arrangeWorkspaceLayout();
     const form = get('tags-form');
     const tagsInput = get('tags');
@@ -10822,6 +11167,8 @@
     setGalleryPath(getGalleryRoot());
     renderCheatsheetPanel();
     qBindEvents();
+    qInstallMobileBridge();
+    window.dispatchEvent(new CustomEvent('bb:dataset-tag-editor-ready', {detail: qMobileState()}));
     void loadProjectState({ silent: true }).then(()=>{
       setGalleryPath(getGalleryRoot());
       setWorkdirPath(getWorkdirRoot());
@@ -11201,3 +11548,4 @@
   });
 })();
 </script>
+<script src="{{ url_for('static', filename='js/dataset_tag_editor_mobile.js') }}"></script>

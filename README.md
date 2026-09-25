@@ -337,12 +337,13 @@ Watch out:
 
 #### Combine Dataset
 How to use:
-- Fill Source folders with one dataset folder per line, fill Output Folder, then click **Combine**.
+- Add at least two source folders in the folder list, choose Output Folder, then click **Combine datasets**.
+- Copy is the default. For Move pairs, click **Preview move pairs**, review the pair count, skipped images without captions, destination, and predicted renames, then click **Move reviewed pairs**. If a source or destination changes, preview again.
 Parameters:
 - Source folders: at least two dataset folders.
 - Suffix for non-base sets: added to file names from non-base datasets to avoid collisions; with more than two datasets, suffixes auto-increment as `_B`, `_C`, `_D`.
 - Image ext: extensions treated as image and caption pairs.
-- Move (not copy): moves files instead of copying them.
+- Move pairs: moves image + `.txt` pairs instead of copying them.
 Watch out:
 - Only top-level image and `.txt` pairs are processed.
 - The base set is the source with the most pairs; ties follow input order.
@@ -351,8 +352,13 @@ Watch out:
 ### Tag Tools
 
 #### Dataset Tag Editor
+- Open **Tag Editor** directly from the tool rail or Home. The main Start/Resume Tagging action is above project setup and dataset utilities.
+- Project Root is a project-specific path. Other tools keep separate dataset, source, and output paths. Once a project is selected, its existing `dataset/` can be offered to dataset tools.
+- Guided Tagging shows the complete caption across segments. “Session autosaved” refers to session progress; “Caption written to … .txt” confirms a file write.
+- Moving selected dataset images to `_temp` or another folder first shows image/caption counts, missing captions, destination, and name conflicts. Existing sidecars move with images.
 How to use:
 - Fill **Project Root**, the parent folder that contains `database/`, `dataset/`, `dataset/_temp`, and `prompt.txt`.
+- **Browse** opens the remembered Project Root first. With no remembered project it starts at `TAG_EDITOR_PROJECT_BASE` (default `E:\_Training DATA`) and falls back to the drive list when that location is unavailable.
 - If Project Setup appears, run **Initialize Project** first.
 - Use **Guided Tagging Flow** for structured image-by-image review.
 - Use **Bulk Tag CRUD** for direct add, remove, rename, and duplicate cleanup operations.
@@ -369,6 +375,7 @@ Bulk Tag CRUD:
 Guided Tagging Flow:
 - The flow stores session state in `dataset/_temp/tagging_session.json`.
 - Final output remains normal sidecar `.txt` caption files.
+- On mobile, the bottom dock opens tagging, Dataset Browser, Dataset Workspace, and ZIP export. Guided Tagging exposes touch controls for images, segments, save/continue, zoom, fullscreen, and session actions without requiring hotkeys.
 - Recommendation chips can repeat when the same tag comes from different mapped cheat-sheet groups, but selecting any copy adds one caption tag and hides the matching copies for that image.
 - Manual tagging supports caption chips, autocomplete, glossary quick pick, keyboard shortcuts, and optional image preview inside the cheat-sheet overlay.
 - Danbooru-aware autocomplete uses the local catalog under `data/tag_catalog/`; typing does not call Danbooru.
@@ -387,15 +394,20 @@ Guided Tagging Flow:
 Watch out:
 - Bulk Tag CRUD works in `dataset/_temp`.
 - **Undo** restores files from `_temp` to `dataset/`.
-- **Dataset zip** zips `dataset/` without `_temp`.
+- **Dataset zip** zips `dataset/` without `_temp`; after generation, **Download ZIP** transfers the archive through the browser, including when BatchBench is opened remotely.
+- Folder browsing always refers to the filesystem of the machine running BatchBench, including when the UI is opened from a phone.
 - **Move all from _temp** moves staged files into a timestamped folder.
 - Add Tags can create new `.txt` files for images without captions after UI confirmation.
 - The Tag Editor treats captions as simple tag lists. Use Dataset Normalization for files containing `#optional:` or `#warning:` blocks.
 
+#### Dataset Health
+- Open **Dataset Health** from the tool rail or Home, choose a dataset, and click **Inspect dataset**. The scan groups missing/orphan captions, empty captions, duplicate names/tags, malformed tags, `_temp` leftovers, and token warnings using the same checks as Workflow.
+- Open an issue's caption to view its paired image and edit text. Missing captions can be explicitly created as empty `.txt` files for review. A caption changed outside the editor must be reopened before saving.
+
 #### Dataset Normalization
 How to use:
-- Fill Dataset folder, choose preset type and preset file, then click **Scan** or **Dry-run preview**.
-- Review the preview, then click **Apply** when the plan is correct.
+- Fill Dataset folder, choose preset type and preset file, then click **Preview changes**.
+- Review changed captions and totals, then click **Apply this preview**. Changing any relevant setting or source file requires a new preview. **Scan dataset** is informational and does not enable Apply.
 Parameters:
 - Dataset folder: folder containing images and `.txt` captions.
 - Image extensions: image extensions matched with `.txt` captions.
@@ -423,15 +435,14 @@ Preset rules:
 - `sort` can prioritize groups before alphabetic ordering.
 - `background_policy` can keep broad background tags while moving specific or rare background tags to optional.
 Watch out:
-- Run Scan or Dry-run before Apply.
+- Apply uses a one-time server-validated preview. Stale, reused, or changed plans are rejected.
 - Invalid regex rules are ignored.
 - Add new presets under `presets/<type>/` and click Reload in the UI.
 
 #### Auto Tag Assist
 How to use:
-- Fill Dataset Folder, choose a curated model, configure the trigger tag and policy, then run **Preview** first.
-- Review kept tags, removed tags, policy drops, and final leak counts in the log.
-- Run tagging only after the preview looks correct.
+- Fill Dataset Folder, choose a curated model, configure the trigger tag and policy, then click **Generate proposals**. This first action never writes captions.
+- Review each proposed caption, existing/kept/added/dropped tags, excluded tags, and write policy. Select the rows to change, then click **Apply reviewed proposals**.
 Parameters:
 - Dataset Folder: folder containing images and optional `.txt` captions.
 - Model: CAFormer S36 dbv4 (ONNX/CPU) or WD SwinV2 Tagger v3 (Timm/PyTorch).
@@ -440,7 +451,7 @@ Parameters:
 - Character policy: default is `Character - omit identity`, which removes recurring identity traits while keeping promptable expression, pose, outfit, and scene tags.
 - Threshold: optimized uses CAFormer `best_threshold` per tag or WD model-specific MCUT/default behavior; custom settings remain under Advanced.
 - Jio7 semantic categories: the recommended defaults keep action, expression, object, setting, and other.
-- Replacement mode: replaces selected existing captions after creating a timestamped backup; preview writes nothing.
+- Replacement mode: replaces selected existing captions after creating a timestamped backup; generating proposals writes nothing.
 - Color sanity: can drop weak color-attribute tags when the image does not support them.
 Watch out:
 - The model can only return tags from its known vocabulary.
@@ -449,14 +460,14 @@ Watch out:
 
 #### CLIP Token Check
 How to use:
-- Fill Dataset Folder, choose mode, then click **Scan Tokens**.
-- Review captions with the highest token counts or captions above Token Limit.
+- Fill Dataset Folder, choose mode, then click **Scan captions**.
+- Review Over limit, Near limit, and Longest captions. **Open caption** takes you to Dataset Health with that caption and its paired image for inspection.
 Parameters:
 - Image Extensions: image and `.txt` pairs to scan.
 - Token Limit: warning threshold; default is `77`.
 - Top N: number of longest captions to show.
 - Mode `estimate`: lightweight scan without an extra tokenizer.
-- Mode `exact`: uses a CLIP tokenizer from `transformers`.
+- Mode `exact`: uses a locally cached CLIP tokenizer from `transformers`; otherwise the scan falls back to estimate without downloading.
 - Recursive scan: includes subfolders.
 - Include `_temp`: scans staging captions when needed.
 Watch out:
@@ -467,15 +478,14 @@ Watch out:
 
 #### Dataset Workflow
 How to use:
-- Fill Dataset Source, Working Directory, and Output Directory.
-- Configure Image extensions, Include subfolders, and Working copy mode.
-- Add or remove step cards, drag them into order, then click **Run Pipeline**.
+- Choose a dataset source, final output folder, and starting point. The normal options for that starting point remain visible; model thresholds and rule overrides are under Advanced.
+- Click **Preview Workflow** and inspect the step plan before **Run Workflow**. The custom step builder remains under Advanced.
 Parameters:
 - Dataset Source Folder: original dataset copied into the working folder.
 - Working Directory: job workspace at `<working>/jobs/<job_id>/`.
 - Output Directory: destination for final artifacts such as zip files.
 - Working copy mode: `copy`, `hardlink`, or `incremental`.
-- Run controls: Run Pipeline, Pause, Resume, Stop, and Open working folder.
+- Run controls: Preview Workflow, Run Workflow, Resume Workflow at manual review, Stop Workflow, and Open Working Folder.
 - Step cards can run Offline Tagger, Tag Editor, Normalization, Zip result, dedup tags, converter, photo adjust, combine, renumber, stitch, and webtoon split steps.
 Workflow:
 - Prepare working copy, run step cards in order, then update artifacts and logs.

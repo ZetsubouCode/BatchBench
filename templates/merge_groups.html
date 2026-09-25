@@ -5,7 +5,7 @@
       <div class="col-md-4">
         <label class="form-label">Source folder</label>
         <div class="input-group">
-          <input id="merge_folder" name="merge_folder" type="text" class="form-control" data-root-sync="1"
+          <input id="merge_folder" name="merge_folder" type="text" class="form-control" data-path-role="source"
                  placeholder="D:\path\to\images"
                  data-bs-toggle="tooltip"
                  data-bs-title="Folder with parts named &lt;prefix&gt;_&lt;order&gt;.&lt;ext&gt; (e.g., chapter1_01.png, chapter1_02.jpg).">
@@ -18,7 +18,7 @@
       <div class="col-md-4">
         <label class="form-label">Output folder (optional)</label>
         <div class="input-group">
-          <input id="merge_out_dir" name="merge_out_dir" type="text" class="form-control"
+          <input id="merge_out_dir" name="merge_out_dir" type="text" class="form-control" data-path-role="output"
                  placeholder="(default: &lt;source&gt;\combined)"
                  data-bs-toggle="tooltip" data-bs-title="Leave blank to write into &lt;source&gt;\combined">
           <button class="btn btn-outline-light btn-browse" type="button" data-target="merge_out_dir"
@@ -26,6 +26,10 @@
         </div>
       </div>
 
+    </div>
+    <details class="bb-advanced mt-3">
+      <summary>Advanced filters and stitching settings</summary>
+      <div class="row g-3 mt-1">
       <div class="col-md-4">
         <label class="form-label">Filename glob</label>
         <input name="merge_glob" class="form-control" value="*_*.*"
@@ -88,15 +92,16 @@
           <input class="form-check-input" type="checkbox" id="merge_overwrite" name="merge_overwrite">
           <label class="form-check-label" for="merge_overwrite">Overwrite</label>
         </div>
-        <div class="form-check" data-bs-toggle="tooltip" data-bs-title="Preview what would be written without saving files">
-          <input class="form-check-input" type="checkbox" id="merge_dry_run" name="merge_dry_run">
-          <label class="form-check-label" for="merge_dry_run">Dry run</label>
-        </div>
       </div>
     </div>
+    </details>
 
+    <div class="form-check mt-3" data-bs-toggle="tooltip" data-bs-title="Preview what would be written without saving files">
+      <input class="form-check-input" type="checkbox" id="merge_dry_run" name="merge_dry_run">
+      <label class="form-check-label" for="merge_dry_run">Dry run (plan only)</label>
+    </div>
     <div class="mt-3">
-      <button class="btn btn-primary">Merge</button>
+      <button class="btn btn-primary">Stitch groups</button>
     </div>
   </form>
 </div>

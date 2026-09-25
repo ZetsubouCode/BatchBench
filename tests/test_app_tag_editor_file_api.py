@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 import zipfile
+from io import BytesIO
 from pathlib import Path
 
 from app import app
@@ -9,6 +10,34 @@ from app import app
 class TagEditorFileApiTests(unittest.TestCase):
     def setUp(self):
         self.client = app.test_client()
+
+    def test_mobile_guided_tagging_controls_are_wired(self):
+        response = self.client.get("/?tab=tags")
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        for section_label in ("Selected / Preselected", "Recommended", "Manual Tags", "Glossarium Tags"):
+            with self.subTest(section_label=section_label):
+                self.assertIn(section_label, html)
+        guided_html = html.split('id="tagging-quiz-modal"', 1)[1].split('id="tagging-quiz-overview-modal"', 1)[0]
+        self.assertLess(guided_html.index('id="tagging-quiz-glossary-list"'), guided_html.index('quiz-mobile-footer'))
+        self.assertLess(guided_html.index('quiz-mobile-footer'), guided_html.index('quiz-desktop-footer'))
+        self.assertIn("function qMobileMappingControls", html)
+        self.assertIn("quiz-map-mobile-section-select", html)
+        self.assertIn("quiz-map-mobile-segment-select", html)
+        self.assertIn("window.visualViewport?.addEventListener('resize'", html)
+
+        project_root = Path(__file__).resolve().parents[1]
+        mobile_css = (project_root / "static/css/dataset_tag_editor_mobile.css").read_text(encoding="utf-8")
+        mobile_js = (project_root / "static/js/dataset_tag_editor_mobile.js").read_text(encoding="utf-8")
+        self.assertIn("#tagging-quiz-setup-modal .quiz-map-mobile-controls", mobile_css)
+        self.assertIn("-webkit-overflow-scrolling: touch", mobile_css)
+        self.assertIn("touch-action: pan-y", mobile_css)
+        self.assertIn("grid-template-rows: auto auto", mobile_css)
+        self.assertIn("#tagging-quiz-modal .quiz-image-pane {\n    position: sticky", mobile_css)
+        self.assertIn("#tagging-quiz-modal .quiz-mobile-footer {\n    flex-direction: column", mobile_css)
+        self.assertIn("position: sticky", mobile_css)
+        self.assertIn("syncGuidedInputState", mobile_js)
+        self.assertIn("tagRect.top - bodyRect.top - stickyHeight - 8", mobile_js)
 
     def test_tag_add_creates_txt_for_existing_image(self):
         with tempfile.TemporaryDirectory() as td:
@@ -93,6 +122,23 @@ class TagEditorFileApiTests(unittest.TestCase):
                 self.assertTrue((temp / f"{stem}.txt").exists())
                 self.assertFalse((root / f"{stem}.png").exists())
                 self.assertFalse((root / f"{stem}.txt").exists())
+
+    def test_move_preview_scope_and_stale_file_rejection(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / 'dataset'; temp = root / '_temp'; temp.mkdir(parents=True)
+            (root / 'a.png').write_bytes(b'image')
+            (root / 'a.txt').write_text('first', encoding='utf-8')
+            body = {'folder': str(root), 'srcs': ['a.png'], 'dst': '_temp'}
+            preview = self.client.post('/api/tags/move-files/preview', json=body)
+            self.assertEqual(preview.status_code, 200)
+            plan = preview.get_json()
+            self.assertEqual(plan['paired_captions'], 1)
+            self.assertEqual(plan['missing_captions'], 0)
+            (root / 'a.txt').write_text('external change', encoding='utf-8')
+            stale = self.client.post('/api/tags/move-files', json={**body, 'preview_token': plan['preview_token']})
+            self.assertEqual(stale.status_code, 409)
+            self.assertTrue((root / 'a.png').exists())
+            self.assertFalse((temp / 'a.png').exists())
 
     def test_return_temp_moves_all_nested_pairs_back_to_root(self):
         with tempfile.TemporaryDirectory() as td:
@@ -210,6 +256,7 @@ class TagEditorFileApiTests(unittest.TestCase):
             self.assertEqual(resp.status_code, 200)
             data = resp.get_json()
             self.assertTrue(data.get("ok"), msg=data)
+            self.assertTrue(data.get("download_url"), msg=data)
             zip_path = Path(data.get("zip_path") or "")
             self.assertTrue(zip_path.exists())
             self.assertEqual(zip_path.parent, dataset.parent)
@@ -218,6 +265,49 @@ class TagEditorFileApiTests(unittest.TestCase):
             self.assertIn("root.png", names)
             self.assertIn("set_1/nested.png", names)
             self.assertNotIn("_temp/hidden.png", names)
+
+            download = self.client.get(data["download_url"])
+            try:
+                self.assertEqual(download.status_code, 200)
+                self.assertEqual(download.mimetype, "application/zip")
+                self.assertIn("attachment", download.headers.get("Content-Disposition", "").lower())
+                self.assertIn(data["zip_name"], download.headers.get("Content-Disposition", ""))
+                downloaded_bytes = bytes(download.data)
+            finally:
+                download.close()
+            with zipfile.ZipFile(BytesIO(downloaded_bytes), "r") as zf:
+                downloaded_names = set(zf.namelist())
+            self.assertIn("root.png", downloaded_names)
+            self.assertIn("set_1/nested.png", downloaded_names)
+            self.assertNotIn("_temp/hidden.png", downloaded_names)
+
+    def test_dataset_zip_download_rejects_unsafe_or_arbitrary_paths(self):
+        with tempfile.TemporaryDirectory() as td:
+            project = Path(td) / "project_a"
+            dataset = project / "dataset"
+            dataset.mkdir(parents=True, exist_ok=True)
+            outside = Path(td) / "private.zip"
+            outside.write_bytes(b"not available through dataset download")
+
+            cases = [
+                "notes.txt",
+                "../dataset__20260919-123456.zip",
+                str(outside),
+                "nested/dataset__20260919-123456.zip",
+            ]
+            for name in cases:
+                with self.subTest(name=name):
+                    response = self.client.get(
+                        "/api/tags/dataset-zip/download",
+                        query_string={"folder": str(project), "name": name},
+                    )
+                    self.assertEqual(response.status_code, 400, msg=response.get_data(as_text=True))
+
+            missing = self.client.get(
+                "/api/tags/dataset-zip/download",
+                query_string={"folder": str(project), "name": "dataset__20260919-123456.zip"},
+            )
+            self.assertEqual(missing.status_code, 404)
 
     def test_temp_move_all_moves_content_to_timestamped_folder(self):
         with tempfile.TemporaryDirectory() as td:

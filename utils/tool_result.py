@@ -17,11 +17,33 @@ def build_tool_result(
     ok: bool,
     error: str = "",
     artifacts: Optional[Dict[str, Any]] = None,
+    state: str = "",
+    scope: str = "",
+    scanned: Optional[int] = None,
+    changed: Optional[int] = None,
+    created: Optional[int] = None,
+    skipped: Optional[int] = None,
+    conflicts: Optional[int] = None,
+    warnings: Optional[int] = None,
+    errors: Optional[int] = None,
+    output_path: str = "",
+    issues: Optional[List[str]] = None,
+    next_action: str = "",
 ) -> ToolTupleWithMeta:
     meta: ToolMeta = {
         "ok": bool(ok),
         "error": str(error or ""),
         "artifacts": dict(artifacts or {}),
+        "state": state or ("completed" if ok else "failed"),
+        "scope": scope,
+        "counts": {key: value for key, value in {
+            "scanned": scanned, "changed": changed, "created": created,
+            "skipped": skipped, "conflicts": conflicts, "warnings": warnings,
+            "errors": errors,
+        }.items() if value is not None},
+        "output_path": output_path,
+        "issues": list(issues or []),
+        "next_action": next_action,
     }
     return active_tab, log_join([str(line) for line in lines]), meta
 

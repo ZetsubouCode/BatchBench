@@ -1,0 +1,21 @@
+{% set result_state = tool_result.get('state') or ('completed' if tool_result.get('ok', true) else 'failed') %}
+<section class="bb-operation-result mt-3" role="status" aria-label="Operation result">
+  <div class="d-flex align-items-start justify-content-between gap-2">
+    <div>
+      <h3 class="h6 mb-1">{{ tool_result.get('scope') or 'Operation' }} {{ result_state|replace('_', ' ') }}</h3>
+      {% if tool_result.get('error') %}<div class="text-danger small">{{ tool_result.error }}</div>{% endif %}
+    </div>
+    <span class="badge {{ 'text-bg-success' if result_state == 'completed' else 'text-bg-warning' if result_state == 'partial' else 'text-bg-danger' }}">{{ result_state|replace('_', ' ')|title }}</span>
+  </div>
+  {% if tool_result.get('counts') %}
+  <dl class="bb-operation-counts mt-2 mb-1">
+    {% for name, value in tool_result.counts.items() %}
+      <div><dt>{{ name|replace('_', ' ')|title }}</dt><dd>{{ value }}</dd></div>
+    {% endfor %}
+  </dl>
+  {% endif %}
+  {% if tool_result.get('output_path') %}<div class="small mt-2">Output: <span class="font-monospace bb-result-path" title="{{ tool_result.output_path }}">{{ tool_result.output_path }}</span></div>{% endif %}
+  {% if tool_result.get('next_action') %}<div class="small mt-2">Next: {{ tool_result.next_action }}</div>{% endif %}
+  {% if tool_result.get('issues') %}<details class="mt-2"><summary>Review {{ tool_result.issues|length }} issue(s)</summary><ul class="small mt-2 mb-0">{% for issue in tool_result.issues %}<li>{{ issue }}</li>{% endfor %}</ul></details>{% endif %}
+  <details class="mt-2"><summary>Technical details</summary><div class="d-flex justify-content-end"><button type="button" class="btn btn-sm btn-outline-secondary" onclick="navigator.clipboard?.writeText(this.closest('details').querySelector('pre').textContent)">Copy log</button></div><pre class="monospace mb-0">{{ log }}</pre></details>
+</section>

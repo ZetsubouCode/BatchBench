@@ -67,6 +67,12 @@
     .gw-sidebar { position:static; max-height:none; }
   }
   @media (max-width:575.98px) {
+    .gw-layout{order:1}
+    .gw-manager{order:2}
+    .gw-shell:not(.is-detail) .gw-article{display:none}
+    .gw-shell.is-detail .gw-sidebar{display:none}
+    .gw-sidebar{max-height:calc(100vh - 15rem);overflow:auto}
+    .gw-tag-btn,.gw-chip{min-height:44px;padding:.45rem .65rem}
     .gw-manager-row { flex-direction:column; }
     .gw-manager-row .form-select { max-width:none; }
     .gw-preview-grid, .gw-guidance-grid, .gw-rel-grid { grid-template-columns:1fr; }
@@ -76,7 +82,7 @@
   }
 </style>
 
-<div class="gw-shell">
+<div class="gw-shell" id="gw-shell">
   <section class="gw-hero">
     <h3>Tag Glossary Wiki</h3>
     <p>Browse your reusable tag collection as a local reference wiki. Articles are loaded from Danbooru only when selected and kept inside BatchBench.</p>
@@ -112,9 +118,10 @@
       <div id="gw-collection"></div>
     </aside>
 
-    <article class="gw-article">
+    <article class="gw-article" id="gw-article">
       <header class="gw-article-head">
         <div>
+          <button type="button" class="btn btn-sm btn-outline-light d-sm-none mb-2" id="gw-back-results">← Back to search results</button>
           <h4 class="gw-title" id="gw-title">Choose a glossary tag</h4>
           <div class="gw-meta" id="gw-meta"></div>
         </div>
@@ -314,7 +321,7 @@
       if (!state.activeTag && firstTag){
         state.activeTag = firstTag;
         renderCollection();
-        if (isWikiVisible()) selectTag(firstTag);
+        if (isWikiVisible()) selectTag(firstTag, {focusDetail:false});
       }
     }catch(err){
       setSync(`Collection load failed: ${err.message || err}`, true);
@@ -743,9 +750,13 @@
     updateActiveActions();
   }
 
-  async function selectTag(rawTag){
+  async function selectTag(rawTag, {focusDetail=true}={}){
     const tag = normalizeTag(rawTag);
     if (!tag) return;
+    if (focusDetail && window.matchMedia('(max-width:575.98px)').matches){
+      get('gw-shell')?.classList.add('is-detail');
+      get('gw-article')?.scrollIntoView({block:'start'});
+    }
     state.activeTag = tag;
     state.activeData = null;
     renderCollection();
@@ -794,10 +805,14 @@
   function ensureActiveArticle(){
     if (state.activeData) return;
     const firstTag = state.activeTag || categories().flatMap(category => state.glossary.categories[category] || [])[0];
-    if (firstTag) selectTag(firstTag);
+    if (firstTag) selectTag(firstTag, {focusDetail:false});
   }
 
-  document.addEventListener('DOMContentLoaded', ()=>{
+  window.bbOnToolReady( ()=>{
+    get('gw-back-results')?.addEventListener('click', () => {
+      get('gw-shell')?.classList.remove('is-detail');
+      get('gw-search')?.focus();
+    });
     void loadGlossary();
     document.querySelector('[data-bs-target="#tab-tag-wiki"]')?.addEventListener('shown.bs.tab', ensureActiveArticle);
     get('gw-search')?.addEventListener('input', e=>{

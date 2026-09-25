@@ -5,14 +5,14 @@
       <div class="col-md-6">
         <label class="form-label">Source Folder</label>
         <div class="input-group">
-          <input id="src_png" name="src_png" type="text" class="form-control" placeholder="D:\path\to\images" data-root-sync="1" data-bs-toggle="tooltip" data-bs-title="Folder containing image files (jpg, png, webp, bmp, etc.)">
+          <input id="src_png" name="src_png" type="text" class="form-control" placeholder="D:\path\to\images" data-path-role="source" data-bs-toggle="tooltip" data-bs-title="Folder containing image files (jpg, png, webp, bmp, etc.)">
           <button class="btn btn-outline-light btn-browse" type="button" data-target="src_png" data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
         </div>
       </div>
       <div class="col-md-6">
         <label class="form-label">Output Folder</label>
         <div class="input-group">
-          <input id="dst_png" name="dst_png" type="text" class="form-control" placeholder="Auto: <source>\output" data-bs-toggle="tooltip" data-bs-title="Converted PNG files will be saved in an output folder inside the source folder">
+          <input id="dst_png" name="dst_png" type="text" class="form-control" data-path-role="output" placeholder="Auto: &lt;source&gt;\output" data-bs-toggle="tooltip" data-bs-title="Converted PNG files will be saved in an output folder inside the source folder">
           <button class="btn btn-outline-light btn-browse" type="button" data-target="dst_png" data-bs-toggle="tooltip" data-bs-title="Browse folders">Browse</button>
         </div>
       </div>

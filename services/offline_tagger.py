@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field, replace
 import fnmatch
+import hashlib
 import json
 from pathlib import Path
 import os
@@ -9,7 +10,14 @@ import subprocess
 import sys
 import time
 import tempfile
+import secrets
+import threading
+from collections import OrderedDict
 from typing import Any, Dict, List, Optional, Tuple
+
+_PROPOSAL_PLANS: "OrderedDict[str, Tuple[float, List[Dict[str, Any]]]]" = OrderedDict()
+_PROPOSAL_LOCK = threading.Lock()
+_PROPOSAL_TTL = 30 * 60
 
 from services.offline_tagger_rules import (
     BUCKET_APPEARANCE_IDENTITY,
@@ -544,6 +552,7 @@ def _external_worker_python(source_root: Path) -> Optional[Path]:
 def _run_external_worker(
     opts: TaggerOptions,
     deprecated_keys: Optional[List[str]],
+    proposal_callback=None,
 ) -> Optional[Tuple[bool, List[str]]]:
     if not getattr(sys, "frozen", False):
         return None
@@ -559,6 +568,7 @@ def _run_external_worker(
         payload = {
             "options": _tagger_options_to_payload(opts),
             "deprecated_keys": list(deprecated_keys or []),
+            "collect_proposals": proposal_callback is not None,
         }
         try:
             payload_path.write_text(json.dumps(payload), encoding="utf-8")
@@ -590,6 +600,9 @@ def _run_external_worker(
                 if proc.stderr.strip():
                     lines.append("Worker stderr:")
                     lines.extend(proc.stderr.strip().splitlines()[-20:])
+                if proposal_callback is not None:
+                    for proposal in data.get("proposals") or []:
+                        proposal_callback(proposal)
                 return bool(data.get("ok")), lines
             return (
                 False,
@@ -2506,6 +2519,7 @@ def run_tagger(
     opts: TaggerOptions,
     deprecated_keys: Optional[List[str]] = None,
     progress_callback=None,
+    proposal_callback=None,
 ) -> Tuple[bool, List[str]]:
     lines: List[str] = []
     profile = resolve_model_profile(getattr(opts, "model_profile", ""), opts.model_id)
@@ -2604,7 +2618,7 @@ def run_tagger(
         max_lookups=DEFAULT_DANBOORU_SAFENET_MAX_LOOKUPS,
     )
 
-    worker_result = _run_external_worker(opts, deprecated_keys) if profile.runtime in {"transformers", "timm"} else None
+    worker_result = _run_external_worker(opts, deprecated_keys, proposal_callback) if profile.runtime in {"transformers", "timm"} else None
     if worker_result is not None:
         return worker_result
     if profile.runtime in {"transformers", "timm"} and getattr(sys, "frozen", False) and os.environ.get(_WORKER_ENV_FLAG) != "1":
@@ -3106,6 +3120,30 @@ def run_tagger(
                         samples.append(f"  [color_sanity] dropped {item}")
                 sample_count += 1
 
+            if proposal_callback is not None:
+                should_write = bool(merged_main or not skip_empty_effective)
+                proposed_text = _format_tag_file(
+                    merged_main,
+                    existing_optional if opts.write_mode in {"append", "overwrite"} else [],
+                    existing_warning if opts.write_mode in {"append", "overwrite"} else None,
+                    opts.newline_end,
+                    opts.strip_whitespace,
+                    protected_literals=protected_literals,
+                ) if should_write else None
+                proposal_callback({
+                    "image": str(path), "caption": str(txt_path),
+                    "existing_tags": existing_main,
+                    "proposed_tags": merged_main,
+                    "kept_tags": [tag for tag in existing_main if tag in merged_main],
+                    "added_tags": [tag for tag in merged_main if tag not in existing_main],
+                    "dropped_tags": [tag for tag in existing_main if tag not in merged_main],
+                    "excluded_tags": image_debug.get("policy_removed") or [],
+                    "write_mode": opts.write_mode,
+                    "reason": "Skipped by empty-tag policy" if not should_write else "Generated with selected model and tag policy",
+                    "text": proposed_text,
+                    "backup_existing": opts.backup_existing,
+                })
+
             if opts.preview_only:
                 processed += 1
                 _report_progress()
@@ -3245,6 +3283,8 @@ def run_tagger(
             lines.append("Preview mode made no filesystem changes.")
         else:
             lines.append(f"Preview done. Processed {processed} images (no files written).")
+            lines.append(f"- Errors: {errors}")
+        lines.append(f"- Skipped existing: {skipped}")
     else:
         if opts.simple_mode:
             lines.append("Auto Tag Assist complete")
@@ -3339,6 +3379,21 @@ def handle(form, ctx):
             form_opts[key] = None
     deprecated = _find_deprecated_keys(form_opts)
     opts = _effective_opts(form_opts, TAGGER_POLICY)
+    # A form submission can only generate proposals. Writing uses a separate,
+    # one-time reviewed plan below, regardless of saved checkbox values.
+    opts.preview_only = True
+    proposals: List[Dict[str, Any]] = []
+
+    def collect_proposal(item: Dict[str, Any]):
+        caption = Path(item["caption"])
+        image = Path(item["image"])
+        old_bytes = caption.read_bytes() if caption.exists() else None
+        image_stat = image.stat()
+        item["dataset"] = str(dataset_path)
+        item["old_hash"] = hashlib.sha256(old_bytes).hexdigest() if old_bytes is not None else None
+        item["image_state"] = (image_stat.st_size, image_stat.st_mtime_ns)
+        item["changed"] = item["text"] is not None and (old_bytes is None or old_bytes != item["text"].encode("utf-8"))
+        proposals.append(item)
     presence = (ctx or {}).get("discord_presence") if isinstance(ctx, dict) else None
 
     def _presence_progress(processed, total, force=False):
@@ -3347,13 +3402,75 @@ def handle(form, ctx):
         phase = "preview" if opts.preview_only else ("complete" if force and processed >= total else "running")
         presence.report_activity("offline", phase=phase, current=processed, total=total)
 
-    ok, lines = run_tagger(opts, deprecated_keys=deprecated, progress_callback=_presence_progress)
+    ok, lines = run_tagger(opts, deprecated_keys=deprecated, progress_callback=_presence_progress, proposal_callback=collect_proposal)
+    token = ''
+    if ok and proposals:
+        token = secrets.token_urlsafe(32)
+        with _PROPOSAL_LOCK:
+            now = time.monotonic()
+            for old, (created, _) in list(_PROPOSAL_PLANS.items()):
+                if now - created > _PROPOSAL_TTL:
+                    _PROPOSAL_PLANS.pop(old, None)
+            _PROPOSAL_PLANS[token] = (now, proposals)
+            while len(_PROPOSAL_PLANS) > 32:
+                _PROPOSAL_PLANS.popitem(last=False)
+    review = [{key: item[key] for key in ("image", "existing_tags", "proposed_tags", "kept_tags", "added_tags", "dropped_tags", "excluded_tags", "write_mode", "reason", "changed")} for item in proposals]
+    def _last_count(label):
+        for line in reversed(lines):
+            match = re.search(rf'{re.escape(label)}:\s*(\d+)', str(line), re.IGNORECASE)
+            if match:
+                return int(match.group(1))
+        return 0
+    skipped = _last_count('Skipped existing')
+    warnings = sum(str(line).lower().startswith(('[warn]', 'warning:')) for line in lines)
     return build_tool_result(
         active_tab,
         lines,
         ok=ok,
         error="" if ok else "Offline tagger failed. See logs for details.",
+        artifacts={"proposal_token": token, "proposals": review,
+                   "scanned": len(proposals) + skipped, "generated": len(proposals),
+                   "skipped": skipped, "warnings": warnings, "errors": _last_count('Errors'),
+                   "would_change": sum(bool(item["changed"]) for item in proposals),
+                   "unchanged": sum(not item["changed"] for item in proposals)},
     )
+
+
+def apply_reviewed_proposals(token: str, selected: List[int]) -> Dict[str, Any]:
+    with _PROPOSAL_LOCK:
+        saved = _PROPOSAL_PLANS.pop(token, None)
+    if not saved or time.monotonic() - saved[0] > _PROPOSAL_TTL:
+        return {"ok": False, "error": "Proposals expired or were already applied. Generate them again."}
+    proposals = saved[1]
+    if not isinstance(selected, list) or any(type(index) is not int or index < 0 or index >= len(proposals) for index in selected):
+        return {"ok": False, "error": "Invalid proposal selection."}
+    chosen = [proposals[index] for index in dict.fromkeys(selected) if proposals[index]["changed"]]
+    for item in chosen:
+        caption = Path(item["caption"])
+        image = Path(item["image"])
+        try:
+            state = image.stat()
+            old_bytes = caption.read_bytes() if caption.exists() else None
+        except OSError as exc:
+            return {"ok": False, "error": f"Source changed: {exc}. Generate proposals again."}
+        old_hash = hashlib.sha256(old_bytes).hexdigest() if old_bytes is not None else None
+        if old_hash != item["old_hash"] or (state.st_size, state.st_mtime_ns) != tuple(item["image_state"]):
+            return {"ok": False, "error": f"Source changed: {caption}. Generate proposals again."}
+    changed = 0
+    issues = []
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    for item in chosen:
+        try:
+            wrote, _, _ = _write_caption_safely(
+                Path(item["dataset"]), Path(item["caption"]), item["text"],
+                backup_existing=item["backup_existing"], timestamp=timestamp,
+            )
+            changed += int(wrote)
+        except Exception as exc:
+            issues.append(f"{item['caption']}: {exc}")
+    return {"ok": not issues, "state": "partial" if issues and changed else "failed" if issues else "completed",
+            "scanned": len(proposals), "changed": changed, "skipped": len(proposals) - changed,
+            "errors": len(issues), "issues": issues, "output_path": proposals[0]["dataset"] if proposals else ""}
 
 
 def _cli():
@@ -3375,9 +3492,13 @@ def _cli():
         payload = json.loads(Path(args.run_options).read_text(encoding="utf-8"))
         opts = _tagger_options_from_payload(payload.get("options") or {})
         deprecated = list(payload.get("deprecated_keys") or [])
-        ok, lines = run_tagger(opts, deprecated_keys=deprecated)
+        proposals = []
+        ok, lines = run_tagger(
+            opts, deprecated_keys=deprecated,
+            proposal_callback=proposals.append if payload.get("collect_proposals") else None,
+        )
         Path(args.result).write_text(
-            json.dumps({"ok": ok, "lines": lines}, ensure_ascii=False),
+            json.dumps({"ok": ok, "lines": lines, "proposals": proposals}, ensure_ascii=False),
             encoding="utf-8",
         )
         sys.exit(0 if ok else 1)

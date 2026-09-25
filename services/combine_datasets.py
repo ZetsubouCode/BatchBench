@@ -3,11 +3,109 @@ import os
 import re
 import shutil
 import string
+import hashlib
+import json
+import secrets
+import threading
+import time
+from collections import OrderedDict
 
 from utils.io import readable_path, ensure_out_dir
 from utils.dataset import collect_pairs
 from utils.parse import parse_bool, parse_exts
 from utils.tool_result import build_tool_result
+
+_MOVE_PREVIEWS = OrderedDict()
+_MOVE_PREVIEW_LOCK = threading.Lock()
+_MOVE_PREVIEW_TTL = 15 * 60
+
+
+def _source_paths(form):
+    raw = [(form.get('folder_a') or '').strip(), (form.get('folder_b') or '').strip()]
+    for block in (form.get('source_folders') or '', form.get('extra_folders') or ''):
+        raw.extend(line.strip() for line in str(block).splitlines())
+    folders = []
+    seen = set()
+    for value in filter(None, raw):
+        folder = readable_path(value)
+        key = str(folder).lower() if os.name == 'nt' else str(folder)
+        if key not in seen:
+            seen.add(key)
+            folders.append(folder)
+    return folders
+
+
+def _move_fingerprint(form):
+    folders = _source_paths(form)
+    out = readable_path((form.get('out_dir') or '').strip())
+    snapshot = {
+        'folders': [str(folder.resolve()) for folder in folders],
+        'output': str(out.resolve()),
+        'suffix': form.get('suffix_combine', '_B'),
+        'exts': parse_exts(form.get('exts_combine'), default=['.jpg', '.jpeg', '.png', '.webp']),
+        'move': parse_bool(form.get('move_instead'), default=False),
+        'files': [],
+    }
+    for folder in folders + [out]:
+        entries = []
+        if folder.is_dir():
+            for path in sorted(folder.iterdir(), key=lambda item: item.name.lower()):
+                if path.is_file():
+                    stat = path.stat()
+                    entries.append((path.name, stat.st_size, stat.st_mtime_ns))
+        snapshot['files'].append(entries)
+    return hashlib.sha256(json.dumps(snapshot, sort_keys=True).encode('utf-8')).hexdigest()
+
+
+def preview_move(form):
+    folders = _source_paths(form)
+    out_raw = (form.get('out_dir') or '').strip()
+    if len(folders) < 2 or not out_raw:
+        return {'ok': False, 'error': 'Choose at least two source folders and an output folder.'}
+    if any(not folder.is_dir() for folder in folders):
+        return {'ok': False, 'error': 'One or more source folders were not found.'}
+    out = readable_path(out_raw)
+    if any(_path_within(str(out), str(folder)) for folder in folders):
+        return {'ok': False, 'error': 'Move output must be outside every source folder.'}
+    exts = parse_exts(form.get('exts_combine'), default=['.jpg', '.jpeg', '.png', '.webp'])
+    datasets = [collect_pairs(folder, exts) for folder in folders]
+    base_idx = max(range(len(datasets)), key=lambda index: len(datasets[index]))
+    suffixes = _build_suffixes(form.get('suffix_combine', '_B'), len(folders) - 1)
+    suffix_by_index = {index: suffix for index, suffix in zip((i for i in range(len(folders)) if i != base_idx), suffixes)}
+    occupied = {path.name.lower() for path in out.iterdir()} if out.is_dir() else set()
+    conflicts = 0
+    for index in [base_idx] + [i for i in range(len(folders)) if i != base_idx]:
+        for image, _ in datasets[index]:
+            stem = image.stem + suffix_by_index.get(index, '')
+            bump = 0
+            while True:
+                proposed = stem if bump == 0 else f'{stem}_{bump}'
+                names = (f'{proposed}{image.suffix.lower()}'.lower(), f'{proposed}.txt'.lower())
+                if not any(name in occupied for name in names):
+                    occupied.update(names)
+                    conflicts += int(bump > 0)
+                    break
+                bump += 1
+    token = secrets.token_urlsafe(32)
+    with _MOVE_PREVIEW_LOCK:
+        now = time.monotonic()
+        for old, (created, _) in list(_MOVE_PREVIEWS.items()):
+            if now - created > _MOVE_PREVIEW_TTL:
+                _MOVE_PREVIEWS.pop(old, None)
+        _MOVE_PREVIEWS[token] = (now, _move_fingerprint(form))
+        while len(_MOVE_PREVIEWS) > 32:
+            _MOVE_PREVIEWS.popitem(last=False)
+    return {'ok': True, 'plan_token': token, 'sources': [str(folder) for folder in folders],
+            'pairs': sum(map(len, datasets)), 'conflicts': conflicts, 'output_path': str(out),
+            'missing_sidecars_skipped': sum(1 for folder in folders for path in folder.iterdir()
+                                            if path.is_file() and path.suffix.lower() in exts and not path.with_suffix('.txt').is_file())}
+
+
+def _consume_move_preview(form):
+    token = (form.get('move_plan_token') or '').strip()
+    with _MOVE_PREVIEW_LOCK:
+        saved = _MOVE_PREVIEWS.pop(token, None)
+    return bool(saved and time.monotonic() - saved[0] <= _MOVE_PREVIEW_TTL and saved[1] == _move_fingerprint(form))
 
 def _label_for_index(idx: int) -> str:
     if idx < 26:
@@ -115,36 +213,16 @@ def handle(form, ctx):
     move_instead = parse_bool(form.get("move_instead"), default=False)
     lines: List[str] = []
 
-    def _done(ok: bool, error: str = ""):
-        return build_tool_result(active_tab, lines, ok=ok, error=error)
+    def _done(ok: bool, error: str = "", **result):
+        return build_tool_result(active_tab, lines, ok=ok, error=error,
+                                 scope='Combine Dataset', **result)
 
     if not out_dir_raw:
         lines.append("Output folder is required.")
         return _done(False, "Output folder is required.")
     out_dir = readable_path(out_dir_raw)
 
-    raw_folders = []
-    if folder_a:
-        raw_folders.append(folder_a)
-    if folder_b:
-        raw_folders.append(folder_b)
-    for block in (source_folders, extra_folders):
-        for line in str(block).splitlines():
-            val = line.strip()
-            if val:
-                raw_folders.append(val)
-
-    folders = []
-    seen = set()
-    for raw in raw_folders:
-        path = readable_path(raw)
-        key = str(path)
-        if os.name == "nt":
-            key = key.lower()
-        if key in seen:
-            continue
-        seen.add(key)
-        folders.append(path)
+    folders = _source_paths(form)
 
     if len(folders) < 2:
         lines.append("Please provide at least 2 source dataset folders.")
@@ -160,6 +238,9 @@ def handle(form, ctx):
         return _done(False, "One or more source folders were not found.")
 
     if move_instead:
+        if not _consume_move_preview(form):
+            lines.append('Move preview is missing or outdated. Preview the pairs again before moving.')
+            return _done(False, 'Move preview is missing or outdated.')
         for folder in folders:
             if _path_within(str(out_dir), str(folder)):
                 lines.append(
@@ -192,8 +273,10 @@ def handle(form, ctx):
     copied = 0
     renamed = 0
     errors = 0
+    conflicts = 0
     for img, txt in datasets[base_idx]["pairs"]:
         target_img, target_txt = _next_pair_target(out_dir, img.stem, img.suffix.lower())
+        conflicts += int(target_img.stem != img.stem)
         ok, error = _transfer_pair(img, txt, target_img, target_txt, move_instead)
         if ok:
             copied += 1
@@ -206,6 +289,7 @@ def handle(form, ctx):
             target_img, target_txt = _next_pair_target(
                 out_dir, img.stem + suf, img.suffix.lower()
             )
+            conflicts += int(target_img.stem != img.stem + suf)
             ok, error = _transfer_pair(img, txt, target_img, target_txt, move_instead)
             if ok:
                 renamed += 1
@@ -214,6 +298,11 @@ def handle(form, ctx):
                 lines.append(f"[ERROR] {img.name}: {error}")
 
     lines.append(
-        f"Done. Copied {copied} unchanged and {renamed} renamed into '{out_dir}'. Errors: {errors}."
+        f"Done. {'Moved' if move_instead else 'Copied'} {copied} base and {renamed} suffixed pairs into '{out_dir}'. Collision renames: {conflicts}. Errors: {errors}."
     )
-    return _done(errors == 0, "" if errors == 0 else f"{errors} pair transfer(s) failed.")
+    return _done(errors == 0, "" if errors == 0 else f"{errors} pair transfer(s) failed.",
+                 state='partial' if errors and copied + renamed else 'failed' if errors else 'completed',
+                 scanned=sum(len(dataset['pairs']) for dataset in datasets), changed=copied + renamed,
+                 conflicts=conflicts, errors=errors, output_path=str(out_dir),
+                 issues=[line for line in lines if line.startswith('[ERROR]')],
+                 next_action='Review failed pairs and retry.' if errors else 'Inspect the combined output.')

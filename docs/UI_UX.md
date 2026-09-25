@@ -153,9 +153,17 @@ When cached/local data is available, use it without requiring internet access.
 
 ## 10. Responsive Scope
 
-The application is desktop-first because dataset preparation is primarily a desktop workflow.
+The application is desktop-first, with intentional tablet and mobile task views. Keep the active image, tags, and Save & Next reachable in Guided Tagging, including when the software keyboard opens. Use one searchable mobile tool drawer and preserve the Tag Editor mobile dock and sticky image.
 
-Responsive behavior should prevent broken layouts on narrower windows, but mobile-first redesign is not a product requirement.
+## Shared workspace behavior
+
+- Keep project, dataset, source, output, and working paths distinct. Only Tag Editor understands `<project>/dataset` as a project convention.
+- The home workspace exposes Tag Editor, Dataset Health, and recent tools directly. Heavy Tag Editor, Workflow, Settings, and Glossary panes load when opened.
+- Auto Tag Assist starts with read-only proposals; only reviewed selections may write captions.
+- Normalization Apply must use a current server-validated preview token. Any changed option or relevant file invalidates it.
+- Dataset Health reuses Workflow's audit and lets users inspect or edit individual captions with stale-file protection.
+- Show structured counts, failures, output path, and next action before expandable technical logs.
+- Keep Bootstrap and icon assets local so the shell works offline.
 
 ## 11. Accessibility and Clarity
 

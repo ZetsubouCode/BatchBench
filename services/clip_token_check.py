@@ -27,7 +27,7 @@ def try_get_clip_tokenizer() -> Optional[object]:
     try:
         if model_or_path:
             return CLIPTokenizerFast.from_pretrained(model_or_path, local_files_only=True)
-        return CLIPTokenizerFast.from_pretrained("openai/clip-vit-large-patch14")
+        return CLIPTokenizerFast.from_pretrained("openai/clip-vit-large-patch14", local_files_only=True)
     except Exception:
         return None
 
@@ -160,8 +160,9 @@ def handle(form, ctx):
     active_tab = "clip_tokens"
     lines: List[str] = []
 
-    def _done(ok: bool, error: str = ""):
-        return build_tool_result(active_tab, lines, ok=ok, error=error)
+    def _done(ok: bool, error: str = "", **result_meta):
+        return build_tool_result(active_tab, lines, ok=ok, error=error,
+                                 scope='CLIP Token Check', **result_meta)
 
     folder_raw = (form.get("folder_clip_tokens", "") or "").strip()
     folder = readable_path(folder_raw)
@@ -211,4 +212,8 @@ def handle(form, ctx):
             preview = str(item.get("preview") or "")
             lines.append(f"- [{token_count}] {file_name}  :: {preview}")
 
-    return _done(True)
+    return _done(True, scanned=int(result.get('scanned_captions') or 0),
+                 warnings=int(result.get('over_limit') or 0), output_path=str(folder),
+                 issues=[f"{item['file']}: {item['token_count']} tokens" for item in offenders
+                         if int(item.get('token_count') or 0) > limit],
+                 next_action='Open and review over-limit captions in Dataset Health.' if result.get('over_limit') else 'No over-limit captions found.')

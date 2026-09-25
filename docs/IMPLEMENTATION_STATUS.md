@@ -1,6 +1,21 @@
 # BatchBench Implementation Status
 
-Last reviewed against the `main` working tree on 2026-09-12 (base commit `ec7bb875faa35c9bb3cc89551d508ec108531fb7`).
+Last reviewed against the local working tree on 2026-09-25. Existing unrelated working-tree edits were preserved.
+
+## 2026-09-25 UI/workflow implementation
+
+- Home now opens first, with direct Tag Editor and Dataset Health navigation, a collapsible desktop rail, and a searchable mobile drawer. Heavy Tag Editor, Workflow, Settings, and Glossary panes are deferred until opened. Bootstrap and icons are vendored locally.
+- Shared path context separates project, dataset, source, output, and working roles. Tag Editor may derive an existing `<project>/dataset`; unrelated source/output inputs are not changed by project selection.
+- Auto Tag Assist generates reviewable proposals before writing. Selected proposals use one-time tokens and source fingerprints; the packaged external Python worker can return proposals. Existing caption backup behavior remains on Apply.
+- Dataset Normalization Apply is tied to a one-time fingerprinted preview and rejects changed options/files. Preview reports all scanned captions, changed/unchanged totals, and changed-only examples.
+- Dataset Health reuses Workflow audit checks and supports guarded caption inspection/editing with paired image preview and stale-file detection.
+- Guided Tagging is the first Tag Editor action, shows complete caption tags, distinguishes session autosave from `.txt` writes, and keeps Save & Next reachable in the mobile footer. Selected pair moves show scope and validate a fresh preview when used from the UI.
+- Workflow keeps a compact normal path and moves uncommon rule controls under Advanced. Manual review carries project context back to Tag Editor and exposes Return to Workflow.
+- Combine Dataset uses a source folder list. Move mode requires a fresh pair-count and collision preview. Webtoon Splitter, Stitch Groups, and Flatten & Renumber now put tuning controls under Advanced. Image → PNG avoids overwriting existing output names and reports collision renames.
+- CLIP Token Check groups over-limit, near-limit, and longest captions with links into Dataset Health. Settings shows Guided Flow unsaved state and warns on navigation.
+- A shared operation result component renders structured counts/issues/output before technical logs for normal form tools, while legacy service handlers continue to work.
+
+Current scope: some specialized batch tools still use their existing form/result layouts, and legacy direct Tag Editor move APIs remain callable for compatibility. These are not yet fully migrated to the new preview/result pattern.
 
 This document describes the repository as it exists now and separates implemented behavior from intended direction.
 
@@ -32,7 +47,10 @@ The current navigation groups tools into image preparation, dataset assembly, ta
 - local suggestion/glossary integration,
 - persistent tagging session state,
 - session reconciliation when images or guided segments change,
-- preservation of missing historical session items without assigning them to a different image.
+- preservation of missing historical session items without assigning them to a different image,
+- Dataset Tag Editor-only mobile layout and touch controls for Guided Tagging, Dataset Browser, Bulk Tag CRUD, and Dataset Workspace, including a sticky reference image, end-of-flow navigation actions, keyboard-safe tag inputs/autosuggest, and touch-native Tagging Flow mapping controls,
+- configurable Project Root browse base with remembered-project precedence,
+- safe browser download of generated dataset ZIP files for remote/mobile use.
 
 ### Tag reference and suggestion system
 

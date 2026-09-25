@@ -4,8 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ config.APP_NAME or "BatchBench" }}</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <script>window.bbOnToolReady = fn => document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', fn, {once:true}) : fn();</script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap/css/bootstrap.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap-icons/font/bootstrap-icons.min.css') }}">
   <link rel="icon" href="{{ url_for('static', filename='icons/icon.ico') }}">
   <style>
     :root{
@@ -38,6 +39,35 @@
       padding-left:0;
       padding-right:0;
     }
+    .bb-context-bar{display:flex;align-items:center;gap:1rem;margin:-.5rem auto 1rem;padding:.45rem .75rem;border:1px solid var(--bb-border);border-radius:.45rem;background:var(--bb-card);min-width:0;}
+    .bb-context-item{display:flex;align-items:center;gap:.4rem;min-width:0;max-width:42%;font-size:.8rem;}
+    .bb-context-item>span{color:var(--bb-muted);flex:none;}
+    .bb-context-item>strong{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
+    .bb-context-item .btn{padding:.1rem .2rem;flex:none;}
+    .bb-tool-rail{position:fixed;z-index:1015;top:3.55rem;bottom:0;left:0;width:14.5rem;overflow-y:auto;padding:.6rem;border-right:1px solid var(--bb-border);background:var(--bb-card);}
+    .bb-tool-rail .bb-tool-menu{display:block;padding-bottom:1.5rem;}
+    .bb-tool-rail .bb-nav-heading{font-size:.7rem;color:var(--bb-muted);text-transform:uppercase;letter-spacing:.07em;margin:.9rem .5rem .3rem;}
+    .bb-tool-rail .bb-menu-link{width:100%;text-align:left;padding:.38rem .55rem;border:0;border-radius:.3rem;background:transparent;color:var(--bb-text);font-size:.875rem;}
+    .bb-tool-rail .bb-menu-link:hover,.bb-tool-rail .bb-menu-link:focus-visible{background:#1b2b46;color:var(--bb-link-hover);}
+    .bb-tool-rail .bb-menu-link.active{background:#173157;color:var(--bb-link);box-shadow:inset 3px 0 var(--bb-primary);}
+    .bb-tool-rail .bb-nav-primary{font-weight:650;}
+    .bb-rail-search{width:100%;margin-bottom:.5rem;}
+    .bb-rail-backdrop{position:fixed;inset:3.55rem 0 0;background:rgba(0,0,0,.55);z-index:1014;}
+    body:not(.bb-rail-collapsed) .bb-context-bar,body:not(.bb-rail-collapsed) .bb-main-content{margin-left:calc(14.5rem + 1rem);width:calc(100% - 14.5rem - 2rem);}
+    body.bb-rail-collapsed .bb-tool-rail{display:none;}
+    @media(max-width:991.98px){
+      .bb-tool-rail{top:3.55rem;width:min(19rem,85vw);transform:translateX(-105%);transition:transform .15s ease-out;box-shadow:.3rem 0 1.5rem rgba(0,0,0,.3);}
+      body.bb-rail-open .bb-tool-rail{transform:translateX(0);}
+      body:not(.bb-rail-collapsed) .bb-context-bar,body:not(.bb-rail-collapsed) .bb-main-content{margin-left:auto;width:calc(100% - 1rem);}
+      body.bb-rail-collapsed .bb-tool-rail{display:block;}
+    }
+    .bb-operation-result{border:1px solid var(--bb-border);border-left:3px solid var(--bb-primary);border-radius:.35rem;padding:1rem;background:var(--bb-card);}
+    .bb-operation-counts{display:flex;flex-wrap:wrap;gap:.6rem 1.5rem;}
+    .bb-operation-counts div{display:flex;gap:.45rem;align-items:baseline;}
+    .bb-operation-counts dt{color:var(--bb-muted);font-size:.8rem;font-weight:400;}
+    .bb-operation-counts dd{margin:0;font-variant-numeric:tabular-nums;font-weight:600;}
+    .bb-result-path{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;white-space:nowrap;}
+    @media(max-width:767.98px){.bb-context-bar{gap:.4rem;flex-wrap:wrap}.bb-context-item{max-width:100%;width:100%}.bb-context-item>span{width:3.6rem}}
     @media (max-width: 991.98px){
       .bb-shell{ width:calc(100% - 1rem); }
     }
@@ -51,6 +81,13 @@
     .btn-primary:hover,.btn-primary:focus{background:var(--bb-primary-hover);border-color:var(--bb-primary-hover);}
     pre{background:var(--bb-code-bg);color:var(--bb-text);padding:1rem;border-radius:.5rem;border:1px solid var(--bb-code-bd);overflow-x:auto;}
     :focus-visible{outline:2px solid var(--bb-focus);outline-offset:2px;}
+    @media (max-width:767.98px){
+      .bb-tool-rail .bb-menu-link,.bb-context-bar .btn,.btn-browse,.btn-primary,.btn-danger{min-height:44px;}
+    }
+    @media (prefers-reduced-motion:reduce){
+      html:focus-within{scroll-behavior:auto!important;}
+      *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important;}
+    }
     .list-group-item{background:var(--bb-card);color:var(--bb-text);border-color:var(--bb-border);}
 
     /* Tabs: white by default, blue when hover/focus/active */
@@ -147,26 +184,32 @@
   </style>
 </head>
 <body>
-  <nav class="navbar navbar-expand-lg navbar-dark mb-4 bb-top-nav">
+  <nav class="navbar navbar-dark mb-3 bb-top-nav">
     <div class="container-fluid bb-shell">
       <a class="navbar-brand" href="/">{{ config.APP_NAME or "BatchBench" }}</a>
-      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#bb-navbar-tools" aria-controls="bb-navbar-tools" aria-expanded="false" aria-label="Toggle navigation">
-        <span class="navbar-toggler-icon"></span>
-      </button>
-      <div class="collapse navbar-collapse" id="bb-navbar-tools">
-        {% block navbar_menu %}{% endblock %}
-      </div>
+      <button class="btn btn-sm btn-outline-light" id="bb-rail-toggle" type="button" aria-controls="bb-navbar-tools" aria-expanded="true" aria-label="Toggle tool navigation"><i class="bi bi-list" aria-hidden="true"></i> Tools</button>
     </div>
   </nav>
 
-  <div class="container-fluid bb-shell pb-5">
+  <div id="bb-rail-backdrop" class="bb-rail-backdrop" hidden></div>
+  <aside class="bb-tool-rail" id="bb-navbar-tools" aria-label="Tools">
+    {% block navbar_menu %}{% endblock %}
+  </aside>
+
+  <div class="bb-context-bar bb-shell" aria-label="Current workspace paths">
+    <div class="bb-context-item"><span>Project</span><strong id="bb-context-project">No project selected</strong><button type="button" class="btn btn-sm btn-link" data-context-copy="project" title="Copy project path">Copy</button><button type="button" class="btn btn-sm btn-outline-secondary" data-context-change="project" aria-label="Change project">Change</button></div>
+    <div class="bb-context-item"><span>Dataset</span><strong id="bb-context-dataset">No dataset selected</strong><button type="button" class="btn btn-sm btn-link" data-context-copy="dataset" title="Copy dataset path">Copy</button><button type="button" class="btn btn-sm btn-outline-secondary" data-context-change="dataset" aria-label="Change dataset">Change</button></div>
+    <span class="small text-warning" id="bb-context-note" role="status"></span>
+  </div>
+
+  <main class="container-fluid bb-shell bb-main-content pb-5">
     {% with messages = get_flashed_messages() %}
       {% if messages %}
         <div class="alert alert-info bb-scoped-flash" data-flash-tab="{{ active_tab or '' }}">{% for m in messages %}<div>{{ m }}</div>{% endfor %}</div>
       {% endif %}
     {% endwith %}
     {% block content %}{% endblock %}
-  </div>
+  </main>
 
   <!-- Folder Picker Modal -->
   <div class="modal fade" id="folderPicker" tabindex="-1" aria-hidden="true">
@@ -177,6 +220,9 @@
           <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
+          <div class="small text-muted mb-2">Browsing folders on the computer running BatchBench.</div>
+          <div class="small mb-2">Choosing: <strong id="bb-picker-role">Folder</strong> <span id="bb-picker-validity" role="status"></span></div>
+          <div id="bb-picker-recent" class="d-flex flex-wrap gap-1 mb-2"></div>
           <div class="d-flex gap-2 mb-2">
             <button class="btn btn-sm btn-secondary" id="bb-up" data-bs-toggle="tooltip" data-bs-title="Go up one level">Up</button>
             <div class="flex-grow-1">
@@ -202,7 +248,11 @@
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="{{ url_for('static', filename='vendor/bootstrap/js/bootstrap.bundle.min.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/batchbench_context.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/batchbench_navigation.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/batchbench_tool_loader.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/batchbench_accessibility.js') }}"></script>
   <script>
     // Shared state for folder picker
     let bbTargetInput = null;
@@ -226,19 +276,27 @@
     }
 
     async function bbOpen(path){
-      const data = await bbGet("/api/list-dir?path="+encodeURIComponent(path));
-      bbPath = data.path || path;
-      document.getElementById("bb-current").value = bbPath;
-      const list = document.getElementById("bb-list"); list.innerHTML = "";
-      (data.dirs||[]).forEach(p=>{
-        const li = document.createElement("li");
-        li.className = "list-group-item d-flex justify-content-between align-items-center";
-        li.textContent = p;
-        li.style.cursor="pointer";
-        li.onclick = ()=> bbOpen(p);
-        list.appendChild(li);
-      });
-      document.getElementById("bb-up").onclick = ()=> bbOpen(data.parent || path);
+      try{
+        const response = await fetch("/api/list-dir?path="+encodeURIComponent(path));
+        const data = await response.json();
+        if(!response.ok || data.ok === false) return false;
+        bbPath = data.path || path;
+        document.getElementById("bb-current").value = bbPath;
+        document.getElementById("bb-picker-validity").textContent = '· Folder found';
+        const list = document.getElementById("bb-list"); list.innerHTML = "";
+        (data.dirs||[]).forEach(p=>{
+          const li = document.createElement("li");
+          li.className = "list-group-item d-flex justify-content-between align-items-center";
+          li.textContent = p;
+          li.style.cursor="pointer";
+          li.onclick = ()=> bbOpen(p);
+          list.appendChild(li);
+        });
+        document.getElementById("bb-up").onclick = ()=> bbOpen(data.parent || path);
+        return true;
+      }catch(_){
+        return false;
+      }
     }
 
     function bbNotifyInputChange(input){
@@ -247,14 +305,36 @@
       input.dispatchEvent(new Event("change", { bubbles: true }));
     }
 
-    document.addEventListener("click", (e)=>{
+    document.addEventListener("click", async (e)=>{
       const btn = e.target.closest(".btn-browse");
       if(!btn) return;
       const targetId = btn.getAttribute("data-target");
       bbTargetInput = document.getElementById(targetId);
+      const role = bbTargetInput?.dataset.pathRole || 'source';
+      document.getElementById('bb-picker-role').textContent = window.bbPathContext?.roleName(role) || 'Folder';
+      document.getElementById('bb-picker-validity').textContent = '';
+      const recentWrap = document.getElementById('bb-picker-recent');
+      recentWrap.replaceChildren();
+      (window.bbPathContext?.recent(role) || []).forEach(path => {
+        const recentButton = document.createElement('button');
+        recentButton.type = 'button';
+        recentButton.className = 'btn btn-sm btn-outline-secondary text-truncate';
+        recentButton.style.maxWidth = '15rem';
+        recentButton.textContent = path;
+        recentButton.title = path;
+        recentButton.addEventListener('click', () => bbOpen(path));
+        recentWrap.appendChild(recentButton);
+      });
       const modal = new bootstrap.Modal(document.getElementById("folderPicker"));
       modal.show();
-      bbShowDrives();
+      const inputPath = (bbTargetInput?.value || "").trim();
+      const configuredStart = (btn.getAttribute("data-browse-start") || "").trim();
+      const initialPath = inputPath || window.bbPathContext?.readRole(role) || configuredStart;
+      const opened = initialPath ? await bbOpen(initialPath) : false;
+      if(!opened){
+        document.getElementById('bb-picker-validity').textContent = initialPath ? '· Saved folder unavailable' : '';
+        await bbShowDrives();
+      }
       document.getElementById("bb-select").onclick = ()=>{
         if(bbTargetInput && bbPath){
           bbTargetInput.value = bbPath;
@@ -467,61 +547,6 @@
         });
       });
 
-      // Shared root folder default across tabs
-      const rootKey = "bb-default-root";
-      const rootInputs = Array.from(document.querySelectorAll('input[data-root-sync="1"]'));
-      const trimPath = (val)=> (val || "").trim();
-      let sharedRoot = trimPath(localStorage.getItem(rootKey));
-      let rootSyncLocked = false;
-
-      const setSharedRoot = (value, origin)=>{
-        const next = trimPath(value);
-        if(!next || next === sharedRoot) return;
-        const prev = sharedRoot;
-        sharedRoot = next;
-        try { localStorage.setItem(rootKey, next); } catch(e){}
-        rootSyncLocked = true;
-        rootInputs.forEach(input=>{
-          if(input === origin) return;
-          const cur = trimPath(input.value);
-          if(!cur || cur === prev){
-            input.value = next;
-            bbNotifyInputChange(input);
-          }
-        });
-        rootSyncLocked = false;
-      };
-
-      const seedSharedRoot = ()=>{
-        if(sharedRoot) return;
-        const found = rootInputs.map(input=> trimPath(input.value)).find(val=> val);
-        if(found){
-          sharedRoot = found;
-          try { localStorage.setItem(rootKey, found); } catch(e){}
-        }
-      };
-
-      const applySharedRoot = ()=>{
-        if(!sharedRoot) return;
-        rootInputs.forEach(input=>{
-          if(!trimPath(input.value)){
-            input.value = sharedRoot;
-            bbNotifyInputChange(input);
-          }
-        });
-      };
-
-      seedSharedRoot();
-      applySharedRoot();
-
-      rootInputs.forEach(input=>{
-        const handler = ()=>{
-          if(rootSyncLocked) return;
-          setSharedRoot(input.value, input);
-        };
-        input.addEventListener("change", handler);
-        input.addEventListener("blur", handler);
-      });
     });
   </script>
   {% if config.DEBUG %}

@@ -2,6 +2,7 @@
   .quiz-settings-grid { display:grid; grid-template-columns:minmax(300px, .9fr) minmax(360px, 1.1fr); gap:1rem; align-items:start; }
   .quiz-settings-card { border:1px solid var(--bb-border); border-radius:.65rem; background:var(--bb-card); padding:1rem; }
   .quiz-settings-actions { display:flex; flex-wrap:wrap; gap:.45rem; }
+  .quiz-settings-header {position:sticky;top:3.5rem;z-index:10;background:var(--bb-bg);padding:.4rem 0;border-bottom:1px solid var(--bb-border)}
   .quiz-step-list { display:flex; flex-direction:column; gap:.55rem; margin-top:.8rem; }
   .quiz-step-card { border:1px solid var(--bb-border); border-radius:.55rem; background:var(--bb-input-bg); padding:.7rem; cursor:grab; user-select:none; }
   .quiz-step-card:active { cursor:grabbing; }
@@ -30,13 +31,13 @@
   @media (max-width: 991.98px) { .quiz-settings-grid { grid-template-columns:1fr; } }
 </style>
 
-<div class="d-flex align-items-start justify-content-between gap-3 flex-wrap mb-3">
+<div class="quiz-settings-header d-flex align-items-start justify-content-between gap-3 flex-wrap mb-3">
   <div>
     <h4 class="mb-1">Settings</h4>
     <div class="text-muted">Configure the steps used by Guided Tagging Flow.</div>
   </div>
   <div class="quiz-settings-actions">
-    <button type="button" class="btn btn-primary" id="quiz-settings-save" data-bs-toggle="tooltip" data-bs-title="Persist the current Guided Tagging Flow for future app sessions.">Save config</button>
+    <button type="button" class="btn btn-primary" id="quiz-settings-save" data-bs-toggle="tooltip" data-bs-title="Persist the current Guided Tagging Flow for future app sessions.">Save Guided Flow</button>
     <button type="button" class="btn btn-outline-warning" id="quiz-settings-reset" data-bs-toggle="tooltip" data-bs-title="Restore the built-in starter flow. You will be asked to confirm first.">Reset to default</button>
     <button type="button" class="btn btn-outline-light" id="quiz-settings-export" data-bs-toggle="tooltip" data-bs-title="Download this configuration as JSON for backup or reuse.">Export JSON</button>
     <button type="button" class="btn btn-outline-light" id="quiz-settings-import" data-bs-toggle="tooltip" data-bs-title="Load an exported JSON configuration for review before saving.">Import JSON</button>
@@ -102,7 +103,7 @@
     <h6>Create steps from current cheat sheet</h6>
     <div class="quiz-settings-note mb-2">Reads prompt.txt sections into editable tagging steps. Your saved config is not overwritten until you save.</div>
     <div class="input-group input-group-sm mb-2">
-      <input type="text" class="form-control" id="quiz-cheatsheet-root" data-root-sync="1" placeholder="Project root"
+      <input type="text" class="form-control" id="quiz-cheatsheet-root" data-path-role="project" placeholder="Project root"
              data-bs-toggle="tooltip" data-bs-title="Optional helper: choose the BatchBench project containing prompt.txt.">
       <button type="button" class="btn btn-outline-light btn-browse" data-target="quiz-cheatsheet-root" data-bs-toggle="tooltip" data-bs-title="Browse for the project root.">Browse</button>
     </div>
@@ -203,7 +204,7 @@
 <script>
 (() => {
   const q = (id) => document.getElementById(id);
-  const state = { config: null, selected: -1, idDirty: false, draggingIndex: -1, suppressCardClick: false, catalogSettings: null, catalogPoll: null };
+  const state = { config: null, savedConfig: null, selected: -1, idDirty: false, draggingIndex: -1, suppressCardClick: false, catalogSettings: null, catalogPoll: null };
   const slug = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]+/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
   const normalizeTag = (value) => String(value || '').trim().toLowerCase().replace(/_+/g, ' ').replace(/\s+/g, ' ');
   const tagsFrom = (value) => {
@@ -218,6 +219,13 @@
     el.style.color = bad ? '#ffc6ce' : 'var(--bb-muted)';
   };
   const step = () => quiz()?.steps?.[state.selected] || null;
+  function markDirty() {
+    if (!state.config || state.savedConfig === null) return;
+    commitEditor(); commitGlobals();
+    const dirty = JSON.stringify(state.config) !== state.savedConfig;
+    q('quiz-settings-save').textContent = dirty ? 'Save Guided Flow · Unsaved' : 'Save Guided Flow';
+    q('quiz-settings-save').dataset.unsaved = dirty ? '1' : '0';
+  }
 
   function clearDropTargets() {
     document.querySelectorAll('.quiz-step-card.is-drop-target').forEach(card => card.classList.remove('is-drop-target'));
@@ -286,6 +294,7 @@
         state.selected = to;
         state.draggingIndex = -1;
         render();
+        markDirty();
       });
       card.addEventListener('dragend', () => {
         state.draggingIndex = -1;
@@ -506,6 +515,7 @@
     try {
       const data = await api('/api/settings/review-quiz');
       state.config = data.config;
+      state.savedConfig = JSON.stringify(state.config);
       state.selected = quiz().steps.length ? 0 : -1;
       render();
       setStatus('Guided Tagging Flow settings loaded.');
@@ -519,26 +529,27 @@
         method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({config:state.config})
       });
       state.config = data.config; render();
+      state.savedConfig = JSON.stringify(state.config); markDirty();
       setStatus('Guided Tagging Flow settings saved.');
     } catch (error) { setStatus(error.message, true); }
   }
 
-  document.addEventListener('DOMContentLoaded', () => {
+  window.bbOnToolReady( () => {
     q('quiz-step-add')?.addEventListener('click', () => {
       commitEditor();
       quiz().steps.push({id:'new_step', label:'New Step', mode:'single', required:false, auto_advance:false, autosuggest_segment_only:false, danbooru_autosuggest:false, allow_not_applicable:false, queue_mode:'all', tags:[]});
-      state.selected = quiz().steps.length - 1; state.idDirty = false; render();
+      state.selected = quiz().steps.length - 1; state.idDirty = false; render(); markDirty();
     });
     q('quiz-step-delete')?.addEventListener('click', () => {
       if (!step() || !confirm('Delete this tagging step?')) return;
       quiz().steps.splice(state.selected, 1);
-      state.selected = Math.min(state.selected, quiz().steps.length - 1); render();
+      state.selected = Math.min(state.selected, quiz().steps.length - 1); render(); markDirty();
     });
     q('quiz-step-duplicate')?.addEventListener('click', () => {
       commitEditor(); if (!step()) return;
       const copy = JSON.parse(JSON.stringify(step()));
       copy.label = `${copy.label} Copy`; copy.id = `${copy.id}_copy`;
-      quiz().steps.splice(state.selected + 1, 0, copy); state.selected += 1; render();
+      quiz().steps.splice(state.selected + 1, 0, copy); state.selected += 1; render(); markDirty();
     });
     q('quiz-step-label')?.addEventListener('input', (event) => {
       if (!state.idDirty) q('quiz-step-id').value = slug(event.target.value);
@@ -548,11 +559,21 @@
     ['quiz-global-area','quiz-global-fit','quiz-global-preload','quiz-global-enabled','quiz-global-keyboard','quiz-global-autosave','quiz-global-tags','quiz-global-progress']
       .forEach(id => q(id)?.addEventListener('change', commitGlobals));
     q('quiz-settings-save')?.addEventListener('click', saveConfig);
+    q('tab-settings')?.addEventListener('input', event => { if (event.target.id?.startsWith('quiz-')) markDirty(); });
+    q('tab-settings')?.addEventListener('change', event => { if (event.target.id?.startsWith('quiz-')) markDirty(); });
+    document.querySelectorAll('[data-bs-toggle="tab"]').forEach(button => button.addEventListener('show.bs.tab', event => {
+      if (event.target?.getAttribute('data-bs-target') === '#tab-settings') return;
+      if (q('tab-settings')?.classList.contains('active') && q('quiz-settings-save')?.dataset.unsaved === '1' && !confirm('Guided Flow changes are unsaved. Leave Settings?')) event.preventDefault();
+    }));
+    window.addEventListener('beforeunload', event => {
+      if (q('quiz-settings-save')?.dataset.unsaved !== '1') return;
+      event.preventDefault(); event.returnValue = '';
+    });
     q('quiz-settings-reset')?.addEventListener('click', async () => {
       if (!confirm('Reset Guided Tagging Flow configuration to defaults?')) return;
       try {
         const data = await api('/api/settings/review-quiz/reset', {method:'POST'});
-        state.config = data.config; state.selected = 0; render(); setStatus('Default Guided Tagging Flow settings restored.');
+        state.config = data.config; state.savedConfig = JSON.stringify(state.config); state.selected = 0; render(); markDirty(); setStatus('Default Guided Tagging Flow settings restored.');
       } catch (error) { setStatus(error.message, true); }
     });
     q('quiz-settings-export')?.addEventListener('click', () => {
@@ -565,7 +586,7 @@
     q('quiz-settings-import-file')?.addEventListener('change', async (event) => {
       const file = event.target.files?.[0]; event.target.value = ''; if (!file) return;
       try {
-        state.config = JSON.parse(await file.text()); state.selected = state.config?.quiz_review?.steps?.length ? 0 : -1; render();
+        state.config = JSON.parse(await file.text()); state.selected = state.config?.quiz_review?.steps?.length ? 0 : -1; render(); markDirty();
         setStatus('Imported JSON is ready to review. Press Save config to persist it.');
       } catch (error) { setStatus(`Import failed: ${error.message}`, true); }
     });
@@ -578,7 +599,7 @@
           method:'POST', headers:{'Content-Type':'application/json'},
           body:JSON.stringify({folder, rel:q('quiz-cheatsheet-file').value.trim() || 'prompt.txt'})
         });
-        quiz().steps = data.steps || []; state.selected = quiz().steps.length ? 0 : -1; render();
+        quiz().steps = data.steps || []; state.selected = quiz().steps.length ? 0 : -1; render(); markDirty();
         setStatus(`Created ${quiz().steps.length} editable step(s) from ${data.rel}. Press Save config to persist them.`);
       } catch (error) { setStatus(error.message, true); }
     });

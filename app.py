@@ -21,6 +21,11 @@ from utils.tags import normalize_caption_tags, tag_compare_key, to_caption_tag
 
 from services.registry import TOOL_REGISTRY
 from services import normalizer
+from services import offline_tagger
+from services import dataset_health
+from services import combine_datasets
+from services import clip_token_check
+from services import pair_moves
 from services import tag_editor
 from services import review_quiz
 from services import danbooru_client
@@ -40,13 +45,19 @@ from services.discord_presence import (
 )
 from services.paths import resource_path, user_path
 from services.pipeline import PIPELINE_MANAGER
+from services.pipeline import _scan_dataset_quality
 
 load_dotenv()
 APP_NAME = os.getenv("APP_NAME", "BatchBench")
+TAG_EDITOR_PROJECT_BASE = (
+    os.getenv("TAG_EDITOR_PROJECT_BASE", r"E:\_Training DATA").strip()
+    or r"E:\_Training DATA"
+)
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-dev-dev")
 app.config["APP_NAME"] = APP_NAME
+app.config["TAG_EDITOR_PROJECT_BASE"] = TAG_EDITOR_PROJECT_BASE
 
 _NATIVE_FOLDER_PICKER_LOCK = threading.Lock()
 _RUNTIME_SERVICES_LOCK = threading.Lock()
@@ -2013,7 +2024,32 @@ def api_tags_dataset_zip():
     result.setdefault("needs_init", False)
     result.setdefault("warnings", [])
     result.setdefault("info", [])
+    if result.get("ok") and result.get("zip_name"):
+        result["download_url"] = url_for(
+            "api_tags_dataset_zip_download",
+            folder=str(paths["project_root"]),
+            name=result["zip_name"],
+        )
     return jsonify(result), code
+
+
+@app.get("/api/tags/dataset-zip/download")
+def api_tags_dataset_zip_download():
+    paths, error = _resolve_project_root_from_payload({"folder": request.args.get("folder", "")})
+    if error:
+        return error
+    result = tag_editor.resolve_dataset_zip_download(
+        paths["project_root"],
+        request.args.get("name", ""),
+    )
+    if not result.get("ok"):
+        return _json_error(result.get("error") or "Dataset ZIP not found", int(result.get("status") or 400))
+    return send_file(
+        result["path"],
+        as_attachment=True,
+        download_name=result["name"],
+        mimetype="application/zip",
+    )
 
 
 @app.post("/api/tags/temp-move-all")
@@ -3029,6 +3065,13 @@ def api_tags_move_files():
     if not root.exists() or not root.is_dir():
         return _json_error(f"Dataset folder not found: {root}", 400, normalized_root=str(paths["project_root"]), needs_init=True)
 
+    preview_token = str(payload.get('preview_token') or '').strip()
+    if preview_token:
+        target = _safe_child_or_root(root, dst_rel)
+        images = [_safe_child(root, rel) for rel in srcs]
+        if not target or any(image is None for image in images) or not pair_moves.consume(root, images, target, preview_token):
+            return _json_error('Move preview is outdated. Preview the selected pairs again.', 409)
+
     moved = []
     errors = []
     for src_rel in srcs:
@@ -3162,13 +3205,122 @@ def api_normalize_scan():
     return jsonify(_serialize_scan_result(result))
 
 
+@app.post("/api/dataset-health/scan")
+def api_dataset_health_scan():
+    payload = request.get_json(silent=True) or {}
+    raw_path = str(payload.get("dataset_path") or "").strip()
+    if not raw_path:
+        return jsonify({"ok": False, "error": "Dataset folder is required."}), 400
+    root = readable_path(raw_path)
+    if not root.is_dir():
+        return jsonify({"ok": False, "error": f"Dataset folder not found: {root}"}), 400
+    report = _scan_dataset_quality(
+        root, list(normalizer.DEFAULT_IMAGE_EXTS), bool(payload.get("recursive", True)),
+        True, bool(payload.get("include_token_check", True)), max(1, parse_int(payload.get("token_warning_limit"), default=77) or 77),
+    )
+    return jsonify({"ok": True, "dataset_path": str(root), "report": report})
+
+
+@app.post('/api/tags/move-files/preview')
+def api_tags_move_files_preview():
+    payload = request.get_json(silent=True) or {}
+    paths, error = _resolve_project_root_from_payload(payload)
+    if error:
+        return error
+    root = paths['dataset_root']
+    dst_rel = str(payload.get('dst') or '').strip()
+    srcs_raw = payload.get('srcs')
+    if not isinstance(srcs_raw, list) or not srcs_raw or _bad_rel(dst_rel):
+        return _json_error('Choose files and a valid destination.', 400)
+    srcs = list(dict.fromkeys(str(value or '').strip() for value in srcs_raw))
+    if any(not rel or _bad_rel(rel) for rel in srcs):
+        return _json_error('Invalid source path.', 400)
+    target = _safe_child_or_root(root, dst_rel)
+    if not target or not target.is_dir():
+        return _json_error('Target folder not found.', 404)
+    images = []
+    for rel in srcs:
+        image = _safe_child(root, rel)
+        if not image or not image.is_file():
+            return _json_error(f'Source file not found: {rel}', 404)
+        images.append(image)
+    try:
+        return jsonify(pair_moves.preview(root, images, target))
+    except (ValueError, OSError) as exc:
+        return _json_error(str(exc), 400)
+
+
+@app.post("/api/combine/preview-move")
+def api_combine_preview_move():
+    result = combine_datasets.preview_move(request.get_json(silent=True) or {})
+    return jsonify(result), (200 if result.get('ok') else 400)
+
+
+@app.post('/api/clip-tokens/scan')
+def api_clip_tokens_scan():
+    payload = request.get_json(silent=True) or {}
+    raw = str(payload.get('folder_clip_tokens') or '').strip()
+    if not raw:
+        return _json_error('Dataset folder is required.', 400)
+    result = clip_token_check.scan_caption_files(
+        readable_path(raw), parse_exts(payload.get('exts_clip_tokens'), default=['.jpg','.jpeg','.png','.webp']),
+        bool(payload.get('recursive_clip_tokens', True)),
+        max(1, parse_int(payload.get('limit_clip_tokens'), default=77) or 77),
+        str(payload.get('mode_clip_tokens') or 'estimate'), bool(payload.get('include_temp_clip_tokens', False)),
+    )
+    return jsonify(result), (200 if result.get('ok') else 400)
+
+
+@app.post("/api/dataset-health/caption")
+def api_dataset_health_caption():
+    payload = request.get_json(silent=True) or {}
+    root = readable_path(str(payload.get("dataset_path") or ""))
+    if not str(payload.get("dataset_path") or "").strip():
+        return jsonify({"ok": False, "error": "Dataset folder is required."}), 400
+    try:
+        result = dataset_health.inspect_caption(root, str(payload.get("relative_path") or ""))
+    except (ValueError, OSError, UnicodeError) as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    return jsonify(result)
+
+
+@app.get("/api/dataset-health/image")
+def api_dataset_health_image():
+    raw_root = str(request.args.get("dataset_path") or "").strip()
+    if not raw_root:
+        return _json_error("Dataset folder is required.", 400)
+    try:
+        image = dataset_health.inspect_pair_image(readable_path(raw_root), str(request.args.get("relative_path") or ""))
+    except (ValueError, OSError) as exc:
+        return _json_error(str(exc), 400)
+    if image is None:
+        return _json_error("Paired image not found.", 404)
+    return send_file(image, conditional=True)
+
+
+@app.post("/api/dataset-health/caption/save")
+def api_dataset_health_caption_save():
+    payload = request.get_json(silent=True) or {}
+    root = readable_path(str(payload.get("dataset_path") or ""))
+    if not str(payload.get("dataset_path") or "").strip():
+        return jsonify({"ok": False, "error": "Dataset folder is required."}), 400
+    if not isinstance(payload.get("content"), str):
+        return jsonify({"ok": False, "error": "Caption text is required."}), 400
+    try:
+        result = dataset_health.save_caption(root, str(payload.get("relative_path") or ""),
+                                             payload["content"], payload.get("fingerprint"))
+    except (ValueError, OSError, UnicodeError) as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 409
+    return jsonify(result)
+
+
 @app.post("/api/normalize/dryrun")
 def api_normalize_dryrun():
     payload = request.get_json(silent=True) or {}
     opts, err = build_normalize_options(payload)
     if err:
         return jsonify({"ok": False, "error": err}), 400
-    result = normalizer.dry_run(opts, NORMALIZE_PRESET_ROOT)
+    result = normalizer.preview_plan(opts, NORMALIZE_PRESET_ROOT)
     return jsonify(result)
 
 
@@ -3178,8 +3330,17 @@ def api_normalize_apply():
     opts, err = build_normalize_options(payload)
     if err:
         return jsonify({"ok": False, "error": err}), 400
-    result = normalizer.apply_normalization(opts, NORMALIZE_PRESET_ROOT)
-    return jsonify(result)
+    result = normalizer.apply_preview_plan(opts, NORMALIZE_PRESET_ROOT, str(payload.get("plan_token") or ""))
+    return jsonify(result), (200 if result.get("ok") else 409)
+
+
+@app.post("/api/offline-tagger/apply-proposals")
+def api_offline_tagger_apply_proposals():
+    payload = request.get_json(silent=True) or {}
+    result = offline_tagger.apply_reviewed_proposals(
+        str(payload.get("proposal_token") or ""), payload.get("selected") or []
+    )
+    return jsonify(result), (200 if result.get("ok") else 409)
 
 
 # -------- Pipeline APIs --------
@@ -3342,9 +3503,26 @@ def api_discord_presence_activity():
 
 
 # -------- Main page (dispatch via registry) --------
+_LAZY_TOOL_TEMPLATES = {
+    "tags": "dataset_labeling.html",
+    "pipeline": "pipeline.html",
+    "settings": "settings.html",
+    "tag_wiki": "tag_glossary_wiki.html",
+}
+
+
+@app.get("/tool-pane/<tool>")
+def tool_pane(tool: str):
+    template = _LAZY_TOOL_TEMPLATES.get(tool)
+    if not template:
+        abort(404)
+    return render_template(template, presets=PRESET_FILES, work_dir=str(WORK_DIR),
+                           tag_editor_project_base=TAG_EDITOR_PROJECT_BASE)
+
+
 @app.route("/", methods=["GET", "POST"])
 def index():
-    active_tab = request.values.get("tab", "guide")
+    active_tab = request.values.get("tab", "home")
     log = ""
 
     is_ajax = request.headers.get("X-Requested-With", "").lower() in ("xmlhttprequest", "fetch")
@@ -3354,6 +3532,7 @@ def index():
         handler = TOOL_REGISTRY.get(tool)
         request_ok = True
         request_error = ""
+        meta = {}
         if not handler:
             request_ok = False
             request_error = f"Unknown tool: {tool}"
@@ -3378,24 +3557,31 @@ def index():
 
         if is_ajax:
             code = 200 if request_ok else 400
-            return jsonify({"ok": request_ok, "active_tab": active_tab, "log": log, "error": request_error}), code
+            return jsonify({"ok": request_ok, "active_tab": active_tab, "log": log, "error": request_error, "result": meta if handler else {}}), code
         session["last_log"] = log
         session["last_tab"] = active_tab
+        session["last_result"] = {key: value for key, value in (meta or {"ok": request_ok, "error": request_error, "state": "failed" if not request_ok else "completed"}).items() if key != "artifacts"}
         return redirect(url_for("index", tab=active_tab))
 
     if "last_log" in session:
         log = session.pop("last_log", "")
+        tool_result = session.pop("last_result", {})
         last_tab = session.pop("last_tab", None)
         if "tab" not in request.values and last_tab:
             active_tab = last_tab
+
+    else:
+        tool_result = {}
 
     return render_template(
         "index.html",
         preset_names=list_presets(),
         active_tab=active_tab,
         log=log,
+        tool_result=tool_result,
         presets=PRESET_FILES,
         work_dir=str(WORK_DIR),
+        tag_editor_project_base=TAG_EDITOR_PROJECT_BASE,
         workflow_guide_items=_readme_workflow_guide_items(),
     )
 

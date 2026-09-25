@@ -73,14 +73,14 @@
       <div class="col-lg-6">
         <label class="form-label">Dataset source folder</label>
         <div class="input-group">
-          <input id="workflow-source" class="form-control" placeholder="D:\dataset" data-root-sync="1">
+          <input id="workflow-source" class="form-control" placeholder="D:\dataset" data-path-role="dataset">
           <button class="btn btn-outline-light btn-browse" type="button" data-target="workflow-source">Browse</button>
         </div>
       </div>
       <div class="col-lg-6">
         <label class="form-label">Final output folder</label>
         <div class="input-group">
-          <input id="workflow-output" class="form-control" placeholder="D:\exports">
+          <input id="workflow-output" class="form-control" placeholder="D:\exports" data-path-role="output">
           <button class="btn btn-outline-light btn-browse" type="button" data-target="workflow-output">Browse</button>
         </div>
       </div>
@@ -91,7 +91,7 @@
         <div class="col-lg-5">
           <label class="form-label">Working directory</label>
           <div class="input-group">
-            <input id="workflow-workdir" class="form-control" value="{{ work_dir }}">
+            <input id="workflow-workdir" class="form-control" value="{{ work_dir }}" data-path-role="working">
             <button class="btn btn-outline-light btn-browse" type="button" data-target="workflow-workdir">Browse</button>
           </div>
         </div>
@@ -369,6 +369,27 @@
   let lastArtifacts = {};
   let presets = { types: [], files: {} };
 
+  function groupAdvancedOptions() {
+    const hiddenByMode = {
+      raw_images: ['block_permanent_marks','general_threshold','character_threshold','policy_mcut_min_general_tags','policy_keep_tags','policy_block_tags','policy_block_regex','identity_tags','extra_remove','extra_keep','replace_existing_captions','tag_policy'],
+      captioned_dataset: ['identity_tags','extra_remove','extra_keep'],
+    };
+    Object.entries(hiddenByMode).forEach(([mode, keys]) => {
+      const root = document.querySelector(`[data-workflow-options="${mode}"]`);
+      const mainRow = root?.querySelector(':scope > .row');
+      if (!mainRow) return;
+      const details = document.createElement('details'); details.className = 'mt-3';
+      const summary = document.createElement('summary'); summary.className = 'fw-semibold'; summary.textContent = 'Advanced tag and model options';
+      const row = document.createElement('div'); row.className = 'row g-3 mt-1';
+      keys.forEach(key => {
+        const control = mainRow.querySelector(`[data-opt="${key}"]`);
+        const column = control?.closest('[class*="col-"]');
+        if (column && column.parentElement === mainRow) row.appendChild(column);
+      });
+      details.append(summary, row); mainRow.after(details);
+    });
+  }
+
   async function fetchJson(url, options={}){
     const res = await fetch(url, { headers:{'Content-Type':'application/json'}, ...options });
     let data = {};
@@ -566,6 +587,7 @@
 
   async function pollStatus(immediate=false){
     if(pollTimer) clearTimeout(pollTimer);
+    if(!q('tab-pipeline')?.classList.contains('active') && !currentJobId) return;
     try{
       const qs = new URLSearchParams();
       if(currentJobId) qs.set('job_id', currentJobId);
@@ -579,6 +601,7 @@
         return;
       }
       currentJobId = job.id;
+      if(!q('tab-pipeline')?.classList.contains('active') && ['COMPLETED','FAILED','STOPPED'].includes(job.status)) return;
       setBadge(job.status);
       renderLogs(job.log || [], !!job.log_delta);
       renderArtifacts(job.artifacts || {});
@@ -771,7 +794,9 @@
     });
   }
 
-  document.addEventListener('DOMContentLoaded', () => {
+  window.bbOnToolReady( () => {
+    document.querySelector('[data-bs-target="#tab-pipeline"]')?.addEventListener('shown.bs.tab', () => pollStatus(true));
+    groupAdvancedOptions();
     wire();
     enableCustomDrag();
     resetCustom();

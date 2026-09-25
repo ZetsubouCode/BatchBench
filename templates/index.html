@@ -1,57 +1,38 @@
 {% extends "base.html" %}
 {% block navbar_menu %}
-  {% set tab = active_tab or 'guide' %}
-  <ul class="navbar-nav bb-tool-menu flex-grow-1" role="tablist">
-    <li class="nav-item">
-      <button class="nav-link bb-menu-link {{ 'active' if tab=='guide' }}" data-bs-toggle="tab" data-bs-target="#tab-guide" type="button"><i class="bi bi-signpost-split" aria-hidden="true"></i><span>Workflow Guide</span></button>
-    </li>
-    <li class="nav-item dropdown">
-      <button class="nav-link bb-menu-link dropdown-toggle {{ 'active' if tab in ['webp', 'batch', 'blur_brush', 'color_brush', 'palette_helper'] }}" data-bs-toggle="dropdown" type="button" aria-expanded="false"><i class="bi bi-images" aria-hidden="true"></i><span>Image Tools</span></button>
-      <ul class="dropdown-menu">
-        <li><button class="dropdown-item {{ 'active' if tab=='webp' }}" data-bs-toggle="tab" data-bs-target="#tab-webp" type="button"><i class="bi bi-images" aria-hidden="true"></i><span>Image -&gt; PNG Converter</span></button></li>
-        <li><button class="dropdown-item {{ 'active' if tab=='batch' }}" data-bs-toggle="tab" data-bs-target="#tab-batch" type="button"><i class="bi bi-sliders2" aria-hidden="true"></i><span>Photo Adjust (preset)</span></button></li>
-        <li><button class="dropdown-item {{ 'active' if tab=='blur_brush' }}" data-bs-toggle="tab" data-bs-target="#tab-blur-brush" type="button"><i class="bi bi-brush" aria-hidden="true"></i><span>Brush Blur</span></button></li>
-        <li><button class="dropdown-item {{ 'active' if tab=='color_brush' }}" data-bs-toggle="tab" data-bs-target="#tab-color-brush" type="button"><i class="bi bi-palette2" aria-hidden="true"></i><span>Color Brush</span></button></li>
-        <li><button class="dropdown-item {{ 'active' if tab=='palette_helper' }}" data-bs-toggle="tab" data-bs-target="#tab-palette-helper" type="button"><i class="bi bi-palette" aria-hidden="true"></i><span>Manga Palette Helper</span></button></li>
-      </ul>
-    </li>
-    <li class="nav-item dropdown">
-      <button class="nav-link bb-menu-link dropdown-toggle {{ 'active' if tab in ['epub_extractor', 'webtoon', 'merge', 'rename', 'combine'] }}" data-bs-toggle="dropdown" type="button" aria-expanded="false"><i class="bi bi-collection" aria-hidden="true"></i><span>Dataset Assembly</span></button>
-      <ul class="dropdown-menu">
-        <li><button class="dropdown-item {{ 'active' if tab=='epub_extractor' }}" data-bs-toggle="tab" data-bs-target="#tab-epub-extractor" type="button"><i class="bi bi-book" aria-hidden="true"></i><span>EPUB Extractor</span></button></li>
-        <li><button class="dropdown-item {{ 'active' if tab=='webtoon' }}" data-bs-toggle="tab" data-bs-target="#tab-webtoon" type="button"><i class="bi bi-scissors" aria-hidden="true"></i><span>Webtoon Panel Splitter</span></button></li>
-        <li><button class="dropdown-item {{ 'active' if tab=='merge' }}" data-bs-toggle="tab" data-bs-target="#tab-merge" type="button"><i class="bi bi-columns-gap" aria-hidden="true"></i><span>Stitch Groups</span></button></li>
-        <li><button class="dropdown-item {{ 'active' if tab=='rename' }}" data-bs-toggle="tab" data-bs-target="#tab-rename" type="button"><i class="bi bi-sort-numeric-down" aria-hidden="true"></i><span>Flatten &amp; Renumber</span></button></li>
-        <li><button class="dropdown-item {{ 'active' if tab=='combine' }}" data-bs-toggle="tab" data-bs-target="#tab-combine" type="button"><i class="bi bi-collection" aria-hidden="true"></i><span>Combine Dataset</span></button></li>
-      </ul>
-    </li>
-    <li class="nav-item dropdown">
-      <button class="nav-link bb-menu-link dropdown-toggle {{ 'active' if tab in ['tags', 'normalize', 'offline_tagger', 'clip_tokens'] }}" data-bs-toggle="dropdown" type="button" aria-expanded="false"><i class="bi bi-tags" aria-hidden="true"></i><span>Tag Tools</span></button>
-      <ul class="dropdown-menu">
-        <li><button class="dropdown-item {{ 'active' if tab=='tags' }}" data-bs-toggle="tab" data-bs-target="#tab-tags" type="button"><i class="bi bi-tags" aria-hidden="true"></i><span>Dataset Tag Editor</span></button></li>
-        <li><button class="dropdown-item {{ 'active' if tab=='normalize' }}" data-bs-toggle="tab" data-bs-target="#tab-normalize" type="button"><i class="bi bi-funnel" aria-hidden="true"></i><span>Dataset Normalization</span></button></li>
-        <li><button class="dropdown-item {{ 'active' if tab=='offline_tagger' }}" data-bs-toggle="tab" data-bs-target="#tab-offline-tagger" type="button"><i class="bi bi-cpu" aria-hidden="true"></i><span>Auto Tag Assist</span></button></li>
-        <li><button class="dropdown-item {{ 'active' if tab=='clip_tokens' }}" data-bs-toggle="tab" data-bs-target="#tab-clip-tokens" type="button"><i class="bi bi-body-text" aria-hidden="true"></i><span>CLIP Token Check</span></button></li>
-      </ul>
-    </li>
-    <li class="nav-item">
-      <button class="nav-link bb-menu-link {{ 'active' if tab=='pipeline' }}" data-bs-toggle="tab" data-bs-target="#tab-pipeline" type="button"><i class="bi bi-diagram-3" aria-hidden="true"></i><span>Dataset Workflow</span></button>
-    </li>
-    <li class="nav-item">
-      <button class="nav-link bb-menu-link {{ 'active' if tab=='tag_wiki' }}" data-bs-toggle="tab" data-bs-target="#tab-tag-wiki" type="button"><i class="bi bi-journal-richtext" aria-hidden="true"></i><span>Tag Glossary Wiki</span></button>
-    </li>
-    <li class="nav-item">
-      <button class="nav-link bb-menu-link {{ 'active' if tab=='settings' }}" data-bs-toggle="tab" data-bs-target="#tab-settings" type="button"><i class="bi bi-gear" aria-hidden="true"></i><span>Settings</span></button>
-    </li>
-    <li class="nav-item ms-lg-auto {{ '' if tab=='batch' else 'd-none' }}" id="batch-preset-info">
-      <span class="navbar-text bb-menu-note">Presets loaded: {{ preset_names|length }}</span>
-    </li>
-  </ul>
+  {% set tab = active_tab or 'home' %}
+  <nav class="bb-tool-menu" role="tablist" aria-label="BatchBench tools">
+    <label class="visually-hidden" for="bb-tool-search">Search tools</label>
+    <input id="bb-tool-search" class="form-control form-control-sm bb-rail-search" type="search" placeholder="Search tools…">
+    <div class="small text-muted px-2 mb-1">Current project</div>
+    <div class="small px-2 text-truncate mb-2" id="bb-rail-project" title="">No project selected</div>
+    {% set groups = [
+      ('', [('home', 'Home', 'house', 'tab-home'), ('tags', 'Tag Editor', 'tags', 'tab-tags'), ('health', 'Dataset Health', 'heart-pulse', 'tab-health')]),
+      ('Image preparation', [('webp', 'Image → PNG', 'images', 'tab-webp'), ('batch', 'Photo Adjust', 'sliders2', 'tab-batch'), ('blur_brush', 'Brush Blur', 'brush', 'tab-blur-brush'), ('color_brush', 'Color Brush', 'palette2', 'tab-color-brush'), ('palette_helper', 'Manga Palette Helper', 'palette', 'tab-palette-helper')]),
+      ('Assembly', [('epub_extractor', 'EPUB Extractor', 'book', 'tab-epub-extractor'), ('webtoon', 'Webtoon Splitter', 'scissors', 'tab-webtoon'), ('merge', 'Stitch Groups', 'columns-gap', 'tab-merge'), ('rename', 'Flatten & Renumber', 'sort-numeric-down', 'tab-rename'), ('combine', 'Combine Dataset', 'collection', 'tab-combine')]),
+      ('Tag tools', [('normalize', 'Normalization', 'funnel', 'tab-normalize'), ('offline_tagger', 'Auto Tag Assist', 'cpu', 'tab-offline-tagger'), ('clip_tokens', 'CLIP Token Check', 'body-text', 'tab-clip-tokens')]),
+      ('Workflow', [('pipeline', 'Dataset Workflow', 'diagram-3', 'tab-pipeline')]),
+      ('Reference', [('tag_wiki', 'Tag Glossary Wiki', 'journal-richtext', 'tab-tag-wiki'), ('guide', 'Guide', 'signpost-split', 'tab-guide')]),
+      ('', [('settings', 'Settings', 'gear', 'tab-settings')])
+    ] %}
+    {% for heading, items in groups %}
+      {% if heading %}<div class="bb-nav-heading">{{ heading }}</div>{% endif %}
+      {% for key, label, icon, target in items %}
+        <button class="bb-menu-link {{ 'bb-nav-primary' if key in ['tags', 'health'] }} {{ 'active' if tab == key }}" data-bs-toggle="tab" data-bs-target="#{{ target }}" type="button"><i class="bi bi-{{ icon }}" aria-hidden="true"></i><span>{{ label }}</span></button>
+      {% endfor %}
+    {% endfor %}
+  </nav>
 {% endblock %}
 
 {% block content %}
-  {% set tab = active_tab or 'guide' %}
+  {% set tab = active_tab or 'home' %}
   <div class="tab-content">
+    <div class="tab-pane fade {{ 'show active' if tab=='home' }}" id="tab-home">
+      {% include "home.html" %}
+    </div>
+    <div class="tab-pane fade {{ 'show active' if tab=='health' }}" id="tab-health">
+      {% include "dataset_health.html" %}
+    </div>
     <div class="tab-pane fade {{ 'show active' if tab=='guide' }}" id="tab-guide">
       {% include "guide.html" %}
     </div>
@@ -59,122 +40,89 @@
     <div class="tab-pane fade {{ 'show active' if tab=='webp' }}" id="tab-webp">
       {% include "webp_to_png.html" %}
       {% if log and tab=='webp' %}
-        <div class="card p-3 mt-3">
-          <h5>Log</h5>
-          <pre class="monospace">{{ log }}</pre>
-        </div>
+        {% include "_operation_result.html" %}
       {% endif %}
     </div>
 
     <div class="tab-pane fade {{ 'show active' if tab=='batch' }}" id="tab-batch">
       {% include "batch_adjust.html" %}
       {% if log and tab=='batch' %}
-        <div class="card p-3 mt-3">
-          <h5>Log</h5>
-          <pre class="monospace">{{ log }}</pre>
-        </div>
+        {% include "_operation_result.html" %}
       {% endif %}
     </div>
 
     <div class="tab-pane fade {{ 'show active' if tab=='tags' }}" id="tab-tags">
-      {% include "dataset_labeling.html" %}
+      {% if tab=='tags' %}{% include "dataset_labeling.html" %}{% else %}<div data-lazy-tool="tags" class="small text-muted">Loading Tag Editor…</div>{% endif %}
     </div>
 
     <div class="tab-pane fade {{ 'show active' if tab=='tag_wiki' }}" id="tab-tag-wiki">
-      {% include "tag_glossary_wiki.html" %}
+      {% if tab=='tag_wiki' %}{% include "tag_glossary_wiki.html" %}{% else %}<div data-lazy-tool="tag_wiki" class="small text-muted">Loading glossary…</div>{% endif %}
     </div>
 
     <div class="tab-pane fade {{ 'show active' if tab=='settings' }}" id="tab-settings">
-      {% include "settings.html" %}
+      {% if tab=='settings' %}{% include "settings.html" %}{% else %}<div data-lazy-tool="settings" class="small text-muted">Loading settings…</div>{% endif %}
     </div>
 
     <div class="tab-pane fade {{ 'show active' if tab=='offline_tagger' }}" id="tab-offline-tagger">
       {% include "offline_tagger.html" %}
       {% if log and tab=='offline_tagger' %}
-        <div class="card p-3 mt-3">
-          <h5>Log</h5>
-          <pre class="monospace">{{ log }}</pre>
-        </div>
+        {% include "_operation_result.html" %}
       {% endif %}
     </div>
 
     <div class="tab-pane fade {{ 'show active' if tab=='normalize' }}" id="tab-normalize">
       {% include "normalize_dataset.html" %}
       {% if log and tab=='normalize' %}
-        <div class="card p-3 mt-3">
-          <h5>Log</h5>
-          <pre class="monospace">{{ log }}</pre>
-        </div>
+        {% include "_operation_result.html" %}
       {% endif %}
     </div>
 
     <div class="tab-pane fade {{ 'show active' if tab=='combine' }}" id="tab-combine">
       {% include "combine_datasets.html" %}
       {% if log and tab=='combine' %}
-        <div class="card p-3 mt-3">
-          <h5>Log</h5>
-          <pre class="monospace">{{ log }}</pre>
-        </div>
+        {% include "_operation_result.html" %}
       {% endif %}
     </div>
 
     <div class="tab-pane fade {{ 'show active' if tab=='rename' }}" id="tab-rename">
       {% include "group_renamer.html" %}
       {% if log and tab=='rename' %}
-        <div class="card p-3 mt-3">
-          <h5>Log</h5>
-          <pre class="monospace">{{ log }}</pre>
-        </div>
+        {% include "_operation_result.html" %}
       {% endif %}
     </div>
 
     <div class="tab-pane fade {{ 'show active' if tab=='merge' }}" id="tab-merge">
       {% include "merge_groups.html" %}
       {% if log and tab=='merge' %}
-        <div class="card p-3 mt-3">
-          <h5>Log</h5>
-          <pre class="monospace">{{ log }}</pre>
-        </div>
+        {% include "_operation_result.html" %}
       {% endif %}
     </div>
 
     <div class="tab-pane fade {{ 'show active' if tab=='webtoon' }}" id="tab-webtoon">
       {% include "webtoon_splitter.html" %}
       {% if log and tab=='webtoon' %}
-        <div class="card p-3 mt-3">
-          <h5>Log</h5>
-          <pre class="monospace">{{ log }}</pre>
-        </div>
+        {% include "_operation_result.html" %}
       {% endif %}
     </div>
 
     <div class="tab-pane fade {{ 'show active' if tab=='epub_extractor' }}" id="tab-epub-extractor">
       {% include "epub_extractor.html" %}
       {% if log and tab=='epub_extractor' %}
-        <div class="card p-3 mt-3">
-          <h5>Log</h5>
-          <pre class="monospace">{{ log }}</pre>
-        </div>
+        {% include "_operation_result.html" %}
       {% endif %}
     </div>
 
     <div class="tab-pane fade {{ 'show active' if tab=='blur_brush' }}" id="tab-blur-brush">
       {% include "blur_brush.html" %}
       {% if log and tab=='blur_brush' %}
-        <div class="card p-3 mt-3">
-          <h5>Log</h5>
-          <pre class="monospace">{{ log }}</pre>
-        </div>
+        {% include "_operation_result.html" %}
       {% endif %}
     </div>
 
     <div class="tab-pane fade {{ 'show active' if tab=='color_brush' }}" id="tab-color-brush">
       {% include "color_brush.html" %}
       {% if log and tab=='color_brush' %}
-        <div class="card p-3 mt-3">
-          <h5>Log</h5>
-          <pre class="monospace">{{ log }}</pre>
-        </div>
+        {% include "_operation_result.html" %}
       {% endif %}
     </div>
 
@@ -185,20 +133,14 @@
     <div class="tab-pane fade {{ 'show active' if tab=='clip_tokens' }}" id="tab-clip-tokens">
       {% include "clip_token_check.html" %}
       {% if log and tab=='clip_tokens' %}
-        <div class="card p-3 mt-3">
-          <h5>Log</h5>
-          <pre class="monospace">{{ log }}</pre>
-        </div>
+        {% include "_operation_result.html" %}
       {% endif %}
     </div>
 
     <div class="tab-pane fade {{ 'show active' if tab=='pipeline' }}" id="tab-pipeline">
-      {% include "pipeline.html" %}
+      {% if tab=='pipeline' %}{% include "pipeline.html" %}{% else %}<div data-lazy-tool="pipeline" class="small text-muted">Loading workflow…</div>{% endif %}
       {% if log and tab=='pipeline' %}
-        <div class="card p-3 mt-3">
-          <h5>Log</h5>
-          <pre class="monospace">{{ log }}</pre>
-        </div>
+        {% include "_operation_result.html" %}
       {% endif %}
     </div>
   </div>
