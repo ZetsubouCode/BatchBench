@@ -375,7 +375,8 @@ Bulk Tag CRUD:
 Guided Tagging Flow:
 - The flow stores session state in `dataset/_temp/tagging_session.json`.
 - Final output remains normal sidecar `.txt` caption files.
-- On mobile, the bottom dock opens tagging, Dataset Browser, Dataset Workspace, and ZIP export. Guided Tagging exposes touch controls for images, segments, save/continue, zoom, fullscreen, and session actions without requiring hotkeys.
+- On desktop, the image preview uses the available modal height. The complete caption shows one line until you choose **Show all tags**.
+- On mobile, the bottom dock opens tagging, Dataset Browser, Dataset Workspace, and ZIP export. Guided Tagging keeps the image visible above a scrollable tag workspace, with separate segment and image navigation, Save & Next, and Close at the bottom. **More** opens the optional segment picker, image controls, and session actions. Save errors appear beside Save & Next.
 - Recommendation chips can repeat when the same tag comes from different mapped cheat-sheet groups, but selecting any copy adds one caption tag and hides the matching copies for that image.
 - Manual tagging supports caption chips, autocomplete, glossary quick pick, keyboard shortcuts, and optional image preview inside the cheat-sheet overlay.
 - Danbooru-aware autocomplete uses the local catalog under `data/tag_catalog/`; typing does not call Danbooru.

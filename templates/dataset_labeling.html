@@ -342,15 +342,26 @@
   .quiz-workspace-grid { display:grid; grid-template-columns:minmax(360px,.82fr) minmax(560px,1.18fr); gap:1rem; align-items:start; }
   .quiz-image-stage { min-height:58vh; border:0; border-radius:0; background:transparent; display:flex; align-items:center; justify-content:center; overflow:hidden; position:relative; }
   .quiz-complete-caption { border-top:1px solid var(--bb-border); padding:.55rem .25rem; max-height:8rem; overflow:auto; }
+  .quiz-complete-caption-heading { display:flex; align-items:center; justify-content:space-between; gap:.5rem; }
+  .quiz-complete-caption-toggle { display:none; border:0; padding:.2rem .15rem; background:transparent; color:var(--bb-link); font-size:.8rem; font-weight:600; white-space:nowrap; cursor:pointer; }
+  .quiz-complete-caption-toggle:hover, .quiz-complete-caption-toggle:focus-visible { color:var(--bb-link-hover); }
+  .quiz-complete-caption-toggle::after { content:""; display:inline-block; width:.38rem; height:.38rem; margin:0 .15rem .14rem .45rem; border-right:1.5px solid currentColor; border-bottom:1.5px solid currentColor; transform:rotate(45deg); transition:transform .16s ease; }
+  .quiz-complete-caption.is-expanded .quiz-complete-caption-toggle::after { transform:rotate(225deg); }
   .quiz-complete-caption-tags { font-size:.82rem; line-height:1.45; overflow-wrap:anywhere; }
   .quiz-desktop-more { position:relative; }
   .quiz-desktop-more summary { cursor:pointer; list-style:none; padding:.4rem .7rem; border:1px solid var(--bb-border); border-radius:.35rem; }
   .quiz-desktop-more-menu { position:absolute;bottom:calc(100% + .3rem);right:0;z-index:5;display:grid;gap:.3rem;width:13rem;padding:.5rem;border:1px solid var(--bb-border);border-radius:.4rem;background:var(--bb-card);box-shadow:0 .5rem 1.25rem rgba(0,0,0,.3); }
   .quiz-image-stage img { max-width:100%; max-height:72vh; object-fit:contain; cursor:zoom-in; transform-origin:center; transition:transform .12s ease, filter .12s ease; user-select:none; }
   @media (min-width:992px){
-    .quiz-image-stage{min-height:0;height:min(44vh,390px)}
+    .quiz-image-stage{min-height:0;height:max(240px, calc(100dvh - 21rem));border:1px solid var(--bb-border);border-radius:.5rem;background:#131d29;transition:border-color .16s ease}
+    .quiz-image-stage:hover{border-color:#4f8fb1}
     .quiz-image-stage img{max-height:100%}
+    .quiz-complete-caption{max-height:none;overflow:visible}
+    .quiz-complete-caption-toggle:not([hidden]){display:inline-flex;align-items:center}
+    .quiz-complete-caption:not(.is-expanded) .quiz-complete-caption-tags{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .quiz-complete-caption:not(.is-expanded) #tagging-quiz-prior-decisions{display:none}
   }
+  @media (prefers-reduced-motion:reduce){.quiz-complete-caption-toggle::after,.quiz-image-stage{transition:none}}
   .quiz-image-stage.is-quiz-zoomed img { cursor:zoom-out; }
   .quiz-image-stage.is-quiz-pannable img { cursor:grab; }
   .quiz-image-stage.is-quiz-panning img { cursor:grabbing; transition:none; }
@@ -1322,12 +1333,16 @@
   </div>
 </div>
 
-<div class="modal fade" id="tagging-quiz-modal" tabindex="-1" aria-hidden="true">
+<div class="modal fade" id="tagging-quiz-modal" tabindex="-1" aria-label="Guided Tagging Flow" aria-hidden="true">
   <div class="modal-dialog modal-fullscreen-lg-down quiz-fullscreen-dialog modal-dialog-scrollable">
     <div class="modal-content bg-dark text-light">
       <div class="modal-header">
         <div>
           <h5 class="modal-title">Guided Tagging Flow</h5>
+          <div class="quiz-mobile-image-progress" id="tagging-quiz-mobile-progress" role="progressbar" aria-label="Current image" aria-valuemin="0" aria-valuenow="0" aria-valuemax="0">
+            <span class="quiz-mobile-image-progress-track" aria-hidden="true"><span class="quiz-mobile-image-progress-fill"></span></span>
+            <span class="quiz-mobile-image-progress-count">0/0</span>
+          </div>
           <div class="quiz-progress-line" id="tagging-quiz-progress"></div>
         </div>
         <details class="tagging-quiz-hotkeys" id="tagging-quiz-hotkeys">
@@ -1394,28 +1409,21 @@
             <div class="d-flex align-items-start justify-content-between gap-2 mb-2">
               <div>
                 <div class="small text-muted">Current image</div>
-                <div class="monospace small" id="tagging-quiz-image-name">-</div>
+                <div class="monospace small" id="tagging-quiz-image-name" title="">-</div>
               </div>
               <div class="small text-muted" id="tagging-quiz-autosave">Autosave idle</div>
             </div>
             <div class="quiz-image-stage" id="tagging-quiz-image-stage"></div>
             <div class="quiz-complete-caption" aria-live="polite">
-              <div class="small text-muted">Complete caption · all segments</div>
+              <div class="quiz-complete-caption-heading">
+                <div class="small text-muted">Complete caption · all segments</div>
+                <button type="button" class="quiz-complete-caption-toggle" id="tagging-quiz-caption-toggle" aria-expanded="false" aria-controls="tagging-quiz-complete-caption tagging-quiz-prior-decisions" hidden>Show all tags</button>
+              </div>
               <div class="quiz-complete-caption-tags" id="tagging-quiz-complete-caption">No tags selected yet.</div>
               <div class="small text-muted" id="tagging-quiz-prior-decisions"></div>
             </div>
-            <div class="quiz-mobile-image-controls" aria-label="Image controls">
-              <button type="button" class="btn btn-outline-light" id="tagging-mobile-zoom-out" aria-label="Zoom out">&minus;</button>
-              <button type="button" class="btn btn-outline-secondary" id="tagging-mobile-zoom-fit">Fit</button>
-              <button type="button" class="btn btn-outline-light" id="tagging-mobile-zoom-in" aria-label="Zoom in">+</button>
-              <button type="button" class="btn btn-outline-info" id="tagging-mobile-fullscreen">Fullscreen</button>
-            </div>
           </div>
           <div class="quiz-tag-pane">
-            <div class="quiz-mobile-segment-selector" id="tagging-mobile-segment-wrap">
-              <label for="tagging-mobile-segment-select" id="tagging-mobile-segment-label">Segment</label>
-              <select class="form-select" id="tagging-mobile-segment-select"></select>
-            </div>
             <div class="quiz-segment-banner">
               <div class="quiz-segment-banner-label">Current Segment</div>
               <div class="quiz-segment-banner-title" id="tagging-quiz-segment-title">-</div>
@@ -1430,7 +1438,7 @@
               <div class="quiz-tag-panel">
                 <div class="quiz-tag-panel-head">
                   <div class="quiz-tag-panel-title">Recommended</div>
-                  <input class="form-control form-control-sm" id="tagging-quiz-search" placeholder="Search recommendation tags" style="max-width:280px;">
+                  <input class="form-control form-control-sm" id="tagging-quiz-search" aria-label="Search recommendation tags" placeholder="Search recommendation tags" style="max-width:280px;">
                 </div>
                 <div class="quiz-recommended-list" id="tagging-quiz-recommended"></div>
               </div>
@@ -1443,7 +1451,7 @@
                   <div class="quiz-tag-panel-title">Manual Tags</div>
                   <div class="small text-muted" id="tagging-quiz-manual-help">Comma separated. Suggestions use your glossary.</div>
                 </div>
-                <textarea class="form-control" id="tagging-quiz-manual" data-tag-suggestion-section="manual_tags" rows="4" placeholder="tag1, tag2"></textarea>
+                <textarea class="form-control" id="tagging-quiz-manual" aria-label="Manual tags" aria-describedby="tagging-quiz-manual-help" data-tag-suggestion-section="manual_tags" rows="4" placeholder="tag1, tag2"></textarea>
                 <label class="quiz-manual-apply-all" title="Adds these manual tags to the current segment for every image in this tagging session. You can still remove them per image later." data-bs-toggle="tooltip" data-bs-title="Adds these manual tags to the current segment for every image in this tagging session. You can still remove them per image later.">
                   <input class="form-check-input" type="checkbox" id="tagging-quiz-manual-apply-all">
                   <span>Apply to all session images</span>
@@ -1474,8 +1482,8 @@
                   </div>
                 </div>
                 <div class="quiz-glossary-controls">
-                  <input type="text" class="form-control form-control-sm" id="tagging-quiz-glossary-search" placeholder="Search glossary tags">
-                  <select class="form-select form-select-sm" id="tagging-quiz-glossary-filter"></select>
+                  <input type="text" class="form-control form-control-sm" id="tagging-quiz-glossary-search" aria-label="Search glossary tags" placeholder="Search glossary tags">
+                  <select class="form-select form-select-sm" id="tagging-quiz-glossary-filter" aria-label="Filter glossary tags"></select>
                   <button type="button" class="btn btn-sm btn-outline-light" id="tagging-quiz-glossary-clear">Clear</button>
                 </div>
                 <div class="quiz-glossary-list" id="tagging-quiz-glossary-list"></div>
@@ -1484,30 +1492,49 @@
           </div>
         </div>
         <div class="modal-footer quiz-mobile-footer">
+          <div class="quiz-mobile-segment-actions" aria-label="Segment navigation">
+            <button type="button" class="btn btn-outline-light" id="tagging-mobile-prev-segment" disabled>&larr; Segment</button>
+            <button type="button" class="btn btn-outline-light" id="tagging-mobile-next-segment" disabled>Segment &rarr;</button>
+          </div>
+          <div class="alert alert-danger d-none" id="tagging-mobile-feedback" role="alert"></div>
           <div class="quiz-mobile-primary-actions">
             <button type="button" class="btn btn-outline-info" id="tagging-mobile-prev-image">&larr; Image</button>
             <button type="button" class="btn btn-warning" id="tagging-mobile-save-image">Save &amp; Next</button>
           </div>
-          <details class="quiz-mobile-more">
-            <summary>More</summary>
+          <div class="quiz-mobile-utility-actions">
+            <button type="button" class="btn btn-outline-light quiz-mobile-more-trigger" id="tagging-mobile-more-trigger" aria-label="More Guided Tagging actions" aria-expanded="false" aria-controls="tagging-mobile-more-sheet">More</button>
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+          <div class="quiz-mobile-more-sheet" id="tagging-mobile-more-sheet" role="region" aria-labelledby="tagging-mobile-more-title" hidden>
+            <div class="quiz-mobile-more-head"><h6 id="tagging-mobile-more-title">More actions</h6><button type="button" class="btn-close btn-close-white" id="tagging-mobile-more-close" aria-label="Close more actions"></button></div>
             <div class="quiz-mobile-more-actions">
-              <button type="button" class="btn btn-outline-light" id="tagging-mobile-prev-segment">&larr; Segment</button>
-              <button type="button" class="btn btn-outline-light" id="tagging-mobile-next-segment">Segment &rarr;</button>
+              <div class="quiz-mobile-more-label">Image</div>
+              <div class="quiz-mobile-image-controls" aria-label="Image controls">
+                <button type="button" class="btn btn-outline-light" id="tagging-mobile-zoom-out" aria-label="Zoom out">&minus;</button>
+                <button type="button" class="btn btn-outline-secondary" id="tagging-mobile-zoom-fit">Fit</button>
+                <button type="button" class="btn btn-outline-light" id="tagging-mobile-zoom-in" aria-label="Zoom in">+</button>
+                <button type="button" class="btn btn-outline-info" id="tagging-mobile-fullscreen">Fullscreen</button>
+              </div>
+              <div class="quiz-mobile-more-label">Jump to segment</div>
+              <div class="quiz-mobile-segment-selector" id="tagging-mobile-segment-wrap">
+                <label for="tagging-mobile-segment-select" id="tagging-mobile-segment-label">Segment</label>
+                <select class="form-select" id="tagging-mobile-segment-select"></select>
+              </div>
               <button type="button" class="btn btn-outline-secondary" id="tagging-mobile-skip">Skip Segment</button>
               <button type="button" class="btn btn-outline-warning" id="tagging-mobile-retry">Retry Guided Tagging</button>
+              <div class="quiz-mobile-more-label">Session</div>
               <button type="button" class="btn btn-outline-info" id="tagging-mobile-later">Continue Later</button>
               <button type="button" class="btn btn-outline-light" id="tagging-mobile-overview">Session Overview</button>
-              <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Close</button>
             </div>
-          </details>
+          </div>
         </div>
       </div>
       <div class="modal-footer justify-content-between quiz-desktop-footer">
         <button type="button" class="btn btn-outline-info" id="tagging-quiz-prev-image">Previous</button>
         <div class="d-flex gap-2 flex-wrap">
+          <button type="button" class="btn btn-sm btn-outline-light" id="tagging-quiz-prev-segment" disabled>Previous segment</button>
+          <button type="button" class="btn btn-sm btn-outline-light" id="tagging-quiz-next-segment" disabled>Next segment</button>
           <details class="quiz-desktop-more"><summary>More</summary><div class="quiz-desktop-more-menu">
-            <button type="button" class="btn btn-sm btn-outline-light" id="tagging-quiz-prev-segment">Previous segment</button>
-            <button type="button" class="btn btn-sm btn-outline-light" id="tagging-quiz-next-segment">Next segment</button>
             <button type="button" class="btn btn-sm btn-outline-secondary" id="tagging-quiz-skip">Skip segment</button>
             <button type="button" class="btn btn-sm btn-outline-warning d-none" id="tagging-quiz-retry-guided">Retry Guided Tagging</button>
             <button type="button" class="btn btn-sm btn-outline-info" id="tagging-quiz-continue-later">Continue later</button>
@@ -2053,6 +2080,17 @@
   function qSetStatus(text, target = QUIZ.status){
     const el = get(target);
     if (el) el.textContent = text || '';
+    if (target === QUIZ.status){
+      const feedback = get('tagging-mobile-feedback');
+      if (feedback){
+        const failed = /\b(failed|error|unable)\b/i.test(text || '');
+        feedback.textContent = failed ? text : '';
+        feedback.classList.toggle('d-none', !failed);
+        if (failed && get(QUIZ.quizModal)?.classList.contains('show') && window.matchMedia('(max-width: 767.98px), (max-width: 991.98px) and (orientation: landscape) and (max-height: 500px)').matches){
+          requestAnimationFrame(() => feedback.scrollIntoView({block: 'nearest'}));
+        }
+      }
+    }
   }
 
   function qTags(raw){
@@ -3183,6 +3221,15 @@
     const fallbackIndex = Number.isFinite(storedIndex) ? storedIndex : 0;
     const imageIndex = activeIndex >= 0 ? activeIndex : Math.max(0, fallbackIndex);
     const displayImageNumber = imageKeys.length ? imageIndex + 1 : 0;
+    const mobileProgress = get('tagging-quiz-mobile-progress');
+    if (mobileProgress){
+      mobileProgress.querySelector('.quiz-mobile-image-progress-count').textContent = `${displayImageNumber}/${imageKeys.length}`;
+      mobileProgress.querySelector('.quiz-mobile-image-progress-fill').style.width = imageKeys.length
+        ? `${Math.min(100, (displayImageNumber / imageKeys.length) * 100)}%`
+        : '0%';
+      mobileProgress.setAttribute('aria-valuenow', String(displayImageNumber));
+      mobileProgress.setAttribute('aria-valuemax', String(imageKeys.length));
+    }
     const imageTagCount = qCurrentImageTagCount();
     const percent = qProgressPercent(session, imageKeys, segments, freeMode);
     qApplyProgressStyle(progress, percent);
@@ -3258,6 +3305,7 @@
     const singleChoiceMode = !freeMode && qIsSingleChoiceSegment(seg);
     qRenderQuizProgress();
     get(QUIZ.imageName).textContent = rel || '-';
+    get(QUIZ.imageName).title = rel || '';
     get(QUIZ.segmentTitle).textContent = freeMode ? 'Free Tagging' : ((seg && seg.label) || '-');
     const modeBadge = get(QUIZ.segmentMode);
     if (modeBadge){
@@ -3278,8 +3326,9 @@
     get(QUIZ.manualBox)?.classList.toggle('d-none', singleChoiceMode);
     get(QUIZ.glossaryPanel)?.classList.toggle('d-none', singleChoiceMode);
     if (singleChoiceMode) qCancelManualConfirm(false);
-    get(QUIZ.prev)?.toggleAttribute('disabled', freeMode);
-    get(QUIZ.next)?.toggleAttribute('disabled', freeMode);
+    const segmentIndex = Number(session.current?.segment_index || 0);
+    get(QUIZ.prev)?.toggleAttribute('disabled', freeMode || segmentIndex <= 0);
+    get(QUIZ.next)?.toggleAttribute('disabled', freeMode || segmentIndex >= segments.length - 1);
     get(QUIZ.skip)?.toggleAttribute('disabled', freeMode);
     get(QUIZ.prevImage)?.toggleAttribute('disabled', !qHasFreeModeTarget(-1));
     const search = get(QUIZ.search);
@@ -3316,7 +3365,7 @@
       if (rel){
         const img = document.createElement('img');
         img.src = qImageUrl(rel);
-        img.alt = '';
+        img.alt = `Current tagging image: ${rel}`;
         img.draggable = false;
         img.title = 'Click to view fullscreen';
         img.addEventListener('click', qToggleImageFullscreen);
@@ -3857,11 +3906,24 @@
     const rows = qImageTagRows(qCurrentImageEntry());
     const caption = get('tagging-quiz-complete-caption');
     const prior = get('tagging-quiz-prior-decisions');
+    const toggle = get('tagging-quiz-caption-toggle');
     if (caption) caption.textContent = rows.length ? rows.map(row => row.tag).join(', ') : 'No tags selected yet.';
+    if (toggle) toggle.hidden = !rows.length;
+    if (!rows.length) qSetCompleteCaptionExpanded(false);
     if (prior) {
       const currentId = qCurrentSegment()?.id;
       const previous = rows.filter(row => row.segment_id !== currentId);
       prior.textContent = previous.length ? `${previous.length} tag${previous.length === 1 ? '' : 's'} from other segments` : 'No prior segment tags.';
+    }
+  }
+
+  function qSetCompleteCaptionExpanded(expanded){
+    const container = document.querySelector('#tagging-quiz-modal .quiz-complete-caption');
+    const toggle = get('tagging-quiz-caption-toggle');
+    container?.classList.toggle('is-expanded', expanded);
+    if (toggle){
+      toggle.setAttribute('aria-expanded', String(expanded));
+      toggle.textContent = expanded ? 'Show fewer' : 'Show all tags';
     }
   }
 
@@ -4973,6 +5035,10 @@
     get(QUIZ.next)?.addEventListener('click', () => qMoveSegment(1));
     get(QUIZ.skip)?.addEventListener('click', qSkipSegment);
     get(QUIZ.saveImage)?.addEventListener('click', () => qSaveImage().catch(err => qSetStatus(`Save image failed: ${err.message}`)));
+    get('tagging-quiz-caption-toggle')?.addEventListener('click', () => {
+      const expanded = document.querySelector('#tagging-quiz-modal .quiz-complete-caption')?.classList.contains('is-expanded');
+      qSetCompleteCaptionExpanded(!expanded);
+    });
     document.addEventListener('keydown', event => qHandleQuizImageArrow(event).catch(err => qSetStatus(`Image navigation failed: ${err.message}`)));
     document.addEventListener('keydown', qHandleQuizModalEscape);
     document.addEventListener('fullscreenchange', qHandleQuizFullscreenChange);
@@ -4993,6 +5059,7 @@
     get(QUIZ.setupModal)?.addEventListener('hidden.bs.modal', () => { quizState.setupUsesCurrentSettings = false; });
     get(QUIZ.quizModal)?.addEventListener('hide.bs.modal', () => {
       get(QUIZ.hotkeys)?.removeAttribute('open');
+      qSetCompleteCaptionExpanded(false);
       qResetQuizImageZoom();
       qScheduleSessionSave(true);
     });

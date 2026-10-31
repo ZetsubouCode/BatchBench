@@ -6,26 +6,68 @@
     const search = document.getElementById('bb-tool-search');
     if (!rail || !toggle) return;
     const mobile = () => window.matchMedia('(max-width: 991.98px)').matches;
-    const close = () => { document.body.classList.remove('bb-rail-open'); backdrop.hidden = true; toggle.setAttribute('aria-expanded', 'false'); };
+    const close = (restoreFocus = false) => {
+      document.body.classList.remove('bb-rail-open');
+      backdrop.hidden = true;
+      toggle.setAttribute('aria-expanded', 'false');
+      if (mobile()) rail.inert = true;
+      if (restoreFocus) toggle.focus();
+    };
     const setDesktop = collapsed => {
       document.body.classList.toggle('bb-rail-collapsed', collapsed);
       toggle.setAttribute('aria-expanded', String(!collapsed));
       try { localStorage.setItem('bb-rail-collapsed', collapsed ? '1' : '0'); } catch (_) {}
     };
     if (!mobile()) {
+      rail.inert = false;
       try { setDesktop(localStorage.getItem('bb-rail-collapsed') === '1'); } catch (_) {}
-    } else close();
+    } else {
+      rail.setAttribute('role', 'dialog');
+      rail.setAttribute('aria-modal', 'true');
+      close();
+    }
     toggle.addEventListener('click', () => {
       if (mobile()) {
         const opening = !document.body.classList.contains('bb-rail-open');
         document.body.classList.toggle('bb-rail-open', opening);
         backdrop.hidden = !opening;
         toggle.setAttribute('aria-expanded', String(opening));
+        rail.inert = !opening;
         if (opening) search?.focus();
       } else setDesktop(!document.body.classList.contains('bb-rail-collapsed'));
     });
-    backdrop.addEventListener('click', close);
-    document.addEventListener('keydown', event => { if (event.key === 'Escape' && mobile()) close(); });
+    backdrop.addEventListener('click', () => close(true));
+    document.addEventListener('keydown', event => {
+      if (!mobile() || !document.body.classList.contains('bb-rail-open')) return;
+      if (event.key === 'Escape') { close(true); return; }
+      if (event.key !== 'Tab') return;
+      const focusable = Array.from(rail.querySelectorAll('a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'))
+        .filter(element => element.getClientRects().length);
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !rail.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !rail.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
+    });
+    document.addEventListener('focusin', event => {
+      if (mobile() && document.body.classList.contains('bb-rail-open') && !rail.contains(event.target)) search?.focus();
+    });
+    window.matchMedia('(max-width: 991.98px)').addEventListener('change', () => {
+      if (mobile()) {
+        rail.setAttribute('role', 'dialog');
+        rail.setAttribute('aria-modal', 'true');
+        close();
+      } else {
+        rail.inert = false;
+        rail.removeAttribute('role');
+        rail.removeAttribute('aria-modal');
+      }
+    });
     rail.addEventListener('click', event => {
       if (event.target.closest('[data-bs-toggle="tab"]') && mobile()) close();
     });

@@ -32,12 +32,22 @@ class TagEditorFileApiTests(unittest.TestCase):
         self.assertIn("#tagging-quiz-setup-modal .quiz-map-mobile-controls", mobile_css)
         self.assertIn("-webkit-overflow-scrolling: touch", mobile_css)
         self.assertIn("touch-action: pan-y", mobile_css)
-        self.assertIn("grid-template-rows: auto auto", mobile_css)
-        self.assertIn("#tagging-quiz-modal .quiz-image-pane {\n    position: sticky", mobile_css)
-        self.assertIn("#tagging-quiz-modal .quiz-mobile-footer {\n    flex-direction: column", mobile_css)
-        self.assertIn("position: sticky", mobile_css)
+        self.assertIn('id="tagging-mobile-more-sheet"', guided_html)
+        self.assertIn('id="tagging-mobile-more-trigger"', guided_html)
+        self.assertIn('id="tagging-quiz-mobile-progress"', guided_html)
+        self.assertIn('class="quiz-mobile-image-progress-count"', guided_html)
+        self.assertNotIn('class="quiz-mobile-more"', guided_html)
+        mobile_footer = guided_html.split('quiz-mobile-footer', 1)[1].split('quiz-desktop-footer', 1)[0]
+        desktop_footer = guided_html.split('quiz-desktop-footer', 1)[1]
+        self.assertLess(mobile_footer.index('id="tagging-mobile-next-segment"'), mobile_footer.index('id="tagging-mobile-more-sheet"'))
+        self.assertGreater(mobile_footer.index('id="tagging-mobile-segment-wrap"'), mobile_footer.index('id="tagging-mobile-more-sheet"'))
+        self.assertLess(desktop_footer.index('id="tagging-quiz-next-segment"'), desktop_footer.index('quiz-desktop-more-menu'))
+        self.assertIn("#tagging-quiz-modal .quiz-mobile-footer {\n    display: grid;\n    position: static;", mobile_css)
+        self.assertIn("#tagging-quiz-modal .quiz-image-stage {\n    min-height: 0;\n    height: min(30dvh, 210px);\n    max-height: 32dvh;\n    position: sticky;", mobile_css)
+        self.assertIn("#tagging-quiz-modal .quiz-tag-pane {\n    min-width: 0;\n    overflow: visible;", mobile_css)
         self.assertIn("syncGuidedInputState", mobile_js)
-        self.assertIn("tagRect.top - bodyRect.top - stickyHeight - 8", mobile_js)
+        self.assertIn("syncCaptionPlacement", mobile_js)
+        self.assertIn("setMoreOpen", mobile_js)
 
     def test_tag_add_creates_txt_for_existing_image(self):
         with tempfile.TemporaryDirectory() as td:

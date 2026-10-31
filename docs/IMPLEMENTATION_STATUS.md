@@ -1,6 +1,14 @@
 # BatchBench Implementation Status
 
-Last reviewed against the local working tree on 2026-09-25. Existing unrelated working-tree edits were preserved.
+Last reviewed against the local working tree on 2026-10-03. Existing unrelated working-tree edits were preserved.
+
+## 2026-10-03 Guided Tagging mobile workspace
+
+- Phone portrait and short landscape layouts use one modal scroll area. Only the contained image preview is sticky; a slim green current-image progress bar (`45/60`) and action rows scroll normally. The preview contracts while a tag input is active.
+- Previous/next segment and image actions stay visible in separate full-width rows. The optional segment picker, image zoom controls, and session actions expand inline under More.
+- Image filenames and autosave metadata stay available on desktop; mobile save errors appear beside Save & Next. Mobile tagging controls have larger touch targets, and Close stays available in the action row.
+- The mobile Tools drawer hides the Tag Editor dock while open and keeps keyboard focus within the drawer.
+- Desktop Guided Tagging gives the image more of the modal height. The complete caption stays on one line by default and expands with Show all tags.
 
 ## 2026-09-25 UI/workflow implementation
 
@@ -48,7 +56,7 @@ The current navigation groups tools into image preparation, dataset assembly, ta
 - persistent tagging session state,
 - session reconciliation when images or guided segments change,
 - preservation of missing historical session items without assigning them to a different image,
-- Dataset Tag Editor-only mobile layout and touch controls for Guided Tagging, Dataset Browser, Bulk Tag CRUD, and Dataset Workspace, including a sticky reference image, end-of-flow navigation actions, keyboard-safe tag inputs/autosuggest, and touch-native Tagging Flow mapping controls,
+- Dataset Tag Editor-only mobile layout and touch controls for Guided Tagging, Dataset Browser, Bulk Tag CRUD, and Dataset Workspace, including a compact sticky Guided Tagging image preview, scrolling Save & Next action, keyboard-safe tag inputs/autosuggest, and touch-native Tagging Flow mapping controls,
 - configurable Project Root browse base with remembered-project precedence,
 - safe browser download of generated dataset ZIP files for remote/mobile use.
 

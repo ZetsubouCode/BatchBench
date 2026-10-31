@@ -57,6 +57,9 @@
     body.bb-rail-collapsed .bb-tool-rail{display:none;}
     @media(max-width:991.98px){
       .bb-tool-rail{top:3.55rem;width:min(19rem,85vw);transform:translateX(-105%);transition:transform .15s ease-out;box-shadow:.3rem 0 1.5rem rgba(0,0,0,.3);}
+      .bb-tool-rail .bb-tool-menu{padding-bottom:calc(1.5rem + env(safe-area-inset-bottom));}
+      .bb-tool-rail .bb-menu-link{display:flex;align-items:center;min-height:44px;}
+      #bb-rail-toggle{min-height:44px;}
       body.bb-rail-open .bb-tool-rail{transform:translateX(0);}
       body:not(.bb-rail-collapsed) .bb-context-bar,body:not(.bb-rail-collapsed) .bb-main-content{margin-left:auto;width:calc(100% - 1rem);}
       body.bb-rail-collapsed .bb-tool-rail{display:block;}
