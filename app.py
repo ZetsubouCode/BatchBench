@@ -705,86 +705,7 @@ def _parse_cheatsheet_content(content: str) -> Dict[str, Any]:
 
 
 def _move_file_with_sidecars(root: Path, src_rel: str, dst_rel: str) -> Tuple[Dict[str, Any], int]:
-    src = _safe_child(root, src_rel)
-    dst_parent = _safe_child_or_root(root, dst_rel)
-    if not src or not src.exists() or not src.is_file():
-        return {"ok": False, "error": "Source file not found"}, 404
-    if not dst_parent or not dst_parent.exists() or not dst_parent.is_dir():
-        return {"ok": False, "error": "Target folder not found"}, 404
-
-    try:
-        src_parent_res = src.parent.resolve()
-        dst_parent_res = dst_parent.resolve()
-    except Exception:
-        return {"ok": False, "error": "Path resolution failed"}, 400
-
-    if dst_parent_res == src_parent_res:
-        return {"ok": True, "moved": False, "rel": src_rel, "warnings": []}, 200
-
-    src_txt = src.with_suffix(".txt")
-    src_txt_bak = Path(str(src_txt) + ".bak")
-    src_bak = src.with_suffix(".bak")
-    src_img_bak = Path(str(src) + ".bak")
-
-    sidecars = []
-    warnings = []
-    if src_txt.exists():
-        sidecars.append((src_txt, ".txt"))
-    else:
-        warnings.append(f"Missing sidecar: {src_txt.name}")
-    if src_txt_bak.exists():
-        sidecars.append((src_txt_bak, ".txt.bak"))
-    if src_bak.exists():
-        sidecars.append((src_bak, ".bak"))
-    if src_img_bak.exists() and src_img_bak != src_bak:
-        sidecars.append((src_img_bak, f"{src.suffix}.bak"))
-
-    stem = src.stem
-    suffix = src.suffix
-    bump = 1
-    while True:
-        candidate_stem = stem if bump == 1 else f"{stem}_{bump-1}"
-        dest_img = dst_parent / f"{candidate_stem}{suffix}"
-        conflicts = dest_img.exists()
-        if not conflicts:
-            for _, dest_suffix in sidecars:
-                if (dst_parent / f"{candidate_stem}{dest_suffix}").exists():
-                    conflicts = True
-                    break
-        if not conflicts:
-            break
-        bump += 1
-
-    moved_pairs = []
-    try:
-        move_plan = [(src, dest_img)]
-        for src_path, dest_suffix in sidecars:
-            move_plan.append((src_path, dst_parent / f"{dest_img.stem}{dest_suffix}"))
-
-        for src_path, dest_path in move_plan:
-            shutil.move(str(src_path), str(dest_path))
-            moved_pairs.append((src_path, dest_path))
-    except Exception as exc:
-        rollback_errors = []
-        for src_path, dest_path in reversed(moved_pairs):
-            try:
-                if dest_path.exists() and not src_path.exists():
-                    shutil.move(str(dest_path), str(src_path))
-            except Exception as rb_exc:
-                rollback_errors.append(f"{dest_path.name}: {rb_exc}")
-        error_msg = str(exc)
-        if rollback_errors:
-            error_msg = f"{error_msg} | rollback errors: {'; '.join(rollback_errors)}"
-        return {"ok": False, "error": error_msg}, 500
-    except BaseException:
-        raise
-
-    return {
-        "ok": True,
-        "moved": True,
-        "rel": _rel_to_root(root, dest_img),
-        "warnings": warnings,
-    }, 200
+    return pair_moves.move(root, src_rel, dst_rel)
 
 
 def _remove_empty_dirs(root: Path, keep: Optional[Path] = None) -> None:
@@ -3134,7 +3055,7 @@ def api_tags_return_temp():
     errors = []
     for path in source_images:
         src_rel = _rel_to_root(root, path)
-        result, code = _move_file_with_sidecars(root, src_rel, "")
+        result, code = pair_moves.move(root, src_rel, "", preserve_structure=source_scope != "all")
         if code == 200 and result.get("ok"):
             moved.append(
                 {

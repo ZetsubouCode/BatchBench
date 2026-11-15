@@ -82,6 +82,7 @@
       });
       select.dataset.signature = signature;
     }
+    Array.from(select.options).forEach((option,i)=>{option.disabled=i>(current.unlockedSegment ?? 0);});
     select.value = String(index + 1);
     if (label) label.textContent = `Segment ${index + 1} / ${segments.length}`;
   }
@@ -121,7 +122,7 @@
       fullscreen.classList.toggle('d-none', !current.fullscreenAvailable);
     }
     get('tagging-mobile-retry')?.classList.toggle('d-none', !current.freeMode);
-    get('tagging-mobile-skip')?.toggleAttribute('disabled', !!current.freeMode || !current.hasSession);
+    get('tagging-mobile-skip')?.toggleAttribute('disabled', !current.canSkipSegment);
     get('tagging-mobile-prev-image')?.toggleAttribute('disabled', !current.canPreviousImage);
     get('tagging-mobile-save-image')?.toggleAttribute('disabled', !current.hasSession || mobileSavePending);
   }
@@ -193,7 +194,7 @@
 
     bind('dataset-mobile-tag', 'click', () => invoke('startTagging'));
     bind('dataset-mobile-dataset', 'click', () => scrollToSurface('.gallery-section'));
-    bind('dataset-mobile-workspace', 'click', () => scrollToSurface('.workdir-panel'));
+    bind('dataset-mobile-workspace', 'click', () => { window.BatchBenchTagWorkspace?.open(true); scrollToSurface('.workdir-panel'); });
     bind('dataset-mobile-zip', 'click', () => invoke('generateZip'));
     bind('gallery-send-selected-mobile', 'click', () => get('workdir-send-selected')?.click());
 

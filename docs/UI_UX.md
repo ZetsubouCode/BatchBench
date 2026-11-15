@@ -92,6 +92,15 @@ Prioritize:
 
 Automated recommendations should look like suggestions, not authoritative answers.
 
+Tag Editor uses one compact, information-rich workspace for the launcher, browser,
+staging, and batch operations. Do not split it into a launcher-only Tag Images page
+and a Manage Dataset page. Guided Tagging preserves the original neo panel hierarchy,
+category context, directly accessible recommendations and glossary, and grouped manual
+entry. Segment navigation stays by the segment controls; image navigation and Save &
+Next stay in the action area. Session JSON uses explicit draft statuses; only a
+confirmed caption write may report Caption saved. A failed draft save must keep work
+open on Close. Removing redundant metadata must not hide frequently used controls.
+
 The UI must not imply that an autotagger result is inherently correct.
 
 ## 6. Tag Display
@@ -178,3 +187,20 @@ Do not rely on color alone for error/success/destructive states.
 Do not add a frontend framework merely to build one new tool.
 
 Continue with Jinja, Bootstrap, and focused vanilla JavaScript unless a new technology solves a concrete problem significantly better and the setup/maintenance cost is justified.
+
+## Tag Editor task 002 refinement
+
+Guided navigation uses a compact connected stepper. Resolve a step by choosing tags,
+entering manual tags, or explicitly choosing Not Applicable. Future steps stay locked;
+completed steps remain revisitable. Progress counts resolved steps independently of
+the active view. Save & Next requires all guided steps to be resolved. Free tagging
+of completed captions retains its existing navigation.
+
+The Dataset Browser fills the workspace until Open Batch Workspace is selected or
+files are staged. Hiding the workspace only hides UI. Visibility and divider ratio
+persist locally; keyboard arrows resize and Home/double-click restore 55:45. Below
+1100px the panels stack. Both browsers provide previews and independent filters.
+Tag Explorer scans staged captions only, renders 40 chips initially, keeps a removable
+selection area, and separates selection from optional Danbooru inspection. Manual
+composer input pauses auto-sync until Sync to Tags. Batch tools and Dataset Export
+span the available width below the browsers.

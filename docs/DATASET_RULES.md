@@ -188,3 +188,19 @@ A good result log answers:
 - Where is the output?
 
 Prefer summary counts plus actionable per-file errors over noisy success output for every trivial operation.
+
+## 11. Tag Editor staging round trips
+
+Interactive image-pair moves into the staging root mirror dataset-relative folders:
+`dataset/group/a.png` becomes `dataset/_temp/group/a.png`. Returning staged pairs to
+the dataset removes only the leading `_temp/` component. Existing staged pairs use
+their relative folder as their return location; no database/reference migration occurs.
+Collisions, including case-only or orphan-caption collisions, rename the incoming pair
+with a deterministic numeric suffix and report the new path. Original filename
+restoration is not inferred after a conflict rename.
+
+Return All targets staging by default. The separately labeled dataset maintenance
+command still explicitly flattens files from all dataset subfolders to dataset root.
+Moving staged files to a chosen dataset folder is an intentional relocation. Existing
+ZIP export excludes the entire `_temp` tree and otherwise includes dataset files;
+the editor now states this scope and warns about excluded staged images.

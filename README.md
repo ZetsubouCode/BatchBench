@@ -352,16 +352,17 @@ Watch out:
 ### Tag Tools
 
 #### Dataset Tag Editor
-- Open **Tag Editor** directly from the tool rail or Home. The main Start/Resume Tagging action is above project setup and dataset utilities.
+- Open **Tag Editor** directly from the tool rail or Home. One workspace keeps Guided Tagging, Dataset Browser, staging, batch edits, and export together. Project Setup appears until the project is ready, then remains available on demand.
 - Project Root is a project-specific path. Other tools keep separate dataset, source, and output paths. Once a project is selected, its existing `dataset/` can be offered to dataset tools.
-- Guided Tagging shows the complete caption across segments. “Session autosaved” refers to session progress; “Caption written to … .txt” confirms a file write.
+- Guided Tagging shows the complete caption across segments. **Draft saved · captions unchanged** refers to session progress; **Caption saved: … .txt** confirms a file write. Close waits for pending draft saves and stays open if they fail.
 - Moving selected dataset images to `_temp` or another folder first shows image/caption counts, missing captions, destination, and name conflicts. Existing sidecars move with images.
 How to use:
 - Fill **Project Root**, the parent folder that contains `database/`, `dataset/`, `dataset/_temp`, and `prompt.txt`.
 - **Browse** opens the remembered Project Root first. With no remembered project it starts at `TAG_EDITOR_PROJECT_BASE` (default `E:\_Training DATA`) and falls back to the drive list when that location is unavailable.
 - If Project Setup appears, run **Initialize Project** first.
 - Use **Guided Tagging Flow** for structured image-by-image review.
-- Use **Bulk Tag CRUD** for direct add, remove, rename, and duplicate cleanup operations.
+- Open **Batch tag operations** beside the browser for direct add, remove, rename, and duplicate cleanup operations. Results distinguish inspected, changed, unchanged, skipped, failed, and backed-up captions.
+- Search filenames and filter caption availability or selected images without rescanning. Filters apply to **loaded images**; increase **Load limit** to include more files. Selection is retained when filters change; **Stage selected** acts on the full selected count.
 Parameters:
 - Project Root: dataset project root. The tool resolves `database/`, `dataset/`, and `dataset/_temp` automatically.
 - Image extensions: scanned image extensions such as `.png,.jpg`.
@@ -375,7 +376,7 @@ Bulk Tag CRUD:
 Guided Tagging Flow:
 - The flow stores session state in `dataset/_temp/tagging_session.json`.
 - Final output remains normal sidecar `.txt` caption files.
-- On desktop, the image preview uses the available modal height. The complete caption shows one line until you choose **Show all tags**.
+- On desktop, the original neo panel organization keeps Selected / Preselected tags, Recommendations, Manual Tags, and Glossary directly accessible beside the image. Segment buttons and Previous/Next segment controls stay together; **Previous image** and **Save & Next** occupy the bottom action area. Pending manual tags stay in their original segment. The complete caption remains under the image with **Show all tags** for long captions.
 - On mobile, the bottom dock opens tagging, Dataset Browser, Dataset Workspace, and ZIP export. Guided Tagging keeps the image visible above a scrollable tag workspace, with separate segment and image navigation, Save & Next, and Close at the bottom. **More** opens the optional segment picker, image controls, and session actions. Save errors appear beside Save & Next.
 - Recommendation chips can repeat when the same tag comes from different mapped cheat-sheet groups, but selecting any copy adds one caption tag and hides the matching copies for that image.
 - Manual tagging supports caption chips, autocomplete, glossary quick pick, keyboard shortcuts, and optional image preview inside the cheat-sheet overlay.
@@ -662,3 +663,25 @@ mytrigger, closed eyes, hair ornament, smile, upper body
 
 - You can drag a folder into many path boxes to paste its path.
 - Back up important data before bulk operations.
+
+### Tag Editor batch workspace
+
+The Dataset Browser reads `dataset/`, excluding `dataset/_temp/`. Choose **Open Batch
+Workspace** to browse staging alongside it, or stage selected images to open it
+automatically. Hiding the panel leaves staged files untouched. Resize the divider by
+dragging or using arrow keys; double-click or Home restores the balanced layout.
+
+Stage Selected and Return Selected move images with their existing caption sidecars.
+Staging and returning preserve relative folders; conflicts are renamed and logged.
+Return All returns staged pairs to matching dataset folders. The separate dataset
+maintenance command can flatten subfolder files into dataset root explicitly.
+
+Tag Explorer scans staged captions. Select tags, choose an operation, and use
+**Preview Changes** before **Apply to staged captions**. Preview writes no captions
+or backups and provides no rollback. Manual input pauses automatic selection sync;
+**Sync to Tags** resumes it. Export ZIP excludes everything under `_temp/`, including
+staged images, and includes other files under `dataset/`.
+
+Guided Tagging locks future steps until each current step has tags or is explicitly
+marked **Not Applicable**. Completed steps can be revisited without clearing later
+choices. **Save & Next** writes captions after all guided steps are resolved.

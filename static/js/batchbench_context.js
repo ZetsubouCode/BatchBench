@@ -109,9 +109,14 @@
       const role = button.dataset.contextChange;
       if (role === 'project') {
         document.querySelector('[data-bs-target="#tab-tags"]')?.click();
-        document.getElementById('folder_tags')?.focus();
+        const focusProject=()=>{
+          const input=document.getElementById('folder_tags');
+          if(input && !input.checkVisibility())document.getElementById('left-drawer-project-toggle')?.click();
+          input?.focus();
+        };
+        focusProject();
         document.addEventListener('bb:tool-loaded', event => {
-          if (event.detail.tool === 'tags') document.getElementById('folder_tags')?.focus();
+          if (event.detail.tool === 'tags') focusProject();
         }, {once:true});
       } else if (role === 'dataset') {
         document.querySelector('[data-bs-target="#tab-health"]')?.click();

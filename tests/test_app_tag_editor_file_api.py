@@ -150,7 +150,7 @@ class TagEditorFileApiTests(unittest.TestCase):
             self.assertTrue((root / 'a.png').exists())
             self.assertFalse((temp / 'a.png').exists())
 
-    def test_return_temp_moves_all_nested_pairs_back_to_root(self):
+    def test_return_temp_preserves_nested_pair_folders(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td) / "dataset"
             nested = root / "_temp" / "batch_a" / "variant"
@@ -170,10 +170,10 @@ class TagEditorFileApiTests(unittest.TestCase):
             self.assertTrue(data.get("ok"), msg=data)
             self.assertEqual(data.get("total"), 2)
             self.assertEqual(len(data.get("moved") or []), 2)
-            self.assertTrue((root / "sample.png").exists())
-            self.assertTrue((root / "sample.txt").exists())
-            self.assertTrue((root / "sample_2.png").exists())
-            self.assertTrue((root / "sample_2.txt").exists())
+            self.assertTrue((root / "batch_a" / "variant" / "sample.png").exists())
+            self.assertTrue((root / "batch_a" / "variant" / "sample.txt").exists())
+            self.assertTrue((root / "batch_a" / "variant" / "sample_2.png").exists())
+            self.assertTrue((root / "batch_a" / "variant" / "sample_2.txt").exists())
             self.assertFalse((nested / "sample.png").exists())
             self.assertFalse((nested / "sample.txt").exists())
             self.assertFalse((nested / "sample_2.png").exists())

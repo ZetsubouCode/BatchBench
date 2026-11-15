@@ -2440,6 +2440,14 @@ def save_tagging_quiz_image(
         session = loaded.get("session") if loaded.get("ok") else None
     if not isinstance(session, dict):
         return {"ok": False, "error": "No tagging session loaded", **_make_serializable_path_info(paths)}
+    incoming_root = str(session.get("project_root") or "").strip()
+    if incoming_root:
+        try:
+            session_root = resolve_project_paths(Path(incoming_root))["project_root"].resolve()
+            if session_root != paths["project_root"].resolve():
+                return {"ok": False, "error": "Session belongs to a different project root; caption was not written.", **_make_serializable_path_info(paths)}
+        except (OSError, ValueError):
+            return {"ok": False, "error": "Invalid session project_root; caption was not written.", **_make_serializable_path_info(paths)}
     quiz_segments = session.get("quiz_segments") or load_tagging_quiz_settings().get("segments") or []
     final_tags = final_tags_from_segments(segments or {}, quiz_segments)
     trigger = extract_trigger_word(paths["prompt_path"])
@@ -2503,14 +2511,24 @@ def save_tagging_quiz_image(
             "free_tagging": False,
         }
 
-    save_tagging_session(paths["project_root"], session)
+    try:
+        draft_result = save_tagging_session(paths["project_root"], session)
+        session_saved = bool(draft_result.get("ok"))
+        session_error = "" if session_saved else str(draft_result.get("error") or "Session save failed")
+    except Exception as exc:
+        session_saved = False
+        session_error = str(exc)
     logs = [f"Saved image {img.name}: {len(final_tags)} tags written"]
+    if not session_saved:
+        logs.append(f"[WARN] Caption was written, but session progress could not be saved: {session_error}")
     if session.get("status") == "completed":
         logs.append(f"Session completed: {completed} / {len(image_rels)} images")
     return {
         "ok": True,
         "tags": final_tags,
         "txt_rel": txt_path.relative_to(paths["dataset_root"]).as_posix(),
+        "session_saved": session_saved,
+        "session_error": session_error,
         "session": session,
         "logs": logs,
         **_make_serializable_path_info(paths),
@@ -3095,14 +3113,17 @@ def handle(form, ctx):
     errors = 0
     missing_txt_skipped = 0
     missing_txt_created = 0
+    dry_run = str(form.get('dry_run') or '').lower() in {'1', 'true', 'on'}
+    backups_created = 0
     for img in images:
         txt = img.with_suffix(".txt")
         if not txt.exists():
             if mode == "insert" and create_missing_txt:
                 try:
-                    txt.write_text(join_tags(add), encoding="utf-8")
-                    _invalidate_cache(txt)
-                    lines.append(f"{img.name}: created missing .txt with insert tags")
+                    if not dry_run:
+                        txt.write_text(join_tags(add), encoding="utf-8")
+                        _invalidate_cache(txt)
+                    lines.append(f"{img.name}: {'would create' if dry_run else 'created'} missing .txt with insert tags")
                     processed += 1
                     missing_txt_created += 1
                 except Exception as exc:
@@ -3144,8 +3165,13 @@ def handle(form, ctx):
         if content.strip() == src.strip():
             continue
         try:
+            if dry_run:
+                lines.append(f"[preview] {txt.relative_to(temp_folder)}: {src.strip()} -> {content}")
+                processed += 1
+                continue
             if backup:
                 txt.with_suffix(txt.suffix + ".bak").write_text(src, encoding="utf-8")
+                backups_created += 1
             txt.write_text(content, encoding="utf-8")
             _invalidate_cache(txt)
             lines.append(f"{img.name}: {action_desc}")
@@ -3158,6 +3184,15 @@ def handle(form, ctx):
     if mode == "insert" and missing_txt_skipped:
         lines.append(f"Skipped {missing_txt_skipped} image(s) without paired .txt in {temp_folder}.")
     if mode == "insert" and missing_txt_created:
-        lines.append(f"Created {missing_txt_created} new .txt file(s) for images that had no paired tags.")
-    lines.append(f"Done. {processed} file(s) updated in {temp_folder}. Errors: {errors}.")
-    return _done(errors == 0, "" if errors == 0 else f"{errors} file update(s) failed.")
+        lines.append(f"{'Would create' if dry_run else 'Created'} {missing_txt_created} new .txt file(s) for images that had no paired tags.")
+    lines.append(f"{'Preview only' if dry_run else 'Done'}. {processed} file(s) {'would change' if dry_run else 'updated'} in {temp_folder}. Errors: {errors}.")
+    unchanged = len(images) - processed - errors - missing_txt_skipped
+    result = build_tool_result(
+        active_tab, lines, ok=errors == 0,
+        error="" if errors == 0 else f"{errors} file update(s) failed.",
+        scope="Staged captions", scanned=len(images), changed=processed,
+        skipped=missing_txt_skipped, created=missing_txt_created, errors=errors,
+        output_path=str(temp_folder), artifacts={"backups_created": backups_created},
+    )
+    result[2]["counts"]["unchanged"] = unchanged
+    return result

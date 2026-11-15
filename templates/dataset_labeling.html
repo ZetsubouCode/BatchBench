@@ -376,7 +376,7 @@
   .quiz-progress-line .quiz-progress-meter::before { display:none; }
   .quiz-progress-line .quiz-progress-meter span + span::before { display:none; }
   .quiz-progress-track { position:relative; width:min(280px, 36vw); min-width:150px; height:.42rem; border:1px solid #31445c; border-radius:999px; background:linear-gradient(90deg, rgba(20,31,46,.9), var(--quiz-progress-soft)); overflow:hidden; }
-  .quiz-progress-fill { display:block; width:var(--quiz-progress-pct); height:100%; border-radius:inherit; background:linear-gradient(90deg, rgba(129,157,185,.42), var(--quiz-progress-color)); box-shadow:0 0 14px var(--quiz-progress-glow); transition:width .18s ease, background-color .18s ease, box-shadow .18s ease; }
+  .quiz-progress-fill { display:block; width:var(--quiz-progress-pct); height:100%; border-radius:inherit; background:var(--bb-primary); }
   .quiz-progress-percent { min-width:3.3rem; color:#f3f8ff; font-weight:700; }
   .quiz-selected-list, .quiz-recommended-list { display:flex; flex-wrap:wrap; align-content:flex-start; gap:.25rem; max-height:180px; overflow:auto; border:1px solid var(--bb-border); border-radius:.45rem; padding:.45rem; background:rgba(0,0,0,.12); }
   .quiz-recommended-list { min-height:116px; max-height:320px; }
@@ -636,6 +636,7 @@
     .gallery-modal-arrow { width:48px; height:48px; font-size:1.7rem; }
   }
 </style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dataset_tag_editor_workspace.css') }}">
 
 <div class="tag-editor-layout" id="tag-editor-layout">
   <div class="tag-editor-form">
@@ -651,7 +652,7 @@
 
     <div class="row g-3">
       <div class="col-md-4">
-        <label class="form-label">Project Root</label>
+        <label class="form-label" for="folder_tags">Project root</label>
         <div class="input-group">
           <input id="folder_tags" name="folder" type="text" class="form-control" data-path-role="project"
                  placeholder="Paste image folder path (this becomes Project Root)" data-bs-toggle="tooltip"
@@ -666,7 +667,7 @@
       <input type="hidden" name="mode" id="mode-select" value="">
 
       <div class="col-md-4">
-        <label class="form-label">Image extensions (comma)</label>
+        <label class="form-label" for="exts">Image extensions</label>
         <input class="form-control" id="exts" name="exts" value=".jpg,.jpeg,.png,.webp"
                data-bs-toggle="tooltip" data-bs-title="Which image types to include">
       </div>
@@ -694,6 +695,7 @@
             </div>
           </div>
           <div class="tagging-quiz-status mt-2" id="tagging-quiz-status">No active guided tagging session loaded.</div>
+          <details class="te-assist"><summary>Autosuggest · optional model inspection</summary>
           <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
             <select class="form-select form-select-sm" id="tagging-context-model" style="max-width:230px" aria-label="Context suggestion model"></select>
             <select class="form-select form-select-sm" id="tagging-context-sensitivity" style="max-width:150px" aria-label="Suggestion sensitivity">
@@ -706,6 +708,7 @@
             <button type="button" class="btn btn-sm btn-outline-warning d-none" id="tagging-context-cancel">Cancel</button>
             <span class="small text-muted" id="tagging-context-status">Suggestions not generated</span>
           </div>
+          </details>
           <div class="tagging-quiz-resume mt-2 d-none" id="tagging-quiz-resume-banner"></div>
         </div>
       </div>
@@ -811,13 +814,13 @@
                 <label class="form-label mb-0">Tag Explorer</label>
                 <button type="button" class="btn btn-outline-secondary btn-sm info-tip-btn" id="tagviz-info-tip"
                         data-bs-toggle="tooltip" data-bs-html="true"
-                        data-bs-title="Select tags -&gt; choose mode -&gt; Run. Edits run on dataset/_temp only; send items there from the Dataset Browser first.&lt;br&gt;Auto-sync ON&lt;br&gt;Glow = tags present in _temp.">
+                        data-bs-title="Select tags -&gt; choose mode -&gt; Run. Edits run on dataset/_temp only; send items there from the Dataset Browser first.&lt;br&gt;Auto-sync ON&lt;br&gt;Scope: staged captions only." aria-label="Tag Explorer help">
                   <i class="bi bi-info-circle"></i>
                 </button>
               </div>
               <div class="small text-muted d-none" id="tagviz-hint">Use this with Bulk Tag CRUD for direct edits in dataset/_temp.</div>
               <div class="tag-sync-status d-none" id="tagviz-sync-status">Auto-sync ON</div>
-              <div class="small text-muted d-none" id="tagviz-glow-note">Glow = tags present in _temp.</div>
+              <div class="small text-muted d-none" id="tagviz-glow-note">Scope: staged captions only.</div>
             </div>
             <div class="d-flex gap-2">
               <button type="button" class="btn btn-outline-light btn-sm" id="tagviz-scan">Scan tags</button>
@@ -830,16 +833,16 @@
           </div>
           <div class="row g-2 mt-2">
             <div class="col-md-4">
-              <input id="tagviz-filter" class="form-control form-control-sm" placeholder="Filter tags">
+              <input id="tagviz-filter" class="form-control form-control-sm" aria-label="Filter tags" placeholder="Filter tags">
             </div>
             <div class="col-md-3">
-              <select id="tagviz-sort" class="form-select form-select-sm">
+              <select id="tagviz-sort" class="form-select form-select-sm" aria-label="Sort tags">
                 <option value="count">Sort by count</option>
                 <option value="az">Sort A-Z</option>
               </select>
             </div>
             <div class="col-md-3">
-              <input id="tagviz-min" type="number" min="1" class="form-control form-control-sm" placeholder="Min count">
+              <input id="tagviz-min" type="number" min="1" class="form-control form-control-sm" aria-label="Minimum tag frequency" placeholder="Min count">
             </div>
             <div class="col-md-2 d-flex align-items-center">
               <div class="small text-muted" id="tagviz-stats">0 tags</div>
@@ -864,17 +867,25 @@
             </div>
           </div>
           <div class="gallery-toolbar">
+            <input type="search" class="form-control form-control-sm" id="gallery-filename-search" aria-label="Search filenames in loaded images" placeholder="Find filename in loaded images">
+            <select class="form-select form-select-sm" id="gallery-caption-filter" aria-label="Filter loaded images">
+              <option value="all">All loaded images</option>
+              <option value="with">With caption</option>
+              <option value="missing">Missing caption</option>
+              <option value="selected">Selected images</option>
+            </select>
+            <button type="button" class="btn btn-sm btn-outline-light" id="gallery-clear-filters">Clear filters</button>
             <div class="form-check form-switch">
               <input class="form-check-input" type="checkbox" id="gallery-recursive" checked>
               <label class="form-check-label" for="gallery-recursive">Recursive</label>
             </div>
             <div class="input-group input-group-sm" style="width:130px;">
-              <span class="input-group-text">Limit</span>
-              <input class="form-control" type="number" id="gallery-limit" min="10" max="500" value="80">
+              <span class="input-group-text">Load limit</span>
+              <input class="form-control" type="number" id="gallery-limit" min="10" max="500" value="80" aria-label="Image display limit">
             </div>
             <div class="input-group input-group-sm" style="min-width:190px;max-width:220px;">
               <span class="input-group-text">Sort</span>
-              <select class="form-select" id="gallery-sort">
+              <select class="form-select" id="gallery-sort" aria-label="Sort images">
                 <option value="match">Match priority</option>
                 <option value="name_asc">Name A-Z</option>
                 <option value="name_desc">Name Z-A</option>
@@ -884,7 +895,8 @@
             </div>
             <div class="input-group input-group-sm gallery-grid-control" style="min-width:180px;max-width:220px;">
               <span class="input-group-text">Grid</span>
-              <select class="form-select" id="gallery-grid-cols">
+              <select class="form-select" id="gallery-grid-cols" aria-label="Thumbnail columns">
+                <option value="auto" selected>Auto fit</option>
                 <option value="2">2 / row</option>
                 <option value="3">3 / row</option>
                 <option value="4">4 / row</option>
@@ -894,7 +906,7 @@
           </div>
           <div class="gallery-selection-toolbar mt-2">
             <button type="button" class="btn btn-sm btn-outline-light gallery-selection-toggle" id="gallery-select-toggle">Select All</button>
-            <button type="button" class="btn btn-sm btn-warning d-md-none" id="gallery-send-selected-mobile">Send selected to _temp</button>
+            <button type="button" class="btn btn-sm btn-outline-light" id="gallery-send-selected-mobile" disabled>Stage selected in _temp</button>
             <span class="gallery-selection-count" id="gallery-selection-count">0 selected</span>
             <span class="gallery-selection-note">Drag selected cards to any folder in Dataset Workspace.</span>
           </div>
@@ -903,7 +915,7 @@
               <div class="gallery-cheatsheet-title">Dataset tag cheat sheet (project root)</div>
               <div class="input-group input-group-sm" style="min-width:220px;max-width:320px;">
                 <span class="input-group-text">TXT</span>
-                <input type="text" class="form-control" id="gallery-cheatsheet-file" placeholder="prompt.txt">
+                <input type="text" class="form-control" id="gallery-cheatsheet-file" aria-label="Project cheat sheet filename" placeholder="prompt.txt">
                 <button type="button" class="btn btn-outline-light" id="gallery-cheatsheet-load">Load</button>
               </div>
             </div>
@@ -957,7 +969,7 @@
               <strong>Mode help:</strong>
               <span id="mode-desc">Select a mode to continue.</span>
             </div>
-            <label class="form-label">Tags / mapping</label>
+            <label class="form-label" for="tags">Tags / mapping</label>
             <input class="form-control" id="tags" name="tags" form="tags-form" data-tag-suggestion-section="manual_tags"
                    placeholder="add/remove: tag1, tag2   |   rename: old->new; old2->new2"
                    data-bs-toggle="tooltip"
@@ -993,7 +1005,7 @@
           </div>
         </div>
         <div class="sidebar-runbar">
-          <button class="btn btn-primary" id="btn-run" type="submit" form="tags-form">Run</button>
+          <button class="btn btn-primary" id="btn-run" type="submit" form="tags-form">Apply to staged captions</button>
           <button type="button" class="btn btn-outline-info" id="btn-dataset-zip"
                   data-bs-toggle="tooltip" data-bs-title="Zip dataset/ to project root (exclude dataset/_temp)">
             Zip Dataset
@@ -1027,7 +1039,7 @@
               <div class="fw-semibold">Dataset Workspace</div>
               <button type="button" class="btn btn-outline-secondary btn-sm info-tip-btn" id="workdir-info-tip"
                       data-bs-toggle="tooltip"
-                      data-bs-title="Use this side panel for staging and return flow while the browser stays in the main reading path after Tag Explorer.">
+                      data-bs-title="Use this side panel for staging and return flow while the browser stays in the main reading path after Tag Explorer." aria-label="Staging workspace help">
                 <i class="bi bi-info-circle"></i>
               </button>
             </div>
@@ -1071,7 +1083,7 @@
         </div>
         <div class="workdir-tree" id="workdir-tree"></div>
         <div class="workdir-actions mt-2">
-          <input class="form-control form-control-sm" type="text" id="workdir-new-name" placeholder="New folder name">
+          <input class="form-control form-control-sm" type="text" id="workdir-new-name" aria-label="New folder name" placeholder="New folder name">
           <button type="button" class="btn btn-sm btn-outline-light" id="workdir-create">New folder</button>
           <button type="button" class="btn btn-sm btn-outline-danger" id="workdir-delete">Delete selected</button>
         </div>
@@ -1087,12 +1099,12 @@
   </nav>
 </div>
 
-<div class="modal fade" id="tagsConfirmModal" tabindex="-1" aria-hidden="true">
+<div class="modal fade" id="tagsConfirmModal" tabindex="-1" aria-hidden="true" role="dialog">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content" style="background:var(--bb-card);color:var(--bb-text);border:1px solid var(--bb-border);">
       <div class="modal-header">
         <h5 class="modal-title">Confirm action</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body" id="tags-confirm-msg"></div>
       <div class="modal-footer">
@@ -1103,12 +1115,12 @@
   </div>
 </div>
 
-<div class="modal fade" id="galleryPreviewModal" tabindex="-1" aria-hidden="true">
+<div class="modal" id="galleryPreviewModal" tabindex="-1" aria-hidden="true" role="dialog">
   <div class="modal-dialog modal-xl modal-dialog-centered">
     <div class="modal-content" style="background:var(--bb-card);color:var(--bb-text);border:1px solid var(--bb-border);">
       <div class="modal-header">
         <h5 class="modal-title" id="gallery-preview-title">Image preview</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
         <div class="gallery-modal-nav">
@@ -1145,7 +1157,7 @@
                 <div class="small text-muted" id="gallery-preview-temp-note">Manual add is available for items inside _temp.</div>
               </div>
               <div class="input-group input-group-sm mt-2">
-                <input type="text" class="form-control gallery-manual-input" id="gallery-preview-add-tags" data-tag-suggestion-section="manual_tags" placeholder="Add tags, comma separated">
+                <input type="text" class="form-control gallery-manual-input" id="gallery-preview-add-tags" aria-label="Add caption tags" data-tag-suggestion-section="manual_tags" placeholder="Add tags, comma separated">
                 <button type="button" class="btn btn-outline-light" id="gallery-preview-add-btn">Add tags</button>
               </div>
               <div class="gallery-manual-note mt-2" id="gallery-preview-add-status"></div>
@@ -1155,8 +1167,8 @@
                   <button type="button" class="btn btn-sm btn-outline-secondary" id="gallery-preview-open-glossary">Open full glossary</button>
                 </div>
                 <div class="gallery-glossary-controls">
-                  <input type="text" class="form-control form-control-sm" id="gallery-preview-glossary-search" placeholder="Search glossary tags">
-                  <select class="form-select form-select-sm" id="gallery-preview-glossary-filter"></select>
+                  <input type="text" class="form-control form-control-sm" id="gallery-preview-glossary-search" aria-label="Search glossary tags" placeholder="Search glossary tags">
+                  <select class="form-select form-select-sm" id="gallery-preview-glossary-filter" aria-label="Glossary category"></select>
                   <button type="button" class="btn btn-sm btn-outline-light" id="gallery-preview-glossary-clear">Clear</button>
                 </div>
                 <div class="gallery-glossary-list" id="gallery-preview-glossary-list"></div>
@@ -1195,7 +1207,7 @@
         </div>
         <div class="d-flex gap-2 flex-wrap mt-2">
           <button type="button" class="btn btn-sm btn-outline-warning" id="danbooru-star-btn" disabled>Star</button>
-          <select class="form-select form-select-sm" id="danbooru-star-category" style="max-width:160px;"></select>
+          <select class="form-select form-select-sm" id="danbooru-star-category" style="max-width:160px;" aria-label="Glossary category for this tag"></select>
           <button type="button" class="btn btn-sm btn-outline-secondary" id="danbooru-add-category">New category</button>
           <button type="button" class="btn btn-sm btn-outline-light" id="danbooru-select-btn" disabled>Select this tag</button>
           <a class="btn btn-sm btn-outline-light" id="danbooru-open-link" href="https://danbooru.donmai.us" target="_blank" rel="noopener noreferrer">Open Danbooru</a>
@@ -1244,21 +1256,21 @@
           </div>
           <div class="danbooru-glossary-stats" id="danbooru-glossary-stats"></div>
           <div class="danbooru-glossary-form">
-            <input class="form-control form-control-sm" id="danbooru-glossary-tag-input" placeholder="Add a tag, for example long hair">
-            <select class="form-select form-select-sm" id="danbooru-glossary-tag-category"></select>
+            <input class="form-control form-control-sm" id="danbooru-glossary-tag-input" aria-label="New glossary tag" placeholder="Add a tag, for example long hair">
+            <select class="form-select form-select-sm" id="danbooru-glossary-tag-category" aria-label="New tag category"></select>
             <button type="button" class="btn btn-sm btn-outline-info" id="danbooru-glossary-tag-add">Add tag</button>
           </div>
           <div class="danbooru-glossary-category-form">
-            <input class="form-control form-control-sm" id="danbooru-glossary-category-input" placeholder="New category name">
+            <input class="form-control form-control-sm" id="danbooru-glossary-category-input" aria-label="New glossary category" placeholder="New category name">
             <button type="button" class="btn btn-sm btn-outline-secondary" id="danbooru-glossary-category-add">Add category</button>
           </div>
         </div>
         <div class="row g-2">
           <div class="col-7">
-            <input class="form-control form-control-sm" id="danbooru-glossary-search" placeholder="Search glossary tags">
+            <input class="form-control form-control-sm" id="danbooru-glossary-search" aria-label="Search glossary tags" placeholder="Search glossary tags">
           </div>
           <div class="col-5">
-            <select class="form-select form-select-sm" id="danbooru-glossary-filter"></select>
+            <select class="form-select form-select-sm" id="danbooru-glossary-filter" aria-label="Filter glossary category"></select>
           </div>
         </div>
         <div class="danbooru-glossary-list mt-2" id="danbooru-glossary-list"></div>
@@ -1267,7 +1279,7 @@
   </div>
 </div>
 
-<div class="modal fade" id="tagging-quiz-setup-modal" tabindex="-1" aria-hidden="true">
+<div class="modal fade" id="tagging-quiz-setup-modal" tabindex="-1" aria-hidden="true" role="dialog">
   <div class="modal-dialog modal-xl modal-dialog-scrollable">
     <div class="modal-content bg-dark text-light">
       <div class="modal-header">
@@ -1333,7 +1345,7 @@
   </div>
 </div>
 
-<div class="modal fade" id="tagging-quiz-modal" tabindex="-1" aria-label="Guided Tagging Flow" aria-hidden="true">
+<div class="modal fade" id="tagging-quiz-modal" tabindex="-1" aria-label="Guided Tagging Flow" aria-hidden="true" data-bs-backdrop="static" role="dialog">
   <div class="modal-dialog modal-fullscreen-lg-down quiz-fullscreen-dialog modal-dialog-scrollable">
     <div class="modal-content bg-dark text-light">
       <div class="modal-header">
@@ -1411,9 +1423,16 @@
                 <div class="small text-muted">Current image</div>
                 <div class="monospace small" id="tagging-quiz-image-name" title="">-</div>
               </div>
-              <div class="small text-muted" id="tagging-quiz-autosave">Autosave idle</div>
+              <div class="small text-muted" id="tagging-quiz-autosave" role="status" aria-live="polite">Draft not saved</div>
             </div>
             <div class="quiz-image-stage" id="tagging-quiz-image-stage"></div>
+            <div class="te-image-tools" aria-label="Image inspection">
+              <button type="button" class="btn btn-sm btn-outline-light" id="tagging-desktop-zoom-out" aria-label="Zoom out">−</button>
+              <button type="button" class="btn btn-sm btn-outline-light" id="tagging-desktop-zoom-fit">Fit</button>
+              <span id="tagging-desktop-zoom-value" aria-live="polite">100%</span>
+              <button type="button" class="btn btn-sm btn-outline-light" id="tagging-desktop-zoom-in" aria-label="Zoom in">+</button>
+              <button type="button" class="btn btn-sm btn-outline-light" id="tagging-desktop-fullscreen">Fullscreen</button>
+            </div>
             <div class="quiz-complete-caption" aria-live="polite">
               <div class="quiz-complete-caption-heading">
                 <div class="small text-muted">Complete caption · all segments</div>
@@ -1428,6 +1447,7 @@
               <div class="quiz-segment-banner-label">Current Segment</div>
               <div class="quiz-segment-banner-title" id="tagging-quiz-segment-title">-</div>
             </div>
+            <nav class="te-segments" id="tagging-desktop-segments" aria-label="Tagging segments"></nav>
             <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap mt-2">
               <label class="form-label mb-0">Selected / Preselected</label>
               <span class="quiz-segment-mode-badge" id="tagging-quiz-segment-mode">Multi choice</span>
@@ -1451,7 +1471,7 @@
                   <div class="quiz-tag-panel-title">Manual Tags</div>
                   <div class="small text-muted" id="tagging-quiz-manual-help">Comma separated. Suggestions use your glossary.</div>
                 </div>
-                <textarea class="form-control" id="tagging-quiz-manual" aria-label="Manual tags" aria-describedby="tagging-quiz-manual-help" data-tag-suggestion-section="manual_tags" rows="4" placeholder="tag1, tag2"></textarea>
+                <textarea class="form-control" id="tagging-quiz-manual" aria-label="Manual tags" aria-describedby="tagging-quiz-manual-help" data-tag-suggestion-section="manual_tags" rows="2" placeholder="long hair, blue eyes"></textarea>
                 <label class="quiz-manual-apply-all" title="Adds these manual tags to the current segment for every image in this tagging session. You can still remove them per image later." data-bs-toggle="tooltip" data-bs-title="Adds these manual tags to the current segment for every image in this tagging session. You can still remove them per image later.">
                   <input class="form-check-input" type="checkbox" id="tagging-quiz-manual-apply-all">
                   <span>Apply to all session images</span>
@@ -1530,12 +1550,13 @@
         </div>
       </div>
       <div class="modal-footer justify-content-between quiz-desktop-footer">
-        <button type="button" class="btn btn-outline-info" id="tagging-quiz-prev-image">Previous</button>
+        <button type="button" class="btn btn-outline-info" id="tagging-quiz-prev-image">Previous image</button>
+        <div class="te-save-status" id="tagging-caption-status" role="status" aria-live="polite">Caption not saved</div>
         <div class="d-flex gap-2 flex-wrap">
           <button type="button" class="btn btn-sm btn-outline-light" id="tagging-quiz-prev-segment" disabled>Previous segment</button>
           <button type="button" class="btn btn-sm btn-outline-light" id="tagging-quiz-next-segment" disabled>Next segment</button>
           <details class="quiz-desktop-more"><summary>More</summary><div class="quiz-desktop-more-menu">
-            <button type="button" class="btn btn-sm btn-outline-secondary" id="tagging-quiz-skip">Skip segment</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="tagging-quiz-skip">Not Applicable</button>
             <button type="button" class="btn btn-sm btn-outline-warning d-none" id="tagging-quiz-retry-guided">Retry Guided Tagging</button>
             <button type="button" class="btn btn-sm btn-outline-info" id="tagging-quiz-continue-later">Continue later</button>
             <button type="button" class="btn btn-sm btn-outline-light" id="tagging-quiz-open-overview">Session overview</button>
@@ -1547,7 +1568,7 @@
   </div>
 </div>
 
-<div class="modal fade" id="tagging-quiz-overview-modal" tabindex="-1" aria-hidden="true">
+<div class="modal fade" id="tagging-quiz-overview-modal" tabindex="-1" aria-hidden="true" role="dialog">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content bg-dark text-light">
       <div class="modal-header">
@@ -1575,6 +1596,7 @@
   </div>
 </div>
 
+<script src="{{ url_for('static', filename='js/dataset_tag_editor_workspace.js') }}"></script>
 <script>
 (() => {
   const get = id => document.getElementById(id);
@@ -1949,6 +1971,11 @@
     lastManualApplyAll: null,
     manualConfirmResolve: null,
     saveTimer: null,
+    saveQueue: Promise.resolve(),
+    draftDirty: false,
+    captionSaving: false,
+    galleryDirty: false,
+    allowClose: false,
     saveSeq: 0,
     lastAcceptedSaveSeq: 0,
     sessionVersion: 0,
@@ -1972,7 +1999,7 @@
     root: '',
     selected: '',
     expanded: new Set(),
-    tempItems: []
+    tempItems: [], tempTotal:0, tempLimit:120
   };
   const danbooruState = {
     offcanvas: null,
@@ -2010,6 +2037,7 @@
   let galleryLoadBusy = false;
   let galleryLoadQueued = false;
   let leftPanel = null;
+  let leftPanelReturnFocus = null;
   let leftDrawerHome = null;
   let leftBackdropHome = null;
   let quizManualCheatsheetTags = null;
@@ -2203,7 +2231,9 @@
   function qAcceptServerSession(session){
     quizState.saveSeq = (quizState.saveSeq || 0) + 1;
     quizState.lastAcceptedSaveSeq = quizState.saveSeq;
-    return qReplaceSession(session);
+    const result = qReplaceSession(session);
+    quizState.draftDirty = false;
+    return result;
   }
 
   function qSessionImageEntries(includeMissing = false){
@@ -3065,6 +3095,7 @@
     if (!root) return null;
     try{
       const data = await qPost('/api/tagging-quiz/session/load', {project_root: root});
+      if (qRootKey(root) !== qRootKey(qProjectRoot())) return null;
       qReplaceSession(data.session || null);
       if (quizState.session){
         quizState.mappingRows = JSON.parse(JSON.stringify(quizState.session.mapping_rows || []));
@@ -3082,39 +3113,24 @@
   }
 
   function qUpdateResumeBanner(warnings = []){
-    const btn = get(QUIZ.cont);
-    const banner = get(QUIZ.resume);
-    const setupBtn = get(QUIZ.setup);
-    const startBtn = get(QUIZ.start);
-    const setupStartBtn = get(QUIZ.startSetup);
+    window.BatchBenchTagWorkspace?.project({root:getResolvedProjectRoot(), dataset:getDatasetRoot(), ready:projectState.ready, matches:!quizState.session || qSessionMatchesCurrentProject()});
     const session = quizState.session;
-    const activeCurrentSession = qHasActiveCurrentSession();
-    btn?.classList.toggle('d-none', !activeCurrentSession);
-    if (setupBtn) setupBtn.textContent = session && (session.mapping_rows || []).length ? 'Edit Tagging Setup' : 'Tagging Setup';
-    if (startBtn) startBtn.textContent = session && (session.mapping_rows || []).length ? 'Open Tagging Flow' : 'Start Tagging';
-    if (setupStartBtn) {
-      setupStartBtn.textContent = activeCurrentSession ? 'Continue Tagging' : 'Start Tagging';
-      setupStartBtn.title = activeCurrentSession
-        ? 'Continue the existing active session for this project path.'
-        : 'Create a new guided tagging session from this setup.';
+    const active = qHasActiveCurrentSession();
+    const hasSetup = !!(session && (session.mapping_rows || []).length);
+    get(QUIZ.cont)?.classList.add('d-none');
+    const start = get(QUIZ.start);
+    if (start) start.textContent = active ? 'Resume Tagging' : hasSetup ? 'Review Captions' : 'Start Tagging';
+    if (get(QUIZ.setup)) get(QUIZ.setup).textContent = hasSetup ? 'Edit Tagging Setup' : 'Tagging Setup';
+    if (get(QUIZ.startSetup)) get(QUIZ.startSetup).textContent = active ? 'Continue Tagging' : 'Start Tagging';
+    const banner = get(QUIZ.resume);
+    if (banner) { banner.classList.add('d-none'); banner.textContent = ''; }
+    const status = get(QUIZ.status);
+    if (status) {
+      const images = qSessionImageEntries(false);
+      const written = images.filter(([, entry]) => entry.final_tags_written).length;
+      status.textContent = !session ? 'No saved session' : `${session.status === 'completed' ? 'Session completed' : get(QUIZ.quizModal)?.classList.contains('show') ? 'Session active' : 'Saved session available'} · ${written}/${images.length} captions written${warnings.length ? ` · ${warnings.length} warning(s)` : ''}`;
+      status.title = [session?.current?.image_rel || '', ...warnings].filter(Boolean).join(' | ');
     }
-    if (!banner) return;
-    if (!session){
-      banner.classList.add('d-none');
-      banner.textContent = '';
-      qNotifyMobileState();
-      return;
-    }
-    const images = qSessionImageEntries(false);
-    const completed = images.filter(([, it]) => it && it.status === 'completed').length;
-    const total = images.length;
-    const current = session.current || {};
-    const seg = qSegments().find(s => s.id === current.segment_id);
-    const currentStep = current.free_tagging ? 'Free Tagging' : ((seg && seg.label) || current.segment_id || '-');
-    banner.classList.remove('d-none');
-    const currentEntry = current.image_rel ? session.images?.[current.image_rel] : null;
-    const tagCount = qImageTagRows(currentEntry).length;
-    banner.textContent = `Resume: ${current.image_rel || '-'} / ${currentStep} | ${tagCount} image tag${tagCount === 1 ? '' : 's'} | ${completed}/${total} done${warnings.length ? ' | ' + warnings.join(' | ') : ''}`;
     qNotifyMobileState();
   }
 
@@ -3146,6 +3162,11 @@
 
   function qCurrentSegmentChoiceMode(){
     return qSegmentChoiceMode(qCurrentSegment());
+  }
+
+  function qCanSkipSegment(){
+    const step = qReviewStepForSegment(qCurrentSegment());
+    return !qIsFreeTaggingMode() && (!step?.required || !!step.allow_not_applicable);
   }
 
   function qCurrentStepAutoAdvance(){
@@ -3234,12 +3255,10 @@
     const percent = qProgressPercent(session, imageKeys, segments, freeMode);
     qApplyProgressStyle(progress, percent);
     progress.innerHTML = `
-      <span class="quiz-progress-meter"><span class="quiz-progress-track" aria-hidden="true"><span class="quiz-progress-fill"></span></span><span class="quiz-progress-percent">${percent}%</span></span>
+      <span class="quiz-progress-meter" title="Estimated session progress from completed images and the current segment position"><span>Review estimate</span><span class="quiz-progress-track" aria-hidden="true"><span class="quiz-progress-fill"></span></span><span class="quiz-progress-percent">${percent}%</span></span>
       <span>Image ${displayImageNumber} / ${imageKeys.length}</span>
       <span>${freeMode ? 'Free tagging' : `Segment ${(Number(session.current?.segment_index || 0) + 1)} / ${segments.length}`}</span>
       <span>Image tags: ${imageTagCount}</span>
-      <span>${escapeHtml(freeMode ? 'No segment restrictions' : ((seg && seg.label) || '-'))}</span>
-      <span>${escapeHtml(session.status || 'active')}</span>
     `;
     qReportDiscordPresence(displayImageNumber, imageKeys.length, freeMode, seg);
   }
@@ -3276,7 +3295,7 @@
     let completedUnits = completedImages * segmentCount;
     const currentEntry = qCurrentImageEntry();
     if (!freeMode && currentEntry && currentEntry.status !== 'completed'){
-      completedUnits += Math.max(0, Math.min(segmentCount - 1, Number(session.current?.segment_index || 0)));
+      completedUnits += qStepProgress().resolved.filter(Boolean).length;
     }
     return Math.max(0, Math.min(100, Math.round((completedUnits / totalUnits) * 100)));
   }
@@ -3299,9 +3318,21 @@
     if (!session) return;
     const rel = qCurrentImageRel();
     const segments = qSegments();
+    const freeMode = qIsFreeTaggingMode();
+    if (!freeMode && Number(session.current?.segment_index || 0) > qStepProgress().unlocked){
+      session.current.segment_index = qStepProgress().unlocked;
+      session.current.segment_id = segments[qStepProgress().unlocked]?.id || '';
+    }
     const seg = qCurrentSegment();
     const state = qCurrentSegmentState();
-    const freeMode = qIsFreeTaggingMode();
+    const cursor = `${rel}:${freeMode ? 'free' : session.current?.segment_index}`;
+    if (quizState.renderedCursor !== cursor) {
+      const pane = get(QUIZ.quizModal)?.querySelector('.quiz-tag-pane');
+      if (pane) pane.scrollTop = 0;
+      quizState.renderedCursor = cursor;
+    }
+    window.BatchBenchTagWorkspace?.segments({segments, entry:qCurrentImageEntry(), index:Number(session.current?.segment_index || 0), free:freeMode,
+      jump:number => qMoveToSegmentNumber(number).catch(err => qSetStatus(`Segment navigation failed: ${err.message}`))});
     const singleChoiceMode = !freeMode && qIsSingleChoiceSegment(seg);
     qRenderQuizProgress();
     get(QUIZ.imageName).textContent = rel || '-';
@@ -3329,7 +3360,8 @@
     const segmentIndex = Number(session.current?.segment_index || 0);
     get(QUIZ.prev)?.toggleAttribute('disabled', freeMode || segmentIndex <= 0);
     get(QUIZ.next)?.toggleAttribute('disabled', freeMode || segmentIndex >= segments.length - 1);
-    get(QUIZ.skip)?.toggleAttribute('disabled', freeMode);
+    get(QUIZ.skip)?.toggleAttribute('disabled', !qCanSkipSegment());
+    if(get(QUIZ.skip)) get(QUIZ.skip).title=qCanSkipSegment()?'Mark this step Not Applicable':'This required step needs a tag selection';
     get(QUIZ.prevImage)?.toggleAttribute('disabled', !qHasFreeModeTarget(-1));
     const search = get(QUIZ.search);
     if (search){
@@ -3356,7 +3388,8 @@
       retryBtn.disabled = !freeMode || !segments.length || !rel;
     }
     const stage = get(QUIZ.imageStage);
-    if (stage) {
+    if (stage && stage.dataset.imageRel !== rel) {
+      stage.dataset.imageRel = rel;
       stage.innerHTML = '';
       if (rel !== quizState.quizImageRel){
         quizState.quizImageRel = rel || '';
@@ -3368,8 +3401,16 @@
         img.alt = `Current tagging image: ${rel}`;
         img.draggable = false;
         img.title = 'Click to view fullscreen';
+        const imageStatus = document.createElement('span');
+        imageStatus.className = 'te-image-state';
+        imageStatus.setAttribute('role', 'status');
+        imageStatus.textContent = 'Loading image…';
+        stage.setAttribute('aria-busy', 'true');
+        img.hidden = true;
+        img.addEventListener('load', () => { img.hidden = false; imageStatus.remove(); stage.setAttribute('aria-busy', 'false'); qApplyQuizImageZoom(); });
+        img.addEventListener('error', () => { imageStatus.textContent = `Image unavailable: ${rel}. Check the file, then refresh the dataset.`; stage.setAttribute('aria-busy', 'false'); });
         img.addEventListener('click', qToggleImageFullscreen);
-        stage.appendChild(img);
+        stage.append(img, imageStatus);
         qApplyQuizImageZoom();
       } else {
         const empty = document.createElement('span');
@@ -3452,7 +3493,9 @@
     const chip = document.createElement('button');
     chip.type = 'button';
     chip.className = 'quiz-chip selected segmented';
-    chip.title = `${qSegmentLabel(segId)}: remove ${tag}`;
+    if (qTags(quizState.sessionDefaults?.[segId] || []).includes(normalizeDanbooruTag(tag))) chip.classList.add('default');
+    chip.setAttribute('aria-label', `Remove ${tag} from ${qSegmentLabel(segId)}`);
+    chip.title = `${qSegmentLabel(segId)}${chip.classList.contains('default') ? ' · preselected' : ''}: remove ${tag}`;
     qApplySegmentStyle(chip, segId);
     const dot = document.createElement('span');
     dot.className = 'quiz-seg-dot';
@@ -3465,7 +3508,15 @@
     chip.appendChild(dot);
     chip.appendChild(label);
     chip.appendChild(remove);
-    chip.addEventListener('click', onRemove);
+    chip.addEventListener('click', () => {
+      const restoreFocus = document.activeElement === chip;
+      onRemove();
+      if (restoreFocus) {
+        const target = get(QUIZ.selected)?.querySelector('button')
+          || (!get(QUIZ.manualBox)?.classList.contains('d-none') ? get(QUIZ.manual) : get(QUIZ.search));
+        target?.focus({preventScroll:true});
+      }
+    });
     return chip;
   }
 
@@ -3585,10 +3636,10 @@
   }
 
   function qManualHelpText(segment = qCurrentSegment()){
-    if (qIsFreeTaggingMode()) return 'Free tagging writes manual tags directly to the image caption.';
+    if (qIsFreeTaggingMode()) return 'Enter tags, then Save & Next to write the caption.';
     if (qIsSingleChoiceSegment(segment)) return 'Choose one tag from this segment option list.';
     if (qManualUsesSegmentOptionsOnly(segment)) return 'Suggestions are limited to this segment option list.';
-    return 'Comma separated. Suggestions use this segment, recent tags, settings, and your glossary.';
+    return 'Comma-separated tags · Enter to add';
   }
 
   async function qLoadContextModels(){
@@ -3753,6 +3804,7 @@
 
   function qRenderQuizChips(){
     qRenderCompleteCaption();
+    qRenderCaptionStatus();
     const seg = qCurrentSegment();
     const state = qCurrentSegmentState();
     if (!state) {
@@ -3819,8 +3871,16 @@
       const source = document.createElement('span');
       source.className = 'quiz-chip-source-label';
       source.textContent = row.source_label || 'Source';
+      source.hidden = true; // Source context remains in the chip's tooltip.
       chip.append(label, source);
-      chip.addEventListener('click', () => qAddRecommendedTag(row.tag).catch(err => qSetManualStatus(`Auto advance failed: ${err.message}`)));
+      chip.addEventListener('click', () => {
+        const keyboardFocus = document.activeElement === chip;
+        qAddRecommendedTag(row.tag).then(() => {
+          if (keyboardFocus && document.activeElement === document.body) {
+            (recHost.querySelector('button') || get(QUIZ.search))?.focus({preventScroll:true});
+          }
+        }).catch(err => qSetManualStatus(`Auto advance failed: ${err.message}`));
+      });
       frag.appendChild(chip);
     });
     recHost.appendChild(frag);
@@ -3855,6 +3915,7 @@
       qSetManualStatus(`"${tag}" already exists in another segment for this image.`);
       return;
     }
+    if (entry) entry.final_tags_written = false;
     qRenderQuizChips();
     if (!(await qMaybeAutoAdvanceAfterSelection())) qScheduleSessionSave();
   }
@@ -3865,6 +3926,7 @@
     if (!state || !tag) return;
     state.selected = qTags(state.selected || []).filter(item => item !== tag);
     state.removed_defaults = qTags([...(state.removed_defaults || []), tag]);
+    if (qCurrentImageEntry()) qCurrentImageEntry().final_tags_written = false;
     qRenderQuizChips();
     qScheduleSessionSave();
   }
@@ -3945,7 +4007,7 @@
   }
 
   function qQuizImagePanLimit(stage, img, zoom){
-    if (!stage || !img || !qQuizImageFullscreenActive() || zoom <= 1.01) return {x: 0, y: 0};
+    if (!stage || !img || zoom <= 1.01) return {x: 0, y: 0};
     const width = Number(img.offsetWidth || 0) * zoom;
     const height = Number(img.offsetHeight || 0) * zoom;
     return {
@@ -3972,6 +4034,8 @@
     }
     const zoom = Math.max(1, Math.min(5, Number(quizState.quizImageZoom) || 1));
     quizState.quizImageZoom = zoom;
+    const zoomLabel = get('tagging-desktop-zoom-value');
+    if (zoomLabel) zoomLabel.textContent = `${Math.round(zoom * 100)}%`;
     const limit = qClampQuizImagePan(stage, img, zoom);
     img.style.transform = `translate3d(${quizState.quizImagePanX}px, ${quizState.quizImagePanY}px, 0) scale(${zoom})`;
     stage.classList.toggle('is-quiz-zoomed', zoom > 1.01);
@@ -4000,7 +4064,7 @@
   function qCanPanQuizImage(){
     const stage = get(QUIZ.imageStage);
     const img = stage?.querySelector?.('img');
-    if (!stage || !img || !qQuizImageFullscreenActive() || quizState.quizImageZoom <= 1.01) return false;
+    if (!stage || !img || quizState.quizImageZoom <= 1.01) return false;
     const limit = qQuizImagePanLimit(stage, img, quizState.quizImageZoom);
     return limit.x > 0 || limit.y > 0;
   }
@@ -4098,12 +4162,14 @@
   function qUpdateStateFromInputs(){
     const state = qCurrentSegmentState();
     if (!state) return;
-    state.manual = (!qIsFreeTaggingMode() && qIsSingleChoiceSegment(qCurrentSegment()))
+    const manual = (!qIsFreeTaggingMode() && qIsSingleChoiceSegment(qCurrentSegment()))
       ? []
       : qTags(get(QUIZ.manual)?.value || '');
+    const changed = JSON.stringify(state.manual || []) !== JSON.stringify(manual);
+    state.manual = manual;
     state.updated_at = new Date().toISOString();
     const entry = qCurrentImageEntry();
-    if (entry && qIsFreeTaggingMode() && state.manual.length) entry.final_tags_written = false;
+    if (entry && changed) entry.final_tags_written = false;
     if (entry && entry.status !== 'completed') entry.status = 'in_progress';
   }
 
@@ -4500,6 +4566,14 @@
     }
   }
 
+  function qRenderCaptionStatus(message = '', state = ''){
+    const el = get('tagging-caption-status');
+    if (!el) return;
+    const saved = !!qCurrentImageEntry()?.final_tags_written;
+    el.textContent = message || (saved ? 'Caption saved' : 'Caption has unsaved changes');
+    el.dataset.state = state || (saved ? 'saved' : 'draft');
+  }
+
   async function qSaveSessionNow(){
     if (quizState.saveTimer){
       clearTimeout(quizState.saveTimer);
@@ -4507,27 +4581,36 @@
     }
     if (!quizState.session || !qProjectRoot()) return;
     qSyncSetupToSession();
-    qUpdateStateFromInputs();
     const saveVersion = qMarkSessionDirty();
     const saveSeq = ++quizState.saveSeq;
+    const snapshot = JSON.parse(JSON.stringify(quizState.session));
+    const root = qSessionRequestRoot();
+    quizState.draftDirty = true;
     const autosaveEl = get(QUIZ.autosave);
-    if (autosaveEl) autosaveEl.textContent = 'Saving session…';
-    try{
-      const data = await qPost('/api/tagging-quiz/session/save', {project_root: qSessionRequestRoot(), session: quizState.session});
-      if (saveVersion === quizState.sessionVersion && saveSeq === quizState.saveSeq){
-        quizState.session = data.session || quizState.session;
-        quizState.lastAcceptedSaveSeq = saveSeq;
-        if (autosaveEl) autosaveEl.textContent = 'Session autosaved';
-      } else {
-        if (autosaveEl) autosaveEl.textContent = 'Session save pending';
-        if (!quizState.saveTimer && saveSeq < (quizState.lastAcceptedSaveSeq || 0)){
-          qScheduleSessionSave(true);
+    if (autosaveEl) autosaveEl.textContent = 'Saving draft…';
+    const pending = quizState.saveQueue.then(async () => {
+      try{
+        const data = await qPost('/api/tagging-quiz/session/save', {project_root: root, session: snapshot});
+        if (saveVersion === quizState.sessionVersion && saveSeq === quizState.saveSeq){
+          quizState.session = data.session || quizState.session;
+          quizState.lastAcceptedSaveSeq = saveSeq;
+          quizState.draftDirty = false;
+          if (autosaveEl) autosaveEl.textContent = 'Draft saved · captions unchanged';
+        } else {
+          if (autosaveEl) autosaveEl.textContent = 'Draft save pending';
+          if (!quizState.saveTimer && saveSeq < (quizState.lastAcceptedSaveSeq || 0)){
+            qScheduleSessionSave(true);
+          }
         }
+        qUpdateResumeBanner();
+        return true;
+      }catch(err){
+        if (autosaveEl) autosaveEl.textContent = `Draft save failed: ${err.message}. Keep this window open and retry.`;
+        return false;
       }
-      qUpdateResumeBanner();
-    }catch(err){
-      if (autosaveEl) autosaveEl.textContent = `Session save failed: ${err.message}`;
-    }
+    });
+    quizState.saveQueue = pending.then(() => {});
+    return pending;
   }
 
   function qScheduleSessionSave(immediate = false){
@@ -4536,13 +4619,21 @@
       quizState.saveTimer = null;
     }
     qMarkSessionDirty();
+    quizState.draftDirty = true;
+    qRenderCaptionStatus();
     if (immediate) {
       qSaveSessionNow();
       return;
     }
     const autosaveEl = get(QUIZ.autosave);
-    if (autosaveEl) autosaveEl.textContent = 'Session save pending';
+    if (autosaveEl) autosaveEl.textContent = 'Draft save pending';
     quizState.saveTimer = setTimeout(qSaveSessionNow, 500);
+  }
+
+  function qStepProgress(){
+    const segments = qSegments();
+    const entry = qCurrentImageEntry();
+    return window.BatchBenchTagWorkspace.progress(segments, entry);
   }
 
   async function qMoveSegment(delta){
@@ -4559,10 +4650,15 @@
       idx = segments.length - 1;
       qSetStatus('Last segment reached. Review selected tags and Save Image.');
     }
+    if (idx > qStepProgress().unlocked){
+      qSetStatus('Choose tags for this step or explicitly mark Not Applicable before continuing.');
+      qRenderCaptionStatus('Resolve the current step before opening a future step.', 'draft');
+      return;
+    }
     quizState.session.current.segment_index = idx;
     quizState.session.current.segment_id = (segments[idx] || {}).id || '';
-    await qSaveSessionNow();
     qRenderQuiz();
+    await qSaveSessionNow();
   }
 
   async function qMoveToSegmentNumber(number){
@@ -4576,15 +4672,22 @@
     if (!segments.length) return;
     const safeNumber = Math.max(1, Math.min(segments.length, Number(number) || 1));
     const idx = safeNumber - 1;
+    if (idx > qStepProgress().unlocked){
+      qSetStatus('Choose tags for this step or explicitly mark Not Applicable before continuing.');
+      qRenderCaptionStatus('Resolve the current step before opening a future step.', 'draft');
+      return;
+    }
     quizState.session.current.segment_index = idx;
     quizState.session.current.segment_id = (segments[idx] || {}).id || '';
-    await qSaveSessionNow();
     qRenderQuiz();
+    await qSaveSessionNow();
   }
 
   async function qSkipSegment(){
+    if (!qCanSkipSegment()) {qSetStatus('This required step needs a tag selection.');return;}
     const state = qCurrentSegmentState();
-    if (state) state.skipped = true;
+    qUpdateStateFromInputs();
+    if (state) { state.skipped = true; qScheduleSessionSave(); }
     await qMoveSegment(1);
   }
 
@@ -4806,8 +4909,10 @@
 
   async function qHandleQuizImageArrow(event){
     if (!event || event.defaultPrevented || event.altKey || event.metaKey) return;
+    if (quizState.captionSaving) return;
     if (!qIsGuidedQuizShortcutActive()) return;
     if (qHandleQuizFullscreenZoomKey(event)) return;
+    if (isEditableTarget(event.target) || event.target?.tagName === 'SELECT' || event.isComposing) return;
     const shiftImageDelta = event.shiftKey && !event.ctrlKey
       ? (keyMatches(event, 'a') ? -1 : (keyMatches(event, 'd') ? 1 : 0))
       : 0;
@@ -4883,32 +4988,74 @@
   }
 
   async function qSaveImage(){
-    if (!quizState.session) return;
+    if (!quizState.session || quizState.captionSaving) return;
     qUpdateStateFromInputs();
-    qMarkSessionDirty();
-    const rel = qCurrentImageRel();
-    const entry = qCurrentImageEntry();
-    const data = await qPost('/api/tagging-quiz/image/save', {
-      project_root: qSessionRequestRoot(),
-      image_rel: rel,
-      segments: entry?.segments || {},
-      session: quizState.session,
-      backup: true
-    });
-    qAcceptServerSession(data.session || quizState.session);
-    qSetStatus((data.logs || [`Saved ${rel}`]).join(' | '));
-    const captionName = rel.replace(/\.[^.]+$/, '.txt');
-    const saveCue = get(QUIZ.autosave);
-    if (saveCue) saveCue.textContent = `Caption written to ${captionName}`;
-    qUpdateResumeBanner();
-    if (quizState.session.status === 'completed'){
-      qRenderOverview();
-      quizState.overviewModal = qModal(QUIZ.overviewModal);
-      quizState.overviewModal?.show();
+    if (!qIsFreeTaggingMode() && qStepProgress().resolved.some(value => !value)){
+      qSetStatus('Resolve every guided step with tags or Not Applicable before Save & Next.');
+      qRenderCaptionStatus('Resolve every guided step before Save & Next.', 'draft');
+      qMoveToSegmentNumber(qStepProgress().unlocked + 1);
+      return;
     }
-    qRenderQuiz();
-    loadGallery();
-    scanTagViz();
+    if (!qSessionMatchesCurrentProject()) throw new Error('Session belongs to another project. Reopen the current project before saving.');
+    quizState.captionSaving = true;
+    if (quizState.saveTimer) { clearTimeout(quizState.saveTimer); quizState.saveTimer = null; }
+    const modal = get(QUIZ.quizModal);
+    const body = modal?.querySelector('.modal-body');
+    const buttons = Array.from(modal?.querySelectorAll('.quiz-desktop-footer button') || []);
+    const disabled = buttons.map(button => button.disabled);
+    buttons.forEach(button => { button.disabled = true; });
+    if (body) body.inert = true;
+    const saveButton = get(QUIZ.saveImage);
+    if (saveButton) saveButton.textContent = 'Saving…';
+    qRenderCaptionStatus('Writing caption…');
+    try {
+      await quizState.saveQueue;
+      qUpdateStateFromInputs();
+      qMarkSessionDirty();
+      const rel = qCurrentImageRel();
+      const entry = qCurrentImageEntry();
+      const data = await qPost('/api/tagging-quiz/image/save', {
+        project_root: qSessionRequestRoot(),
+        image_rel: rel,
+        segments: entry?.segments || {},
+        session: quizState.session,
+        backup: true
+      });
+      qAcceptServerSession(data.session || quizState.session);
+      quizState.draftDirty = data.session_saved === false;
+      qSetStatus((data.logs || [`Saved ${rel}`]).join(' | '));
+      const captionName = rel.replace(/\.[^.]+$/, '.txt');
+      const saveCue = get(QUIZ.autosave);
+      if (saveCue) saveCue.textContent = data.session_saved === false
+        ? `Caption written · draft save failed: ${data.session_error || 'Retry before closing'}`
+        : 'Draft saved with caption';
+      qUpdateResumeBanner();
+      if (quizState.session.status === 'completed' && data.session_saved !== false){
+        qRenderOverview();
+        quizState.overviewModal = qModal(QUIZ.overviewModal);
+        quizState.overviewModal?.show();
+      }
+      qRenderQuiz();
+      qRenderCaptionStatus(data.session_saved === false
+        ? `Caption saved: ${captionName}. Draft save failed; keep this window open and retry.`
+        : `Caption saved: ${captionName}${qCurrentImageRel() !== rel ? ' · next image ready' : ''}`, data.session_saved === false ? 'error' : 'saved');
+      if (data.session_saved === false) qSetStatus(`Caption saved: ${captionName}. Draft save failed: ${data.session_error || 'retry before closing'}`);
+      quizState.galleryDirty = true;
+    } catch (err) {
+      qRenderCaptionStatus(`Caption save failed: ${err.message}. Your draft is still open.`, 'error');
+      throw err;
+    } finally {
+      quizState.captionSaving = false;
+      if (body) body.inert = false;
+      buttons.forEach((button, index) => { button.disabled = disabled[index]; });
+      const free = qIsFreeTaggingMode();
+      const index = Number(quizState.session?.current?.segment_index || 0);
+      get(QUIZ.prev)?.toggleAttribute('disabled', free || index <= 0);
+      get(QUIZ.next)?.toggleAttribute('disabled', free || index >= qSegments().length - 1);
+      get(QUIZ.prevImage)?.toggleAttribute('disabled', !qHasFreeModeTarget(-1));
+      if (saveButton) saveButton.textContent = 'Save & Next';
+      qNotifyMobileState();
+    }
   }
 
   function qRenderOverview(){
@@ -5000,6 +5147,7 @@
       qCancelManualConfirm(false);
       qUpdateStateFromInputs();
       qRenderQuizProgress();
+      qRenderCompleteCaption();
       qScheduleSessionSave();
     });
     get(QUIZ.manualApplyAll)?.addEventListener('change', e => {
@@ -5057,18 +5205,42 @@
     get(QUIZ.deleteSession)?.addEventListener('click', qDeleteSession);
     get(QUIZ.archiveSession)?.addEventListener('click', qArchiveSession);
     get(QUIZ.setupModal)?.addEventListener('hidden.bs.modal', () => { quizState.setupUsesCurrentSettings = false; });
-    get(QUIZ.quizModal)?.addEventListener('hide.bs.modal', () => {
+    get(QUIZ.quizModal)?.addEventListener('hide.bs.modal', event => {
+      if (quizState.captionSaving) { event.preventDefault(); return; }
+      if (!quizState.allowClose && (quizState.draftDirty || quizState.saveTimer)) {
+        event.preventDefault();
+        qSaveSessionNow().then(saved => {
+          if (!saved || quizState.draftDirty) return;
+          quizState.allowClose = true;
+          qModal(QUIZ.quizModal)?.hide();
+        });
+        return;
+      }
+      quizState.allowClose = false;
       get(QUIZ.hotkeys)?.removeAttribute('open');
       qSetCompleteCaptionExpanded(false);
       qResetQuizImageZoom();
-      qScheduleSessionSave(true);
+    });
+    get(QUIZ.quizModal)?.addEventListener('hidden.bs.modal', () => {
+      qUpdateResumeBanner();
+      if (quizState.galleryDirty) {
+        quizState.galleryDirty = false;
+        loadGallery();
+        scanTagViz();
+      }
+    });
+    get(QUIZ.quizModal)?.addEventListener('shown.bs.modal', () => qUpdateResumeBanner());
+    window.addEventListener('beforeunload', event => {
+      if (!quizState.draftDirty && !quizState.captionSaving) return;
+      event.preventDefault();
+      event.returnValue = '';
     });
   }
 
   async function qContinueLater(){
-    await qSaveSessionNow();
+    if (!(await qSaveSessionNow()) || quizState.draftDirty) return;
     quizState.quizModal?.hide();
-    qSetStatus('Session saved. Continue later is ready.');
+    qSetStatus('Draft saved. Continue later to write caption files.');
   }
 
   function qOpenOverview(){
@@ -5086,6 +5258,7 @@
       status: session?.status || '',
       freeMode: qIsFreeTaggingMode(),
       segmentIndex: Math.max(0, Number(session?.current?.segment_index || 0)),
+      unlockedSegment: session && !qIsFreeTaggingMode() ? qStepProgress().unlocked : 0,
       segments: segments.map((segment, index) => ({
         index,
         id: segment.id || '',
@@ -5097,6 +5270,7 @@
         || get(QUIZ.imageStage)?.webkitRequestFullscreen
       ),
       canPreviousImage: qHasFreeModeTarget(-1),
+      canSkipSegment: !!session && qCanSkipSegment(),
       completed: images.filter(([, entry]) => entry?.status === 'completed').length,
       total: images.filter(([, entry]) => !entry?.missing).length,
       txtWritten: images.filter(([, entry]) => entry?.final_tags_written).length,
@@ -5149,7 +5323,7 @@
   function isEditableTarget(target){
     if (!target) return false;
     const tag = target.tagName ? target.tagName.toLowerCase() : '';
-    return tag === 'input' || tag === 'textarea' || !!target.isContentEditable;
+    return tag === 'input' || tag === 'textarea' || tag === 'select' || !!target.isContentEditable;
   }
 
   function keyMatches(event, letter){
@@ -5265,7 +5439,7 @@
     if (!trigger || typeof bootstrap === 'undefined' || !bootstrap.Tooltip) return;
     const hint = (get(TAGVIZ.hint)?.textContent || '').trim();
     const sync = (get(TAGVIZ.syncStatus)?.textContent || '').trim();
-    const glow = (get(TAGVIZ.glowNote)?.textContent || 'Glow = tags present in _temp.').trim();
+    const glow = (get(TAGVIZ.glowNote)?.textContent || 'Scope: staged captions only.').trim();
     const plain = [hint, sync, glow].filter(Boolean).join('\n');
     const html = [hint, sync, glow].filter(Boolean).join('<br>');
     trigger.setAttribute('title', plain);
@@ -5330,12 +5504,15 @@
     if (!input) return;
     const dedupMode = getModeValue() === 'dedup';
     input.readOnly = dedupMode;
+    input.hidden = dedupMode;
+    document.querySelector('label[for="tags"]')?.toggleAttribute('hidden', dedupMode);
     input.placeholder = dedupMode
       ? 'Clean Duplicates ignores this field.'
       : TAGS_PLACEHOLDER_DEFAULT;
   }
 
   function handleModeChange(){
+    window.BatchBenchTagWorkspace?.mode?.();
     updateTagsInputState();
     if (!getModeValue()){
       updateModeHelp();
@@ -5347,8 +5524,6 @@
     refreshTempHints();
     const input = get(IDS.tags);
     if(!input) return;
-    const mode = getModeOrDefault();
-    const hasMapping = input.value.includes('->');
 
     if (tagsSyncEnabled){
       syncTagsFromSelection(true);
@@ -5360,17 +5535,6 @@
       return;
     }
 
-    if (hasMapping && mode !== 'replace'){
-      tagsSyncEnabled = true;
-      tagsSyncLocked = true;
-      input.value = '';
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      input.dispatchEvent(new Event('change', { bubbles: true }));
-      tagsSyncLocked = false;
-      syncTagsFromSelection(true);
-      updateTagSyncStatus();
-      updateTagHint();
-    }
     updateTagWarningsFromInput();
     clearWarning();
     refreshCheatsheetChipSelectionCue();
@@ -5398,7 +5562,7 @@
     setPath(IDS.effEditPath, editPath);
     setPath(IDS.effUndoFrom, temp);
     setPath(IDS.effUndoTo, dataset);
-    if (get(TAGVIZ.path)) get(TAGVIZ.path).textContent = dataset || '...';
+    if (get(TAGVIZ.path)) {get(TAGVIZ.path).textContent='dataset/_temp/';get(TAGVIZ.path).title=temp || '';}
 
     const flag = get(IDS.effEditFlag);
     if (flag){
@@ -5589,16 +5753,22 @@
     const projectBtn = get(LEFT.projectBtn);
     const backdrop = get(LEFT.backdrop);
     const open = !!next;
+    const previous = leftPanel;
+    if (next && !previous) leftPanelReturnFocus = document.activeElement;
     leftPanel = next;
     if (cheat){
       const isOpen = next === 'cheatsheet';
       cheat.classList.toggle('is-open', isOpen);
       cheat.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+      cheat.inert = !isOpen;
+      cheat.setAttribute('aria-modal', String(isOpen));
     }
     if (project){
       const isOpen = next === 'project';
       project.classList.toggle('is-open', isOpen);
       project.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+      project.inert = !isOpen;
+      project.setAttribute('aria-modal', String(isOpen));
     }
     if (cheatBtn){
       const active = next === 'cheatsheet';
@@ -5614,6 +5784,11 @@
       backdrop.classList.toggle('is-open', open);
     }
     syncLeftDrawerQuizOverlay();
+    if (next && previous !== next) {
+      requestAnimationFrame(() => (next === 'project' ? project : cheat)?.querySelector('button, input, select')?.focus());
+    } else if (!next && previous && leftPanelReturnFocus?.checkVisibility()) {
+      leftPanelReturnFocus.focus({preventScroll:true});
+    }
   }
 
   function toggleLeftDrawer(panel){
@@ -5641,6 +5816,16 @@
       refreshCheatsheetChipSelectionCue();
     });
     document.addEventListener('keydown', (e)=>{
+      if (e.key === 'Tab' && leftPanel) {
+        const panel = get(leftPanel === 'project' ? LEFT.projectPanel : LEFT.cheatPanel);
+        const controls = Array.from(panel?.querySelectorAll('button,input,select,textarea,a[href],summary,[tabindex="0"]') || [])
+          .filter(element => element.checkVisibility() && !element.disabled && !element.closest('[inert]'));
+        const first = controls[0], last = controls[controls.length - 1];
+        if (first && ((!panel.contains(document.activeElement)) || (e.shiftKey ? document.activeElement === first : document.activeElement === last))) {
+          e.preventDefault();
+          (e.shiftKey ? last : first).focus();
+        }
+      }
       if (e.key === 'Escape' && leftPanel){
         e.preventDefault();
         e.stopImmediatePropagation();
@@ -5673,8 +5858,17 @@
     const projectBtn = get(LEFT.projectBtn);
     if (!panel || !drawerBody || !inlineHost) return;
     const shouldInline = !isWorkspaceReady();
+    const destination = shouldInline ? inlineHost : drawerBody;
+    // Reparenting a focused field fires change/blur and can re-enter this function.
+    if (!destination.contains(panel) && panel.contains(document.activeElement)) return;
+    const movePanel = parent => {
+      const focused = document.activeElement;
+      if (typeof parent.moveBefore === 'function') parent.moveBefore(panel, null);
+      else parent.appendChild(panel);
+      if (focused !== document.body && focused?.isConnected && focused.checkVisibility()) focused.focus({preventScroll:true});
+    };
     if (shouldInline){
-      if (!inlineHost.contains(panel)) inlineHost.appendChild(panel);
+      if (!inlineHost.contains(panel)) movePanel(inlineHost);
       inlineHost.classList.remove('d-none');
       if (projectBtn){
         projectBtn.classList.add('d-none');
@@ -5682,7 +5876,7 @@
       }
       if (leftPanel === 'project') setLeftDrawer(null);
     } else {
-      if (!drawerBody.contains(panel)) drawerBody.appendChild(panel);
+      if (!drawerBody.contains(panel)) movePanel(drawerBody);
       inlineHost.classList.add('d-none');
       if (projectBtn){
         projectBtn.classList.remove('d-none');
@@ -5719,6 +5913,7 @@
     const layout = get('tag-editor-layout');
     const form = get('tags-form');
     const topCard = form?.closest('.card.p-4');
+    const reviewBanner = get('pipeline-review-banner');
     const legacyMain = topCard?.parentElement;
     const row = form?.querySelector('.row.g-3');
     const sidebar = get('tag-editor-sidebar');
@@ -5735,6 +5930,7 @@
     const gallerySection = row?.querySelector('.gallery-section');
     const galleryCol = gallerySection?.closest('.col-md-12');
     const cheatsheet = gallerySection?.querySelector('.gallery-cheatsheet');
+    const triggerSafetyCol = get('trigger-safety-trigger')?.closest('.col-md-12');
 
     if (!layout || !form || !row || !gallerySection || !sidebar || !editorPanel || !workdirPanel || !folderCol || !extsCol || !editCol || !quizCol || !projectStatusCol || !tagExplorerCol || layout.dataset.workflowReady === '1'){
       return;
@@ -5791,6 +5987,8 @@
     cheatDrawer.className = 'left-drawer';
     cheatDrawer.id = LEFT.cheatPanel;
     cheatDrawer.setAttribute('aria-hidden', 'true');
+    cheatDrawer.setAttribute('role', 'dialog');
+    cheatDrawer.setAttribute('aria-label', 'Project cheat sheet');
     cheatDrawer.innerHTML = `
       <div class="left-drawer-head">
         <div>
@@ -5825,6 +6023,8 @@
     projectDrawer.className = 'left-drawer left-drawer-project-setup';
     projectDrawer.id = LEFT.projectPanel;
     projectDrawer.setAttribute('aria-hidden', 'true');
+    projectDrawer.setAttribute('role', 'dialog');
+    projectDrawer.setAttribute('aria-label', 'Project setup');
     projectDrawer.innerHTML = `
       <div class="left-drawer-head">
         <div>
@@ -5839,6 +6039,9 @@
     const setupPanel = document.createElement('section');
     setupPanel.id = PROJECT.panel;
     setupPanel.className = 'project-setup-card';
+    form.addEventListener('focusin', event => {
+      if (!setupPanel.contains(event.target)) requestAnimationFrame(syncProjectSetupPlacement);
+    });
     setupPanel.innerHTML = `
       <div class="project-setup-summary">
         <div>
@@ -5863,7 +6066,17 @@
       <div class="project-cue-list" id="${PROJECT.cues}"></div>
       <div class="project-info-list" id="${PROJECT.infoList}"></div>
     `;
-    setupBody.append(metaGrid, projectStatusCol, cueWrap);
+    const browseNote = folderCol.querySelector('.form-text');
+    setupBody.append(metaGrid);
+    if (browseNote) setupBody.append(browseNote);
+    setupBody.append(projectStatusCol, cueWrap);
+    if (triggerSafetyCol) {
+      const safety = document.createElement('details');
+      safety.className = 'te-reference';
+      safety.innerHTML = '<summary>Trigger safety check</summary>';
+      safety.append(triggerSafetyCol);
+      setupBody.append(safety);
+    }
     setupPanel.appendChild(setupBody);
     projectDrawer.querySelector('.left-drawer-body')?.appendChild(setupPanel);
 
@@ -5911,8 +6124,8 @@
     bulkPanel.innerHTML = `
       <summary>
         <span>
-          <span class="advanced-tool-title">Bulk Tag CRUD</span>
-          <span class="advanced-tool-note d-block">Optional tools for direct add, remove, rename, and cleanup actions.</span>
+          <span class="advanced-tool-title">Batch tag operations</span>
+          <span class="advanced-tool-note d-block">Insert, delete, replace, or deduplicate captions in dataset/_temp.</span>
         </span>
         <span class="advanced-tool-chevron">Advanced</span>
       </summary>
@@ -5937,15 +6150,12 @@
       composerSection.appendChild(editorPanel);
       bulkBody.append(explorerSection, composerSection);
     }
-    bulkPanel.addEventListener('toggle', ()=>{
-      if (!bulkPanel.open) return;
-      requestAnimationFrame(()=>{
-        bulkPanel.scrollIntoView({ block:'nearest', behavior:'smooth' });
-      });
-    });
     rightCol.appendChild(bulkPanel);
     workdirPanel.classList.add('workspace-lock-target');
     rightCol.appendChild(workdirPanel);
+    rightCol.prepend(workdirPanel);
+    const exportPanel = rightCol.querySelector('.dataset-export-panel');
+    if (exportPanel) rightCol.append(exportPanel);
 
     workdirPanel.querySelectorAll('.workdir-head .small.text-muted, .workdir-quick-drop .small.text-muted').forEach(el=>{
       el.classList.add('truncate-2');
@@ -5981,7 +6191,7 @@
         <div class="fw-semibold">Tag Action Composer</div>
         <button type="button" class="btn btn-outline-secondary btn-sm info-tip-btn" id="composer-info-tip"
                 data-bs-toggle="tooltip"
-                data-bs-title="Pick mode, sync tags from Tag Explorer, then run edits for staged files in dataset/_temp.">
+                data-bs-title="Pick mode, sync tags from Tag Explorer, then run edits for staged files in dataset/_temp." aria-label="Batch operation help">
           <i class="bi bi-info-circle"></i>
         </button>
       </div>
@@ -6013,7 +6223,7 @@
 
     const shell = document.createElement('div');
     shell.className = 'tag-editor-shell';
-    shell.append(quizCol, inlineProjectHost, content);
+    shell.append(inlineProjectHost, quizCol, content);
 
     if (topCard && topCard.parentElement){
       topCard.parentElement.insertBefore(form, topCard);
@@ -6030,6 +6240,7 @@
     form.innerHTML = '';
     hiddenFields.forEach(field=> form.appendChild(field));
     form.append(leftRail, backdrop, cheatDrawer, projectDrawer, shell);
+    if (reviewBanner) shell.prepend(reviewBanner);
     const hotkeysTipBtn = get(LEFT.hotkeysBtn);
     if (hotkeysTipBtn) window.bbInitTooltips?.(hotkeysTipBtn);
     window.bbInitTooltips?.(form);
@@ -6045,6 +6256,7 @@
   }
 
   function renderProjectState(){
+    window.BatchBenchTagWorkspace?.project({root:getResolvedProjectRoot(), dataset:getDatasetRoot(), ready:projectState.ready, matches:!quizState.session || qSessionMatchesCurrentProject()});
     setProjectChip(PROJECT.rootChip, getResolvedProjectRoot());
     setProjectChip(PROJECT.databaseChip, getDatabaseRoot());
     setProjectChip(PROJECT.datasetChip, getDatasetRoot());
@@ -6352,6 +6564,7 @@
       });
       let data = null;
       try { data = await res.json(); } catch(_) {}
+      if (qRootKey(folder) !== qRootKey(getProjectRootInput())) return false;
       if (!res.ok || !data || !data.ok){
         showStatus((data && data.error) ? data.error : `Project check failed (HTTP ${res.status})`);
         return false;
@@ -6465,6 +6678,11 @@
       el.textContent = '';
       return;
     }
+    const filtering = !!get('gallery-filename-search')?.value.trim() || (get('gallery-caption-filter')?.value || 'all') !== 'all';
+    if (filtering) {
+      el.textContent = `${getFilteredGalleryItems().length} matches · ${galleryState.items.length} loaded / ${total} total`;
+      return;
+    }
     const shownText = (typeof shown === 'number' && shown !== total) ? `${shown}/${total}` : `${total}`;
     el.textContent = `${shownText} images`;
   }
@@ -6472,12 +6690,17 @@
   function applyGalleryGridColumns(value){
     const sel = get(GALLERY.gridCols);
     const grid = get(GALLERY.grid);
+    const auto = String(value ?? sel?.value ?? 'auto') === 'auto';
     const parsed = Number.parseInt(String(value ?? sel?.value ?? ''), 10);
     const cols = [2, 3, 4].includes(parsed) ? parsed : 2;
-    if (sel) sel.value = String(cols);
-    if (grid) grid.style.setProperty('--gallery-cols', String(cols));
+    const mode = auto ? 'auto' : String(cols);
+    if (sel) sel.value = mode;
+    if (grid) {
+      grid.dataset.gridMode = mode;
+      grid.style.setProperty('--gallery-template', auto ? 'repeat(auto-fill,minmax(min(100%,180px),1fr))' : `repeat(${cols},minmax(0,1fr))`);
+    }
     try{
-      localStorage.setItem(GALLERY_GRID_COLS_KEY, String(cols));
+      localStorage.setItem(GALLERY_GRID_COLS_KEY, mode);
     }catch(_){}
   }
 
@@ -6559,7 +6782,7 @@
       setGallerySelectionAnchor(options.anchorRel || '');
     }
     updateGallerySelectionCount();
-    if (options.render !== false) renderGalleryItems();
+    if (options.render !== false) syncGallerySelectionCards();
   }
 
   function selectGalleryRange(anchorRel, targetRel, options={}){
@@ -6602,8 +6825,12 @@
     const sendBtn = get(WORKDIR.sendSelected);
     if (!el) return;
     const count = galleryState.selected?.size || 0;
-    el.textContent = `${count} selected`;
+    const visible = new Set(getVisibleGalleryItems().map(item => item.rel));
+    const outsideView = getSelectedGalleryRels().filter(rel => !visible.has(rel)).length;
+    el.textContent = `${count} selected${outsideView ? ` · ${outsideView} outside view` : ''}`;
     if (sendBtn) sendBtn.disabled = count === 0;
+    get('gallery-send-selected-mobile')?.toggleAttribute('disabled', count === 0);
+    el.closest('.gallery-selection-toolbar')?.classList.toggle('has-selection', count > 0);
     updateGallerySelectToggle();
   }
 
@@ -6629,14 +6856,14 @@
     else next.delete(rel);
     galleryState.selected = next;
     updateGallerySelectionCount();
-    renderGalleryItems();
+    syncGallerySelectionCards();
   }
 
   function clearGallerySelection(){
     galleryState.selected = new Set();
     setGallerySelectionAnchor('');
     updateGallerySelectionCount();
-    renderGalleryItems();
+    syncGallerySelectionCards();
   }
 
   function toggleSelectAllVisibleGalleryItems(){
@@ -6653,7 +6880,20 @@
     });
     galleryState.selected = next;
     updateGallerySelectionCount();
-    renderGalleryItems();
+    syncGallerySelectionCards();
+  }
+
+  function syncGallerySelectionCards(){
+    if (get('gallery-caption-filter')?.value === 'selected') { renderGalleryItems(); return; }
+    const count = galleryState.selected?.size || 0;
+    get(GALLERY.grid)?.querySelectorAll('.gallery-card').forEach(card => {
+      const selected = galleryState.selected?.has(card.dataset.rel);
+      card.classList.toggle('is-selected', selected);
+      const checkbox = card.querySelector('input[type="checkbox"]');
+      if (checkbox) checkbox.checked = selected;
+      const drag = card.querySelector('.gallery-drag-chip');
+      if (drag) drag.textContent = selected && count > 1 ? `drag ${count}` : 'drag';
+    });
   }
 
   function removeGallerySelection(rels){
@@ -7116,7 +7356,7 @@
   }
 
   function getSortedGalleryItems(){
-    const items = galleryState.items || [];
+    const items = getFilteredGalleryItems();
     if (!items.length) return items;
     const selected = tagVizState.selected;
     const sortMode = get(GALLERY.sort)?.value || galleryState.sort || 'match';
@@ -7155,6 +7395,18 @@
       ? Math.max(1, Math.min(items.length, galleryState.visibleCount))
       : items.length;
     return items.slice(0, count);
+  }
+
+  function getFilteredGalleryItems(){
+    const query = (get('gallery-filename-search')?.value || '').trim().toLowerCase();
+    const filter = get('gallery-caption-filter')?.value || 'all';
+    return (galleryState.items || []).filter(item => {
+      if (query && !String(item.rel || item.name || '').toLowerCase().includes(query)) return false;
+      if (filter === 'with') return !!item.has_txt;
+      if (filter === 'missing') return !item.has_txt;
+      if (filter === 'selected') return galleryState.selected?.has(item.rel);
+      return true;
+    });
   }
 
   function fillGalleryTags(container, tags, hasTxt, maxTags, ctx=null){
@@ -7411,6 +7663,14 @@
     const root = galleryState.root || getGalleryRoot();
     const frag = document.createDocumentFragment();
     const items = getSortedGalleryItems();
+    if (!items.length) {
+      const empty = document.createElement('div');
+      empty.className = 'gallery-empty';
+      empty.textContent = 'No matching loaded images. Clear filters or increase the load limit.';
+      wrap.append(empty);
+      setGalleryCount(galleryState.total, 0);
+      return;
+    }
     const safePage = Math.max(20, parseInt(String(galleryState.pageSize || 120), 10) || 120);
     galleryState.pageSize = safePage;
     if (!Number.isFinite(galleryState.visibleCount) || galleryState.visibleCount <= 0){
@@ -7506,58 +7766,31 @@
       const name = document.createElement('div');
       name.className = 'gallery-name';
       name.textContent = item.name || item.rel || '';
+      name.title = item.rel || item.name || '';
       card.appendChild(name);
 
       const meta = document.createElement('div');
       meta.className = 'gallery-meta';
-      const badges = document.createElement('div');
-      badges.className = 'gallery-badges';
-      const sourceBadge = document.createElement('span');
-      sourceBadge.className = 'gallery-state-badge';
-      sourceBadge.textContent = 'database';
-      badges.appendChild(sourceBadge);
-      const txtBadge = document.createElement('span');
-      txtBadge.className = 'gallery-state-badge' + (item.has_txt ? '' : ' is-temp');
-      txtBadge.textContent = item.has_txt ? 'has txt' : 'missing txt';
-      badges.appendChild(txtBadge);
-      if (item.in_temp){
-        const badge = document.createElement('span');
-        badge.className = 'gallery-state-badge is-temp';
-        badge.textContent = '_temp';
-        badges.appendChild(badge);
+      meta.textContent = item.has_txt ? (item.tag_count ? 'Caption present' : 'Empty caption') : 'Missing caption';
+      meta.title = `${item.rel || item.name} · ${formatCreatedLabel(item.created_ts)}`;
+      card.append(meta);
+      const summary = document.createElement('div');
+      summary.className = 'te-gallery-summary';
+      const tags = item.tags || [];
+      const remaining = Math.max(0, (item.tag_count ?? tags.length) - Math.min(4, tags.length));
+      summary.textContent = tags.slice(0, 4).join(', ');
+      summary.title = tags.join(', ');
+      const captionPreview = document.createElement('div');
+      captionPreview.className = 'te-gallery-caption';
+      captionPreview.append(summary);
+      if (remaining) {
+        const more = document.createElement('span');
+        more.className = 'te-gallery-more';
+        more.textContent = `+${remaining}`;
+        more.title = `${remaining} more tags. Open the image to inspect its full caption.`;
+        captionPreview.append(more);
       }
-      if (folderCue){
-        const badge = document.createElement('span');
-        badge.className = 'gallery-state-badge is-folder';
-        badge.textContent = 'folder';
-        badge.title = folderCue;
-        badges.appendChild(badge);
-      }
-      meta.appendChild(badges);
-      const created = document.createElement('span');
-      created.textContent = formatCreatedLabel(item.created_ts);
-      meta.appendChild(created);
-      card.appendChild(meta);
-
-      if (folderCue){
-        const folderDetail = document.createElement('div');
-        folderDetail.className = 'gallery-folder-detail';
-        folderDetail.textContent = `Folder: ${folderCue}`;
-        folderDetail.title = folderCue;
-        card.appendChild(folderDetail);
-      }
-
-      if (item.rel && (item.rel.includes('/') || item.rel.includes('\\'))){
-        const sub = document.createElement('div');
-        sub.className = 'gallery-subpath';
-        sub.textContent = item.rel;
-        card.appendChild(sub);
-      }
-
-      const tagWrap = document.createElement('div');
-      tagWrap.className = 'gallery-tags';
-      fillGalleryTags(tagWrap, item.tags || [], item.has_txt, 10);
-      card.appendChild(tagWrap);
+      card.append(captionPreview);
 
       frag.appendChild(card);
     });
@@ -7629,6 +7862,7 @@
       });
       let data = null;
       try{ data = await res.json(); }catch(_){}
+      if (qRootKey(root) !== qRootKey(qProjectRoot())) return;
       if (!res.ok || !data || !data.ok){
         const err = (data && data.error) ? data.error : `HTTP ${res.status}`;
         galleryState.items = [];
@@ -7860,6 +8094,7 @@
   }
 
   function renderGalleryPreviewModal(preferredRel = ''){
+    get('gallery-full-caption')?.remove();
     const img = get(GALLERY.modalImg);
     const name = get(GALLERY.modalName);
     const tags = get(GALLERY.modalTags);
@@ -7948,6 +8183,21 @@
       }
     };
     fillGalleryTags(tags, item.tags || [], item.has_txt, 0, ctx);
+    if (item.tags_truncated) {
+      const full = document.createElement('details');
+      full.id = 'gallery-full-caption';
+      full.open = true;
+      const heading = document.createElement('summary');
+      heading.textContent = `Full caption · ${item.tag_count} tags`;
+      const content = document.createElement('pre');
+      content.style.whiteSpace = 'pre-wrap';
+      content.textContent = 'Loading full caption…';
+      full.append(heading, content);
+      tags.after(full);
+      qPost('/api/dataset-health/caption', {dataset_path:root, relative_path:item.rel.replace(/\.[^.]+$/, '.txt')})
+        .then(data => { if (img.dataset.previewKey === previewKey) content.textContent = data.content; })
+        .catch(error => { content.textContent = `Cannot read full caption: ${error.message}`; });
+    }
     applyGalleryZoomPan();
   }
 
@@ -8045,11 +8295,6 @@
     }
     let fileRel = e.dataTransfer.getData('application/x-bb-file') || '';
     let dirRel = e.dataTransfer.getData('application/x-bb-dir') || '';
-    if (!fileRel && !dirRel){
-      const raw = e.dataTransfer.getData('text/plain') || '';
-      if (raw.startsWith('file:')) fileRel = raw.split(/\r?\n/, 1)[0].slice(5);
-      else if (raw.startsWith('dir:')) dirRel = raw.slice(4);
-    }
     if (!fileRels.length && fileRel) fileRels = [fileRel];
     return { fileRel, fileRels, dirRel };
   }
@@ -8083,86 +8328,17 @@
   function renderTempItems(){
     const wrap = get(WORKDIR.tempList);
     if (!wrap) return;
-    wrap.innerHTML = '';
-    const items = workdirState.tempItems || [];
-    setWorkdirTempCount(items.length);
-    if (!items.length){
-      const empty = document.createElement('div');
-      empty.className = 'workdir-empty';
-      empty.textContent = 'No staged items in _temp.';
-      wrap.appendChild(empty);
-      return;
-    }
-    const frag = document.createDocumentFragment();
-    items.forEach(item=>{
-      const card = document.createElement('div');
-      card.className = 'workdir-temp-card';
-      card.draggable = true;
-      card.addEventListener('dragstart', (e)=>{
-        const rel = toDatasetTempRel(item.rel || '');
-        if (!rel){
-          e.preventDefault();
-          return;
-        }
-        e.dataTransfer.setData('application/x-bb-files', JSON.stringify([rel]));
-        e.dataTransfer.setData('application/x-bb-file', rel);
-        e.dataTransfer.setData('text/plain', `file:${rel}`);
-        e.dataTransfer.effectAllowed = 'move';
-      });
-
-      const thumbWrap = document.createElement('button');
-      thumbWrap.type = 'button';
-      thumbWrap.className = 'gallery-thumb';
-      const img = document.createElement('img');
-      img.className = 'workdir-temp-thumb';
-      img.loading = 'lazy';
-      img.alt = item.name || item.rel || 'temp item';
-      img.src = `/api/tags/image?folder=${encodeURIComponent(getResolvedProjectRoot())}&area=temp&path=${encodeURIComponent(item.rel)}`;
-      const fallback = document.createElement('div');
-      fallback.className = 'workdir-temp-fallback d-none';
-      fallback.textContent = 'No preview';
-      img.addEventListener('error', ()=>{
-        img.classList.add('d-none');
-        fallback.classList.remove('d-none');
-      });
-      img.addEventListener('load', ()=>{
-        img.classList.remove('d-none');
-        fallback.classList.add('d-none');
-      });
-      thumbWrap.addEventListener('click', ()=> openGalleryPreviewByRel(item.rel || '', 'temp'));
-      thumbWrap.appendChild(img);
-      thumbWrap.appendChild(fallback);
-      card.appendChild(thumbWrap);
-
-      const body = document.createElement('div');
-      body.className = 'workdir-temp-body';
-      const name = document.createElement('div');
-      name.className = 'workdir-temp-name';
-      name.textContent = item.name || item.rel || '';
-      name.title = item.rel || item.name || '';
-      body.appendChild(name);
-      const path = document.createElement('div');
-      path.className = 'workdir-temp-path';
-      path.textContent = item.rel || '';
-      path.title = item.rel || '';
-      body.appendChild(path);
-      const tags = document.createElement('div');
-      tags.className = 'gallery-tags';
-      fillGalleryTags(tags, item.tags || [], item.has_txt, 6);
-      body.appendChild(tags);
-      card.appendChild(body);
-      frag.appendChild(card);
-    });
-    wrap.appendChild(frag);
+    window.BatchBenchTagWorkspace?.tempItems({items:workdirState.tempItems || [], total:workdirState.tempTotal || 0,
+      root:getResolvedProjectRoot(), preview:rel => openGalleryPreviewByRel(rel, 'temp'),
+      move:(rels,dst) => moveFileToFolder(rels,dst), more:() => {workdirState.tempLimit += 120; loadTempItems();}});
   }
 
   async function loadTempItems(){
     const root = getResolvedProjectRoot();
-    workdirState.tempItems = [];
-    renderTempItems();
     if (!root || (projectState.needsInit && !projectState.ready)){
-      return;
+      workdirState.tempItems = []; workdirState.tempTotal = 0; renderTempItems(); return;
     }
+    get(WORKDIR.tempList)?.setAttribute('aria-busy','true');
     try{
       const res = await fetch('/api/tags/images', {
         method: 'POST',
@@ -8172,21 +8348,20 @@
           area: 'temp',
           exts: get(IDS.exts)?.value || '',
           recursive: true,
-          limit: 120,
+          limit: workdirState.tempLimit,
           tag_limit: 40
         })
       });
       let data = null;
       try{ data = await res.json(); }catch(_){}
-      if (!res.ok || !data || !data.ok){
-        return;
-      }
+      if (qRootKey(root) !== qRootKey(qProjectRoot())) return;
+      if (!res.ok || !data || !data.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      workdirState.tempTotal = Number(data.total || 0);
       workdirState.tempItems = Array.isArray(data.images) ? data.images : [];
       renderTempItems();
-    } catch (_err) {
-      workdirState.tempItems = [];
-      renderTempItems();
-    }
+    } catch (err) {
+      setWorkdirStatus(`Temporary browser failed: ${err.message}. Use Rescan to retry.`);
+    } finally { get(WORKDIR.tempList)?.setAttribute('aria-busy','false'); }
   }
 
   async function refreshTempItemsAfterTagMutation(){
@@ -8363,6 +8538,7 @@
     }
     setWorkdirStatus('Loading...');
     const data = await fetchWorkdirDirs('');
+    if (root !== getDatasetRoot()) return;
     if (!data.ok){
       setWorkdirStatus(data.error || 'Load failed.');
       return;
@@ -8479,9 +8655,30 @@
     setWorkdirStatus('Folder deleted.');
     clearWorkdirSelection();
     await loadWorkdirRoot();
+    await loadGallery();
+    await scanTagViz();
   }
 
+  function showFileResult(action, moved, errors, target){
+    const result = get('te-file-result');
+    if (!result) return;
+    if(window.BatchBenchTagWorkspace){window.BatchBenchTagWorkspace.operationError=errors.length ? `${errors.length} file(s) failed. See operation results.` : '';window.BatchBenchTagWorkspace.updateStatus();}
+    const changed=moved.filter(item=>item.moved!==false).length;
+    result.textContent = `${action}: ${changed} images · requested: ${moved.length+errors.length} · skipped: ${moved.length-changed} · failed: ${errors.length} · ${target}`;
+    if (errors.length) result.textContent += '\n' + errors.map(item => `${item.src || 'File'}: ${item.error}`).join('\n');
+  }
+
+  let fileMoveBusy = false;
   async function moveFileToFolder(fileRelOrList, dstRel){
+    if (fileMoveBusy || formBusy || batchRequestBusy) return;
+    fileMoveBusy = true;
+    window.BatchBenchTagWorkspace?.busy(true);
+    try { await performFileMove(fileRelOrList, dstRel); }
+    catch (err) { setWorkdirStatus(`Move failed: ${err.message}. Rescan before retrying if interrupted.`); }
+    finally { fileMoveBusy = false; window.BatchBenchTagWorkspace?.busy(false); updateGallerySelectionCount(); }
+  }
+
+  async function performFileMove(fileRelOrList, dstRel){
     const root = getResolvedProjectRoot();
     const srcRels = Array.isArray(fileRelOrList)
       ? fileRelOrList.map(rel => String(rel || '').replace(/\\/g, '/')).filter(Boolean)
@@ -8523,6 +8720,7 @@
     }
     const movedItems = Array.isArray(data.moved) ? data.moved : [];
     const errors = Array.isArray(data.errors) ? data.errors : [];
+    showFileResult('Moved', movedItems, errors, targetLabel);
     showLog('');
     movedItems.forEach(item=>{
       appendTagsLog(`Moved ${item.src} -> ${item.rel || item.src}`);
@@ -8538,7 +8736,9 @@
         ? `${actionVerb} ${movedItems.length} file(s) to ${targetLabel}.`
         : `${actionVerb} file to ${targetLabel}.`);
     }
-    removeGallerySelection(movedItems.map(item => item.src).filter(Boolean));
+    if (isTempTarget && movedItems.some(item => item.moved)) window.BatchBenchTagWorkspace?.open(true);
+    window.BatchBenchTagWorkspace?.moved(movedItems.filter(item => item.moved));
+    removeGallerySelection(movedItems.filter(item => item.moved).map(item => item.src).filter(Boolean));
     await loadGallery();
     await loadWorkdirRoot();
     await scanTagViz();
@@ -8566,9 +8766,21 @@
     }
     setWorkdirStatus(data.moved === false ? 'No move needed.' : 'Folder moved.');
     await loadWorkdirRoot();
+    await loadGallery();
+    await scanTagViz();
   }
 
-  async function returnAllTempToRoot(){
+  async function returnAllTempToRoot(source = 'temp'){
+    if (fileMoveBusy || formBusy || batchRequestBusy) return;
+    fileMoveBusy = true;
+    window.BatchBenchTagWorkspace?.busy(true);
+    try {await performReturnAll(source);}
+    catch (err) {setWorkdirStatus(`Return failed: ${err.message}. Rescan to verify before retrying.`);}
+    finally {fileMoveBusy = false; window.BatchBenchTagWorkspace?.busy(false); updateGallerySelectionCount();}
+  }
+
+  async function performReturnAll(source){
+    if (!await showConfirm(source === 'all' ? 'Flatten images and captions from all dataset subfolders into dataset root? Conflicts are renamed.' : 'Return all staged image/caption pairs to their matching dataset folders? Conflicts are renamed.', 'Return files')) return;
     const root = getResolvedProjectRoot();
     if (!root){
       setWorkdirStatus('Project root not set.');
@@ -8578,7 +8790,7 @@
     const res = await fetch('/api/tags/return-temp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ folder: root, exts: get(IDS.exts)?.value || '', source: 'all' })
+      body: JSON.stringify({ folder: root, exts: get(IDS.exts)?.value || '', source })
     });
     let data = null;
     try{ data = await res.json(); }catch(_){}
@@ -8590,6 +8802,8 @@
 
     const movedItems = Array.isArray(data.moved) ? data.moved : [];
     const errors = Array.isArray(data.errors) ? data.errors : [];
+    window.BatchBenchTagWorkspace?.moved(movedItems.filter(item=>item.moved));
+    showFileResult('Returned', movedItems, errors, 'dataset/');
     if (!movedItems.length && !errors.length){
       setWorkdirStatus('No files found in dataset subfolders.');
       await loadWorkdirRoot();
@@ -8645,6 +8859,7 @@
       (data.logs || []).forEach(line => appendTagsLog(line));
       const movedItems = Array.isArray(data.moved) ? data.moved : [];
       const errors = Array.isArray(data.errors) ? data.errors : [];
+      showFileResult('Moved from staging', movedItems, errors, data.destination || data.target || 'dataset/');
       removeGallerySelection(movedItems.map(item => item.src).filter(Boolean));
       if (errors.length){
         setWorkdirStatus(
@@ -8803,12 +9018,7 @@
   function updateTagSyncStatus(){
     const el = get(TAGVIZ.syncStatus);
     if(!el) return;
-    if (!tagVizState.selected.size){
-      el.textContent = 'Auto-sync ON';
-      el.title = 'Auto-sync ON';
-      updateTagExplorerTooltip();
-      return;
-    }
+    el.dataset.state = tagsSyncEnabled ? 'ready' : 'warning';
     el.textContent = tagsSyncEnabled ? 'Auto-sync ON' : 'Auto-sync paused (manual edit)';
     el.title = el.textContent;
     updateTagExplorerTooltip();
@@ -8874,8 +9084,11 @@
         const backdrop = backdrops[backdrops.length - 1];
         if (backdrop) backdrop.classList.add('tags-confirm-backdrop');
       };
-      const modal = new bootstrap.Modal(modalEl);
-      const cleanup = (result)=>{
+      const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+      let accepted = false;
+      okBtn.disabled = true;
+      cancelBtn.disabled = true;
+      const cleanup = ()=>{
         if (done) return;
         done = true;
         okBtn.onclick = null;
@@ -8885,12 +9098,14 @@
         document.querySelectorAll('.modal-backdrop.tags-confirm-backdrop').forEach(backdrop => {
           backdrop.classList.remove('tags-confirm-backdrop');
         });
-        resolve(result);
+        resolve(accepted);
       };
-      okBtn.onclick = ()=>{ cleanup(true); modal.hide(); };
-      cancelBtn.onclick = ()=>{ cleanup(false); modal.hide(); };
-      modalEl.addEventListener('hidden.bs.modal', ()=> cleanup(false), { once: true });
-      modalEl.addEventListener('shown.bs.modal', markTopBackdrop, { once: true });
+      okBtn.onclick = ()=>{ accepted = true; okBtn.disabled = true; modal.hide(); };
+      cancelBtn.onclick = ()=>{ modal.hide(); };
+      modalEl.addEventListener('hidden.bs.modal', cleanup, { once: true });
+      modalEl.addEventListener('shown.bs.modal', ()=>{
+        markTopBackdrop(); okBtn.disabled = false; cancelBtn.disabled = false;
+      }, { once: true });
       modal.show();
       requestAnimationFrame(markTopBackdrop);
     });
@@ -9044,20 +9259,18 @@
       const text = msg || '';
       el.textContent = text;
       el.title = text;
+      el.setAttribute('role','status');
+      el.dataset.state = /scanning/i.test(text) ? 'busy' : /fail|error|not set/i.test(text) ? 'error' : 'ready';
     }
   }
 
   function updateTagVizStats(){
     const el = get(TAGVIZ.stats);
     if(!el) return;
-    const parts = [];
-    parts.push(`${tagVizState.shown}/${tagVizState.total} tags`);
-    if (tagVizState.selected.size) parts.push(`${tagVizState.selected.size} selected`);
-    if (tagVizState.meta.tag_files) parts.push(`${tagVizState.meta.tag_files} tag files`);
-    if (tagVizState.meta.total_images) parts.push(`${tagVizState.meta.total_images} images`);
-    if (tagVizState.tempTags && tagVizState.tempTags.size) parts.push(`${tagVizState.tempTags.size} in _temp`);
-    el.textContent = parts.join(' | ');
-    el.title = el.textContent;
+    el.replaceChildren();
+    [`${tagVizState.items.length} unique tags`, `${tagVizState.shown} shown / ${tagVizState.total} matches`, `${tagVizState.selected.size} selected`, `${tagVizState.meta.tag_files || 0} captions`, `${tagVizState.meta.total_images || 0} images`].forEach(text => {
+      const stat = document.createElement('span'); stat.textContent = text; el.append(stat);
+    });
   }
 
   function updateTagVizCount(tag, delta){
@@ -10593,6 +10806,14 @@
     danbooruState.debounceTimer = setTimeout(runLookup, 180);
   }
 
+  function removeExplorerTag(tag){
+    tagVizState.selected.delete(tag);
+    syncTagsFromSelection();
+    renderTagViz();
+    updateTagHint();
+    syncGallerySelectionFromTagExplorer({render:true});
+  }
+
   function renderTagViz(){
     const wrap = get(TAGVIZ.cloud);
     if(!wrap) return;
@@ -10613,7 +10834,8 @@
     }
 
     tagVizState.total = items.length;
-    const maxRender = 400;
+    if (get('te-tags-selected-only')?.checked) items = items.filter(item => tagVizState.selected.has(item.tag));
+    const maxRender = window.BatchBenchTagWorkspace?.tagLimit || 40;
     const shownItems = items.slice(0, maxRender);
     tagVizState.shown = shownItems.length;
 
@@ -10622,6 +10844,7 @@
       empty.className = 'small text-muted';
       empty.textContent = tagVizState.items.length ? 'No tags match the filters.' : 'No tag data. Run "Scan tags".';
       wrap.appendChild(empty);
+      window.BatchBenchTagWorkspace?.selectedTags(tagVizState.selected, removeExplorerTag);
       updateTagVizStats();
       updateTagSyncStatus();
       return;
@@ -10633,10 +10856,11 @@
       btn.type = 'button';
       const isSelected = tagVizState.selected.has(item.tag);
       const isWarn = tagVizState.warnTags && tagVizState.warnTags.has(item.tag);
-      const isTemp = tagVizState.tempTags && tagVizState.tempTags.has(item.tag);
+      const isTemp = false;
       btn.className = 'tag-chip' + (isSelected ? ' is-selected' : '') + (isWarn ? ' is-warning' : '') + (isTemp ? ' is-temp' : '');
       btn.dataset.tag = item.tag;
-      if (isWarn) btn.title = 'Already exists in dataset';
+      btn.title = `${item.tag} · in ${item.count} caption files${isWarn ? ' · already present in staged captions' : ''}`;
+      btn.setAttribute('aria-pressed', String(isSelected));
 
       const name = document.createElement('span');
       name.className = 'tag-name';
@@ -10657,27 +10881,28 @@
           btn.classList.add('is-selected');
         }
         updateTagVizStats();
-        tagsSyncEnabled = true;
-        syncTagsFromSelection(true);
+        syncTagsFromSelection();
         updateTagSyncStatus();
         updateTagHint();
-        const lookupTag = getDanbooruLookupSeed(item.tag);
-        if (lookupTag){
-          triggerDanbooruLookup(lookupTag, { autoOpen: true });
-        }
+        renderTagViz();
         syncGallerySelectionFromTagExplorer({ render: true });
       });
-      frag.appendChild(btn);
+      const cell = document.createElement('div'); cell.className = 'te-tag-cell';
+      const info = document.createElement('button'); info.type = 'button'; info.className = 'btn btn-sm te-tag-info';
+      info.textContent = 'ⓘ'; info.setAttribute('aria-label', `Inspect ${item.tag} in Danbooru`);
+      info.addEventListener('click', () => triggerDanbooruLookup(getDanbooruLookupSeed(item.tag), {forceOpen:true,immediate:true}));
+      cell.append(btn,info); frag.appendChild(cell);
     });
 
     if (items.length > maxRender){
-      const note = document.createElement('div');
-      note.className = 'small text-muted tag-cloud-note';
-      note.textContent = `Showing first ${maxRender} tags. Refine filters to see more.`;
-      frag.appendChild(note);
+      const more = document.createElement('button'); more.type = 'button'; more.className = 'btn btn-sm btn-outline-light te-tags-more';
+      more.textContent = `Show more (${shownItems.length} of ${items.length})`;
+      more.addEventListener('click', () => {window.BatchBenchTagWorkspace.tagLimit += 40; renderTagViz();});
+      frag.appendChild(more);
     }
 
     wrap.appendChild(frag);
+    window.BatchBenchTagWorkspace?.selectedTags(tagVizState.selected, removeExplorerTag);
     updateTagVizStats();
     updateTagSyncStatus();
   }
@@ -10762,6 +10987,7 @@
     tagScanBusy = true;
     setTagScanButtonBusy(true);
     const root = getResolvedProjectRoot();
+    const fileSelection = getSelectedGalleryRels().join('\0');
     try{
       if (!root){
         setTagVizStatus('Project root not set.');
@@ -10769,11 +10995,12 @@
       }
       const previousSelected = new Set(tagVizState.selected);
       setTagVizStatus('Scanning...');
-      let scanFolder = getDatasetRoot();
-      let result = await fetchTagScan(root, true, 'dataset');
+      let scanFolder = getTempRoot();
+      let result = await fetchTagScan(root, true, 'temp');
+      if (qRootKey(root) !== qRootKey(qProjectRoot())) return;
 
       if (!result.ok){
-        setTagVizStatus(result.error || 'Scan failed.');
+        setTagVizStatus(`Scan failed: ${result.error || 'Unknown error'}`);
         return;
       }
 
@@ -10783,24 +11010,13 @@
         tag_files: data.tag_files || 0,
         total_images: data.total_images || 0
       };
-      const tempFolder = getTempRoot();
       tagVizState.tempTags = new Set();
-      if (tempFolder){
-        const tempResult = await fetchTagScan(root, true, 'temp');
-        if (tempResult.ok && tempResult.data){
-          const tempItems = tempResult.data.tags || [];
-          tagVizState.tempTags = new Set(tempItems.map(it => it.tag));
-        }
-      }
 
       const available = new Set(tagVizState.items.map(it => it.tag));
       tagVizState.selected = new Set(Array.from(previousSelected).filter(tag => available.has(tag)));
-      if (tagsSyncEnabled){
-        syncTagsFromSelection(true);
-      } else {
-        updateTagSyncStatus();
-      }
-      if (get(TAGVIZ.path)) get(TAGVIZ.path).textContent = scanFolder || '...';
+      if (tagsSyncEnabled) syncTagsFromSelection();
+      renderTagViz();
+      if (get(TAGVIZ.path)) {get(TAGVIZ.path).textContent = 'dataset/_temp/';get(TAGVIZ.path).title=scanFolder || '';}
       updateTagWarningsFromInput();
       updateTagHint();
       clearWarning();
@@ -10810,7 +11026,9 @@
         setTagVizStatus('Scan complete.');
       }
       refreshCheatsheetChipSelectionCue();
-      syncGallerySelectionFromTagExplorer({ render: true });
+      if (tagVizState.selected.size && fileSelection === getSelectedGalleryRels().join('\0')) syncGallerySelectionFromTagExplorer({ render: true });
+    } catch (err) {
+      setTagVizStatus(`Scan failed: ${err.message}`);
     } finally {
       tagScanBusy = false;
       setTagScanButtonBusy(false);
@@ -10831,10 +11049,6 @@
     const input = get(IDS.tags);
     if(!input) return;
     const selected = Array.from(tagVizState.selected);
-    if (!selected.length){
-      setTagVizStatus('No tags selected.');
-      return;
-    }
     tagsSyncEnabled = true;
     syncTagsFromSelection(true);
     updateTagHint();
@@ -10936,6 +11150,7 @@
   }
   function setFormBusy(isBusy){
     formBusy = !!isBusy;
+    window.BatchBenchTagWorkspace?.busy(formBusy);
     const runBtn = get('btn-run');
     const zipBtn = get('btn-dataset-zip');
     const clearBtn = get('btn-clear');
@@ -10946,6 +11161,7 @@
     if (zipBtn) zipBtn.disabled = formBusy;
     if (clearBtn) clearBtn.disabled = formBusy;
     if (moveAllBtn) moveAllBtn.disabled = formBusy;
+    const preview = get('te-preview-batch'); if (preview) preview.disabled = formBusy;
     if (completionZipBtn) completionZipBtn.disabled = formBusy;
     if (mobileZipBtn) mobileZipBtn.disabled = formBusy;
   }
@@ -11060,7 +11276,15 @@
     fd.set('folder', root);
   }
 
+  let batchRequestBusy = false;
   async function runTagsForm(form, options={}){
+    if(batchRequestBusy || fileMoveBusy || formBusy) return;
+    batchRequestBusy=true;
+    try {await performTagsForm(form,options);}
+    finally {batchRequestBusy=false;}
+  }
+
+  async function performTagsForm(form, options={}){
     if (!isWorkspaceReady()){
       showStatus('Workspace not ready. Complete Project Setup first.');
       return;
@@ -11091,13 +11315,13 @@
     }
     const tempReady = await ensureEditTempFolderReady(mode);
     if (!tempReady) return;
-    if (mode === 'delete'){
+    if (mode === 'delete' && !options.preview){
       const ok = await showConfirm('Delete mode will remove tags from files in the target folder. Continue?', 'Delete tags');
       if (!ok) return;
     }
 
     let createMissingTxt = !!options.createMissingTxt;
-    if (mode === 'insert' && !options.skipMissingTxtConfirm){
+    if (mode === 'insert' && !options.skipMissingTxtConfirm && !options.preview){
       const missingTxtCheck = await checkInsertNeedsMissingTxtWarning();
       if (missingTxtCheck.warn){
         const ok = await showConfirm(
@@ -11109,7 +11333,7 @@
       }
     }
 
-    if ((mode === 'insert' || mode === 'replace') && !options.allowDuplicateTags){
+    if ((mode === 'insert' || mode === 'replace') && !options.allowDuplicateTags && !options.preview){
       const existing = new Set((tagVizState.items || []).map(it => it.tag));
       const dupes = mode === 'insert'
         ? splitTagList(raw).filter(tag => existing.has(tag))
@@ -11151,7 +11375,7 @@
     }
 
     setFormBusy(true);
-    showStatus('Running...');
+    showStatus(options.preview ? 'Previewing staged captions…' : 'Applying to staged captions…');
     const tagsInput = get(IDS.tags);
     if (tagsInput && !tagsInput.value.trim() && tagVizState.selected.size) {
       syncTagsFromSelection(true);
@@ -11161,9 +11385,20 @@
     const fd = new FormData(form);
     finalizeFormDataForMode(fd);
     fd.set('create_missing_txt', createMissingTxt ? '1' : '0');
+    fd.set('dry_run', options.preview ? '1' : '0');
     try{
       const data = await postForm(fd);
-      if (data.ok){
+      const counts = data.result?.counts;
+      if(window.BatchBenchTagWorkspace){window.BatchBenchTagWorkspace.operationError=data.ok===false || counts?.errors ? (data.error || 'Some staged captions failed. See the operation log.') : '';}
+      if (options.preview) {
+        showStatus(`Preview only · ${counts?.scanned || 0} inspected · ${counts?.changed || 0} would change · ${counts?.errors || 0} failed · no files or backups written`);
+        showLog(data.log || '');
+        return;
+      }
+      if (counts && Number.isFinite(counts.scanned)){
+        showStatus(`Inspected ${counts.scanned} · changed ${counts.changed} · unchanged ${counts.unchanged} · skipped ${counts.skipped} · failed ${counts.errors} · backups ${data.result.artifacts?.backups_created || 0} · dataset/_temp`);
+        get(IDS.status).title = data.result.output_path || '';
+      } else if (data.ok){
         showStatus('Done.');
       } else {
         const errText = (data.error || '').trim();
@@ -11222,10 +11457,10 @@
       galleryState.cheatsheetFile = 'prompt.txt';
     }
     galleryState.sort = get(GALLERY.sort)?.value || 'match';
-    let gridCols = 2;
+    let gridCols = 'auto';
     try{
-      const savedCols = Number.parseInt(localStorage.getItem(GALLERY_GRID_COLS_KEY) || '', 10);
-      if ([2, 3, 4].includes(savedCols)) gridCols = savedCols;
+      const savedCols = localStorage.getItem(GALLERY_GRID_COLS_KEY) || '';
+      if (['auto', '2', '3', '4'].includes(savedCols)) gridCols = savedCols;
     }catch(_){}
     applyGalleryGridColumns(gridCols);
     initGalleryMarqueeEvents();
@@ -11235,6 +11470,11 @@
     renderCheatsheetPanel();
     qBindEvents();
     qInstallMobileBridge();
+    window.BatchBenchTagWorkspace?.install({tagging:get('tagging-quiz-start').closest('.col-md-12'),
+      management:document.querySelector('.tag-editor-content'), rail:document.querySelector('.tag-editor-left-rail'), bridge:window.BatchBenchDatasetTagEditor,
+      move:moveFileToFolder, renderTags:renderTagViz, refreshTemp:loadTempItems,
+      moveFolder:moveWorkdirFolder, selectedFolder:() => workdirState.selected, previewBatch:() => runTagsForm(form,{preview:true})});
+    renderProjectState();
     window.dispatchEvent(new CustomEvent('bb:dataset-tag-editor-ready', {detail: qMobileState()}));
     void loadProjectState({ silent: true }).then(()=>{
       setGalleryPath(getGalleryRoot());
@@ -11360,6 +11600,14 @@
       }
     });
     get(GALLERY.refresh)?.addEventListener('click', loadGallery);
+    const filterGallery = () => { galleryState.visibleCount = galleryState.pageSize; renderGalleryItems(); };
+    get('gallery-filename-search')?.addEventListener('input', filterGallery);
+    get('gallery-caption-filter')?.addEventListener('change', filterGallery);
+    get('gallery-clear-filters')?.addEventListener('click', () => {
+      get('gallery-filename-search').value = '';
+      get('gallery-caption-filter').value = 'all';
+      filterGallery();
+    });
     get('btn-dataset-zip')?.addEventListener('click', zipDatasetFolder);
     get(WORKDIR.sendSelected)?.addEventListener('click', sendSelectedGalleryItemsToTemp);
     get(GALLERY.loadMore)?.addEventListener('click', ()=>{
@@ -11532,12 +11780,13 @@
     bindWorkdirQuickDrop(WORKDIR.rootDrop, '');
     bindWorkdirQuickDrop(WORKDIR.tempDrop, '_temp');
     get(WORKDIR.moveAllTemp)?.addEventListener('click', moveAllFromTempToNewFolder);
-    get(WORKDIR.returnTemp)?.addEventListener('click', returnAllTempToRoot);
+    get(WORKDIR.returnTemp)?.addEventListener('click', () => returnAllTempToRoot());
+    get('te-flatten-dataset')?.addEventListener('click', () => returnAllTempToRoot('all'));
     get(WORKDIR.cleanupSubdirs)?.addEventListener('click', cleanupWorkspaceSubfolders);
     get(IDS.tags)?.addEventListener('input', ()=>{
       if (tagsSyncLocked) return;
       const raw = (get(IDS.tags)?.value || '').trim();
-      if (raw && tagsSyncEnabled){
+      if (tagsSyncEnabled){
         tagsSyncEnabled = false;
         updateTagSyncStatus();
         updateTagHint();
@@ -11600,6 +11849,7 @@
           input.value = cleaned;
         }
       }
+      if (projectState.ready && qRootKey(getProjectRootInput()) === qRootKey(getResolvedProjectRoot())) return;
       refreshTempHints();
       loadProjectState({ silent: true }).then(()=>{
         qLoadSession(true);
@@ -11609,8 +11859,26 @@
         scanTagViz();
       });
     };
-    get(IDS.folder)?.addEventListener('input', onFolderChange);
-    get(IDS.folder)?.addEventListener('change', onFolderChange);
+    let folderChangeTimer = null;
+    get(IDS.folder)?.addEventListener('input', () => {
+      clearTimeout(folderChangeTimer);
+      projectState.ready = false;
+      refreshWorkspaceGating();
+      galleryState.items = [];
+      galleryState.total = 0;
+      galleryState.selected = new Set();
+      renderGalleryItems();
+      setGalleryCount(0, 0);
+      updateGallerySelectionCount();
+      workdirState.tempItems = [];
+      renderTempItems();
+      clearWorkdirSelection();
+      get(WORKDIR.tree)?.replaceChildren();
+      const status = get('te-project-state');
+      if (status) { status.textContent = 'Checking project path…'; status.dataset.ready = 'false'; }
+      folderChangeTimer = setTimeout(onFolderChange, 300);
+    });
+    get(IDS.folder)?.addEventListener('change', () => { clearTimeout(folderChangeTimer); onFolderChange(); });
     get(IDS.tags)?.addEventListener('focus', clearWarning);
   });
 })();

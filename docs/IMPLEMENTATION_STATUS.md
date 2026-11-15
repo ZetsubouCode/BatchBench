@@ -35,6 +35,17 @@ The current navigation groups tools into image preparation, dataset assembly, ta
 
 ## Implemented
 
+### Tag Editor corrective desktop refinement (2026-11-15)
+
+- Restored one main workspace; removed the unsuccessful launcher-only Tag Images / Manage Dataset split.
+- Guided Tagging retains the original neo panel hierarchy and category colors, visible recommendations and glossary, direct segment access, grouped manual entry, and persistent image inspection.
+- Filename and caption/selection filters operate on loaded images. Browser cards use compact caption summaries and keep full preview access. One contextual staging action replaces duplicated controls.
+- Batch edits expose inspected/changed/unchanged/skipped/failed and backup counts; file-operation results remain visible after refresh. Folder maintenance is secondary to staging.
+- Draft writes are serialized; close/unload guards preserve pending work. Save & Next prevents repeated writes and reports caption success separately from session-save failure.
+- Segment navigation preserves pending manual text in its original segment. Image shortcuts no longer intercept typing in free mode.
+- Selection updates preserve gallery thumbnails and focus. Caption writes defer dataset-wide gallery/tag refresh until the editor closes.
+- Existing pair previews, conflict handling, backups, file return, and pipeline review wiring remain. See [Tag Editor workflow and verification](TAG_EDITOR_REDESIGN.md).
+
 ### Core local application
 
 - Flask local web application.
@@ -241,3 +252,17 @@ Normal local tagging and local catalog usage should not become network-dependent
 5. Keep improving pair-integrity/audit feedback where real workflow failures reveal gaps.
 
 Avoid pausing product work for a broad repository rewrite.
+
+## Tag Editor further refinement (task 002, 2026-11-15)
+
+Implemented connected sequential step navigation; optional split browsers with saved
+visibility and keyboard/pointer resizing; a staged browser with search, sort, folder
+filter, selection, preview, incremental loading, and paired return actions; full-panel
+internal drops; staged-only Tag Explorer with incremental chips and explicit info
+actions; manual-input-safe auto-sync; full-width composer with read-only preview;
+separate dataset maintenance and export sections; and state-aware LED status labels.
+The shared pair move service now preserves nested staging paths and handles
+case-insensitive image/caption collisions and rollback. Explicit dataset flattening
+remains separate. Existing uncommitted draft-save/reporting changes were retained.
+
+Task-002 validation: 80 focused Python tests and 10 subtests passed. The Chromium workflow suite passed at 1920, 1440, 1024, 768, and 375px. See `docs/TAG_EDITOR_FURTHER_REDESIGN.md` for scope, files, screenshots, and limits.
